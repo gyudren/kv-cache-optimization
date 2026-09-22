@@ -198,5 +198,41 @@
     "result": "unverified_exhausted",
     "attempt": 2,
     "reason": "결정적 형식 요건은 충족한다. SUMMARY, 1~7장, REFERENCE가 모두 존재하며 단일 우승·순위·추천을 제시하지 않는다.; 표 1 [D] 산술이 명시 산식과 일치하지 않는다. 토큰당 320KiB이면 8,192 토큰은 2.5GiB, 131,072 토큰은 40GiB, 1,048,576 토큰은 320GiB이고 동시 8건은 각각 20GiB, 320GiB, 2,560GiB로 맞다. 그러나 ‘GPU HBM 80GB 대비’ 열은 GiB 값을 80GB와 혼용한다. 2.5GiB/80GB는 약 3.36%, 40GiB/80GB는 약 53.7%, 320GiB/80GB는 약 429.5%이다. 표의 3%·50%·400%는 80GiB 기준에 가까우므로, 분모를 ‘80GiB’로 수정하거나 80GB 기준 비율을 수정해야 한다.; 4.4 표의 MLA D4 인용 `[1, p.13]`은 제공된 검증 Evidence snippets에 존재하지 않는다. 본문 D4의 ‘32K 길이에서 1000 step 추가 학습’, ‘128K context 평가 및 NIAH’ 주장도 제공된 [1] p.13 발췌로 검증되지 않는다. 해당 행과 서술은 인용 검증 실패로 보완 또는 삭제가 필요하다.; 4.4 표의 ITME D4 인용 `[2, p.3]`은 제공된 검증 Evidence snippets에 존재하지 않는다. ITME의 cache miss 시 재계산 정책은 [2, p.10]에는"
+  },
+  {
+    "node": "report",
+    "attempt": 0,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": false,
+    "result": "revise",
+    "attempt": 1,
+    "reason": "결정적 인용 검증 실패: 4.1의 MLA TRL 표와 바로 아래 MLA TRL 본문은 `[1, p.15]`를 MLA–MHA 벤치마크 근거로 인용하지만, REFERENCE의 [1] 페이지 목록과 제공된 검증 Evidence에는 p.15가 없다. 해당 인용을 검증 가능한 `[1, p.31]` 또는 `[1, p.32]`로 교체하고, 인용이 뒷받침하는 문장을 해당 페이지의 실제 표·실험 범위에 맞춰 수정해야 한다.; 7장의 ‘HW 베이스라인 교차 확인’ 행은 “InfiniGen·CXL-PNM 자료를 … 사용했다”고 서술하지만, 인용된 `[4, p.1] [4, p.2] [4, p.10]`은 제공된 Evidence상 CXL-PNM 자료만 뒷받침한다. InfiniGen의 직접 자료·인용이 없으므로 InfiniGen을 삭제하거나, 검증 가능한 InfiniGen 출처와 대응 인용을 추가해야 한다. 현재 문장의 ‘InfiniGen의 직접 메커니즘·측정 결과 발췌는 부족’이라는 후속 진술도 근거 없이 해당 자료를 사용했다고 주장하는 모순이 있다.; 4.4 ITME D5 본문은 “10–20턴에서 KV 증가에 따른 I/O 경합과 prefix hit rate 하락”을 `[2, p.10]` 하나로 인용한다. 제공된 p.10 발췌는 I/O 경합과 지연 블록의 재계산은 뒷받침하지만, ‘10–20턴’ 구간 및 ‘prefix hit rate 하락’의 직접 근거는 해당"
+  },
+  {
+    "node": "report",
+    "attempt": 1,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": false,
+    "result": "revise",
+    "attempt": 2,
+    "reason": "결정적 인용 검증 실패: 4.1 TRL 표와 MLA TRL 본문에서 사용한 `[1, p.15]`는 제공된 검증 Evidence에 없고, REFERENCE의 [1] 페이지 목록에도 포함되지 않는다. 해당 인용을 검증 가능한 페이지 인용으로 교체하거나 해당 문장을 삭제해야 한다.; 본문-REFERENCE 양방향 연결이 완결되지 않았다. REFERENCE의 `[W1]`, `[W9]`, `[W10]`은 본문에서 인용되지 않는다. 실제 본문 근거로 사용할 경우 해당 위치에 인용을 연결하고, 사용하지 않을 경우 REFERENCE에서 제거해야 한다.; SUMMARY의 ITME 문장에는 ‘시장’이 CXL 계열 신호와 ITME 자체 채택 공백 때문에 혼재라는 판정이 포함되지만, 해당 문장에 붙은 `[W14]`는 CXL과 HBM의 성능 관계에 관한 이해관계자 우려 근거이지 시장·채택 신호 근거가 아니다. SUMMARY에는 `[W2]` 또는 `[W15]` 등 해당 시장 신호를 직접 뒷받침하는 인용을 추가하거나, 시장 판정을 별도 인용 문장으로 분리해야 한다.; 4.1 MLA TRL 표의 ‘MLA-MHA 비교 및 모델 벤치마크’ 근거는 `[1, p.6; p.15; p.32]`로 제시되어 있으나 p.15가 검증 불가하다. p.32의 Table 9 및 필요하면 p.31만으로 근거 문구를 재구성하고, TRL 4–6이 공개 논문 기반의 보수적 추정이라는 현재의 "
+  },
+  {
+    "node": "report",
+    "attempt": 2,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": false,
+    "result": "unverified_exhausted",
+    "attempt": 2,
+    "reason": "결정적 인용 검증 실패: 4.1의 MLA TRL 표 및 본문은 `[1, p.15]`를 인용하지만, 제공된 검증 Evidence에 `[1, p.15]` 항목이 없고 REFERENCE의 [1] 페이지 목록에도 p.15가 없다. 해당 문장을 검증된 `[1, p.31]` 또는 `[1, p.32]` 근거로 교체하거나, p.15의 검증 가능한 원문 근거를 추가해야 한다.; 본문-REFERENCE 양방향 연결 누락: `[W9]`는 REFERENCE에 있으나 보고서 본문, 표, 각주에서 인용되지 않는다. 실제로 사용하지 않은 출처라면 REFERENCE에서 제거하고, 사용했다면 해당 주장 위치에 `[W9]` 인용을 추가해야 한다."
   }
 ]

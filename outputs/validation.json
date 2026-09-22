@@ -1,33 +1,26 @@
 {
   "passed": false,
   "issues": [
-    "결정적 형식 요건은 충족한다. SUMMARY, 1~7장, REFERENCE가 모두 존재하며 단일 우승·순위·추천을 제시하지 않는다.",
-    "표 1 [D] 산술이 명시 산식과 일치하지 않는다. 토큰당 320KiB이면 8,192 토큰은 2.5GiB, 131,072 토큰은 40GiB, 1,048,576 토큰은 320GiB이고 동시 8건은 각각 20GiB, 320GiB, 2,560GiB로 맞다. 그러나 ‘GPU HBM 80GB 대비’ 열은 GiB 값을 80GB와 혼용한다. 2.5GiB/80GB는 약 3.36%, 40GiB/80GB는 약 53.7%, 320GiB/80GB는 약 429.5%이다. 표의 3%·50%·400%는 80GiB 기준에 가까우므로, 분모를 ‘80GiB’로 수정하거나 80GB 기준 비율을 수정해야 한다.",
-    "4.4 표의 MLA D4 인용 `[1, p.13]`은 제공된 검증 Evidence snippets에 존재하지 않는다. 본문 D4의 ‘32K 길이에서 1000 step 추가 학습’, ‘128K context 평가 및 NIAH’ 주장도 제공된 [1] p.13 발췌로 검증되지 않는다. 해당 행과 서술은 인용 검증 실패로 보완 또는 삭제가 필요하다.",
-    "4.4 표의 ITME D4 인용 `[2, p.3]`은 제공된 검증 Evidence snippets에 존재하지 않는다. ITME의 cache miss 시 재계산 정책은 [2, p.10]에는 뒷받침되지만, 표와 본문의 `[2, p.3] [2, p.7]` 조합은 검증된 인용 연결이 아니다. D4 근거를 제공된 직접 인용으로 교체하거나 ‘근거 부족’ 서술만 유지해야 한다.",
-    "4.2 및 4.3의 [W] 인용은 REFERENCE에는 있으나, 제공된 verified evidence snippets에 W22/W5/W9/W6/W12/W4/W15/W2/W1/W23/W11/W17/W14/W10의 주장·작성 주체·확인일·직접성을 검증할 증거가 없다. 보고서가 이들을 확정 사실로 확대하지 않은 점은 적절하지만, 신호표의 ‘긍정·혼재·우려’ 판정 및 ‘[W14]는 … 발언을 포함한다’, ‘[W23]은 … 언급한다’ 같은 개별 서술은 현재 제공 증거로 검증할 수 없다. 각 웹 근거의 검증 가능한 Evidence를 제공하거나, 해당 판정·개별 주장에 ‘검증 불가/근거 부족’을 명시해야 한다.",
-    "4.3 ITME ‘경쟁 진영 우려’는 검증되지 않은 [W14]에 의존한다. 또한 5장의 ‘CXL 일반의 HBM 대체 한계 신호’와 ITME 상충표도 같은 미검증 근거를 서술한다. 웹 원문 검증 없이는 ‘우려’ 판정을 유지할 수 없다.",
-    "5장 MLA의 두 번째 ‘관점 간 상충’에서 ‘시장 생태계 지지 긍정 신호’는 4.2의 신호표와 연결되지만, 그 신호의 근거가 검증되지 않았다. 코드 생성 표와 narrative 사이의 값 자체는 일치하나, 내러티브의 근거 연결은 보완이 필요하다.",
-    "7장의 ‘InfiniGen 및 CXL-PNM 자료를 검토했다’라는 문장 중 CXL-PNM 관련 [4, p.2] 인용은 제공된 검증 snippets에 없다. 제공 증거로는 [4, p.1], [4, p.3], [4, p.4], [4, p.10], [4, p.11]만 확인된다. 검증된 페이지로 교체하거나 해당 페이지 인용을 제거해야 한다.",
-    "[2]의 REFERENCE는 2026년 논문으로 표기되어 있고 다수 [W] 자료도 2026년 날짜를 가진다. 기준 시점 또는 자료 검색·검증 시점이 보고서에 명시되지 않아 미래 날짜 여부와 출처 상태를 판정할 수 없다. 날짜가 의도된 데이터셋 기준이라면 그 기준 시점을 명시하고, 아니라면 서지정보를 재검증해야 한다."
+    "결정적 인용 검증 실패: 4.1의 MLA TRL 표 및 본문은 `[1, p.15]`를 인용하지만, 제공된 검증 Evidence에 `[1, p.15]` 항목이 없고 REFERENCE의 [1] 페이지 목록에도 p.15가 없다. 해당 문장을 검증된 `[1, p.31]` 또는 `[1, p.32]` 근거로 교체하거나, p.15의 검증 가능한 원문 근거를 추가해야 한다.",
+    "본문-REFERENCE 양방향 연결 누락: `[W9]`는 REFERENCE에 있으나 보고서 본문, 표, 각주에서 인용되지 않는다. 실제로 사용하지 않은 출처라면 REFERENCE에서 제거하고, 사용했다면 해당 주장 위치에 `[W9]` 인용을 추가해야 한다."
   ],
   "used_references": [
     "[1] DeepSeek-AI (2024). DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model. arXiv preprint arXiv:2405.04434, p.1, p.6, p.7, p.8, p.13, p.16, p.31, p.32.",
     "[2] Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix) (2026). ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories. arXiv preprint arXiv:2606.12556, p.1, p.2, p.3, p.7, p.8, p.9, p.10, p.11.",
-    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.2, p.10.",
+    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.2.",
+    "[W6] docs.vllm.ai (게시일 미확인). mla_attention - vLLM Documentation. docs.vllm.ai, https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/attention/mla_attention",
+    "[W12] sgl-project-sglang-93.mintlify.app (게시일 미확인). DeepSeek Models - SGLang. sgl-project-sglang-93.mintlify.app, https://sgl-project-sglang-93.mintlify.app/models/deepseek",
+    "[W14] chosun.com (게시일 미확인). CXL Can't Replace HBM in AI Era. chosun.com, https://www.chosun.com/english/industry-en/2026/09/17/DPBT3YGLRJEXVHCBEOSVQ3GZNI",
+    "[W2] computeexpresslink.org (게시일 미확인). Breaking Boundaries in Memory: Highlights from AI Infra Summit and SDC 2025 - Compute Express Link. computeexpresslink.org, https://computeexpresslink.org/blog/breaking-boundaries-in-memory-highlights-from-ai-infra-summit-and-sdc-2025-4198",
     "[W22] precedenceresearch.com (Wed, 09 Sep 2026 00:00:00 GMT). AI Inference-as-a-Service Market Companies, Size & Trends 2026 .... precedenceresearch.com, https://www.precedenceresearch.com/ai-inference-as-a-service-market",
     "[W5] docs.dynatrace.com (Fri, 28 Aug 2026 00:00:00 GMT). AI Observability integrations — Dynatrace Docs. docs.dynatrace.com, https://docs.dynatrace.com/docs/observe/dynatrace-for-ai-observability/integrations",
     "[W9] github.com (게시일 미확인). vllm/vllm/model_executor/layers/attention/mla_attention.py at main. github.com, https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/attention/mla_attention.py",
-    "[W6] docs.vllm.ai (게시일 미확인). mla_attention - vLLM Documentation. docs.vllm.ai, https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/attention/mla_attention",
-    "[W12] sgl-project-sglang-93.mintlify.app (게시일 미확인). DeepSeek Models - SGLang. sgl-project-sglang-93.mintlify.app, https://sgl-project-sglang-93.mintlify.app/models/deepseek",
     "[W4] dataintelo.com (게시일 미확인). CXL Memory Pooling Software Market. dataintelo.com, https://dataintelo.com/report/cxl-memory-pooling-software-market",
     "[W15] forbes.com (Sat, 18 Jul 2026 00:00:00 GMT). AI Storage & Memory From Backblaze, CoreWeave, Panmnesia, Vast And Cloudera - Forbes. forbes.com, https://www.forbes.com/sites/tomcoughlin/2026/07/18/ai-storage--memory-from-backblaze-coreweave-panmnesia-vast-and-cloudera/",
-    "[W2] computeexpresslink.org (게시일 미확인). Breaking Boundaries in Memory: Highlights from AI Infra Summit and SDC 2025 - Compute Express Link. computeexpresslink.org, https://computeexpresslink.org/blog/breaking-boundaries-in-memory-highlights-from-ai-infra-summit-and-sdc-2025-4198",
     "[W1] arxiv.org (게시일 미확인). Disaggregated LLM Serving withCXL Shared Memory KV Cache at .... arxiv.org, https://arxiv.org/html/2512.18194v1",
     "[W23] redhat.com (게시일 미확인). Enhancing DeepSeek models with MLA and FP8 optimizations in vLLM. redhat.com, https://www.redhat.com/en/blog/enhancing-deepseek-models-mla-and-fp8-optimizations-vllm",
     "[W11] news.ycombinator.com (게시일 미확인). DeepSeek Open Source FlashMLA – MLA Decoding Kernel for .... news.ycombinator.com, https://news.ycombinator.com/item?id=43155023",
     "[W17] guinnessgi.com (게시일 미확인). How has DeepSeek affected the AI Market for investors?. guinnessgi.com, https://www.guinnessgi.com/insights/articles/how-has-deepseek-affected-ai-market-investors",
-    "[W14] chosun.com (게시일 미확인). CXL Can't Replace HBM in AI Era. chosun.com, https://www.chosun.com/english/industry-en/2026/09/17/DPBT3YGLRJEXVHCBEOSVQ3GZNI",
     "[W10] news.sbs.co.kr (게시일 미확인). AI Market: HBM's Dominance Expected to Continue... 'CXL .... news.sbs.co.kr, https://news.sbs.co.kr/english/article.do?news_id=N1008757342"
   ]
 }

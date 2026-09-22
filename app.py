@@ -84,9 +84,42 @@ def export_only() -> dict:
     return finalize(json.loads(state_path.read_text(encoding="utf-8")), output_dir)
 
 
+def report_only() -> dict:
+    """직전 실행의 조사·평가·종합 결과(final_state.json)를 그대로 두고 보고서→검수 루프만 다시 돈다.
+
+    그래프의 report / master_report_gate 노드를 같은 순서·같은 재시도 한도(report ≤ 2)로 실행한다.
+    새 검색은 하지 않으므로 근거는 전체 실행에서 수집·검증된 Evidence와 동일하다.
+    """
+    from kv_eval.agents import master, report
+    settings = Settings.from_env()
+    if not settings.openai_key:
+        raise RuntimeError("OPENAI_API_KEY is required")
+    state_path = settings.output_dir / "final_state.json"
+    if not state_path.is_file():
+        raise FileNotFoundError(f"{state_path} 없음: 먼저 python app.py 로 전체 파이프라인을 실행하세요")
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["retry_counts"]["report"] = 0
+    state.setdefault("review_feedback", {}).pop("report", None)
+    state["phase"], state["status"] = "report", "running"
+    llm = StructuredLLM(settings.openai_key)
+    started_at = time.time()
+    while True:
+        for node in (lambda st: report.report_node(st, llm), lambda st: master.master_report_gate_node(st, llm)):
+            update = node(state)
+            state["logs"] = state["logs"] + update.pop("logs", [])
+            state.update(update)
+            last = state["logs"][-1]
+            print(f"[{time.time()-started_at:6.0f}s] {last['node']} ({last.get('result')})", flush=True)
+        if master.route_report(state) == "end":
+            break
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return finalize(state, settings.output_dir)
+
+
 if __name__ == "__main__":
     try:
-        result = export_only() if "--export-only" in sys.argv[1:] else run()
+        args = sys.argv[1:]
+        result = export_only() if "--export-only" in args else report_only() if "--report-only" in args else run()
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if not result["verified"]:
             print("WARNING: report generated but NOT verified for submission", file=sys.stderr)

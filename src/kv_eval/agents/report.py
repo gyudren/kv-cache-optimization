@@ -15,6 +15,9 @@ from ..reporting.sections import citation_catalog, citeable_evidence, used_refer
 TECHS = (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME"))
 
 import re
+from datetime import date
+
+AS_OF = date.today().isoformat()
 
 # 팀 설계 산출물. 1·2장의 고정 표와 설계 판단은 이 문서를 출처 [D]로 표기한다.
 DESIGN_REF = ("[D] 판교 9반 2조 (2026). RAG-Design 설계 산출물: KV cache 최적화 기술 다관점 평가 "
@@ -23,12 +26,12 @@ DESIGN_REF = ("[D] 판교 9반 2조 (2026). RAG-Design 설계 산출물: KV cach
 # 설계 산출물 A-2 (Llama-3.1-70B, FP16: 80 layers × 8 KV heads × 128 dim × K·V 2 × 2B = 320 KiB/token)
 KV_SCALE_FORMULA = ("산식: 토큰당 KV = 레이어 80 × KV head 8(GQA) × head dim 128 × (K, V) 2 × FP16 2B = 327,680B = 320KiB. "
                     "요청 1건 = 문맥 토큰 수 × 320KiB (8K = 8,192 토큰, 128K = 131,072 토큰, 1M = 1,048,576 토큰). "
-                    "HBM 대비 비율은 80GB를 기준으로 한 근사치 [D].")
-KV_SCALE_TABLE = """| 문맥 길이 | 요청 1건 KV cache | 동시 8건 | GPU HBM 80GB 대비(1건) |
+                    "HBM 대비 비율은 80GB = 80×10⁹B ≈ 74.5GiB를 분모로 계산했다(설계서 A-2의 3%·50%·400%는 GiB/GB 단위를 혼용한 근사치라 여기서 바로잡음) [D].")
+KV_SCALE_TABLE = """| 문맥 길이 | 요청 1건 KV cache | 동시 8건 | GPU HBM 80GB(≈74.5GiB) 대비(1건) |
 |---|---|---|---|
-| 8K | 2.5 GiB | 20 GiB | 3% |
-| 128K | 40 GiB | 320 GiB | 50% |
-| 1M | 320 GiB | 2,560 GiB | 400% |"""
+| 8K | 2.5 GiB | 20 GiB | 약 3.4% |
+| 128K | 40 GiB | 320 GiB | 약 53.7% |
+| 1M | 320 GiB | 2,560 GiB | 약 429.5% |"""
 
 # 설계 산출물 A-4 비선정 후보
 UNSELECTED_TABLE = """| 후보 | 진영 | 비선정 사유 | RAG 문서 활용 |
@@ -58,8 +61,19 @@ VERDICT_FIELDS = {
 }
 
 
+# Agent 출력에 섞여 나오는 스키마 필드명을 보고서 용어로 바꾼다.
+FIELD_LABELS = {"technology_trl:": "개별 기술 TRL:", "family_trl:": "계열 TRL:", "fact:": "사실:",
+                "interpretation:": "해석:", "judgment:": "판정:", "unknown:": "미확인:"}
+
+
+def readable(text: str) -> str:
+    for raw, label in FIELD_LABELS.items():
+        text = re.sub(rf"(?<![\w]){re.escape(raw)}", label, text)
+    return text
+
+
 def _cell(text: Any) -> str:
-    return " ".join(str(text or "").split()).replace("|", "/")
+    return readable(" ".join(str(text or "").split()).replace("|", "/"))
 
 
 _OWN_HEADING = re.compile(r"^\s*#{1,6}\s*(REFERENCE|참고\s*문헌|참고자료|References?)\b", re.IGNORECASE)
@@ -221,7 +235,7 @@ def render_report(state: dict, llm: Any) -> str:
         f"### 4.4 도메인 적용성(D1-D7)\n{tables['4.4']}\n\n{parts['perspective_domain']}",
         f"## 5. 종합 의견\n{parts['synthesis']}",
         f"## 6. 시사점\n{parts['implications']}",
-        f"## 7. 한계점\n{parts['limitations']}\n\n#### 표 7. 증거 균형표 (중복 제거 후 수집·검증된 Evidence 수)\n{evidence_balance_table(state)}",
+        f"## 7. 한계점\n**자료 기준 시점**: 웹 자료 검색·검증일 {AS_OF} (Tavily 검색 결과 기준). 이후 공개된 발표·제품 정보는 반영되지 않았다.\n\n{parts['limitations']}\n\n#### 표 7. 증거 균형표 (중복 제거 후 수집·검증된 Evidence 수)\n{evidence_balance_table(state)}",
     ])
     refs, _ = used_references(report, state["evidence"])
     if "[D]" in report:
