@@ -102,10 +102,10 @@ flowchart TD
 
 ※ 설계 산출물 PDF(D-2. Graph 흐름 설계) 원본 flowchart 이미지를 Mermaid로 옮긴 것으로, 노드 문구는 원본 이미지를 기준으로 최대한 그대로 옮겼으며 세부 배치·색상은 Mermaid 렌더링 방식에 따라 원본과 다를 수 있음
 
-
 ## Directory Structure
 
-<<<<<<< HEAD
+```text
+kv-cache-optimization/
 ├── data/                      # 문서 풀
 │   ├── manifest.json          # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
 │   ├── raw/                   # 원문 PDF (git 미포함, 로컬에 직접 배치)
@@ -133,34 +133,9 @@ flowchart TD
 ├── tests/                      # pytest (전부 오프라인 stub 기반 — 실제 LLM/임베딩/네트워크 호출 없음)
 ├── outputs/                    # 평가 결과 저장 (RAG-Output_*.md, *.pdf)
 ├── pyproject.toml              # 전체 의존성 (kv_eval 패키지 + preprocessing + vectordb)
-=======
-```text
-kv-cache-optimization/
-├── data/                    # 문서 풀
-├── data/
-│   ├── manifest.json        # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
-│   ├── raw/                 # 원문 PDF (git 미포함, 로컬에 직접 배치)
-│   └── processed/           # 전처리 결과 (chunks.jsonl, summary.json)
-├── preprocessing/           # 데이터 전처리 (파싱·참고문헌 제외·청킹·페이지 예산 검증)
-├── agents/                  # Agent 모듈
-├── prompts/                 # 프롬프트 템플릿
-├── prompts/                 # Agent 프롬프트 패키지 (00_common_contract 등)
-├── schemas/                 # Evidence 등 공통 JSON Schema
-├── scripts/                 # 프롬프트 패키지 정적 검증 스크립트
-├── src/kv_eval/             # 백엔드 패키지 (src 레이아웃)
-│   ├── config.py / state.py / graph.py / llm.py
-│   ├── agents/              # master, technology, market, stakeholder, domain, synthesis, report
-│   ├── rag/                 # ingest, index, retrieve, workflow
-│   ├── tools/                # web_search.py
-│   └── reporting/            # sections, export
-├── tests/
-├── outputs/                 # 평가 결과 저장
-├── app.py                   # 실행 스크립트
-├── pyproject.toml
->>>>>>> facd63eb4d8c15761bdd724d634bf08af60e128c
+├── .env / .env.example
 └── README.md
 ```
-
 
 ## Usage
 
@@ -214,21 +189,14 @@ python app.py
 
 ## Contributors
 
-<<<<<<< HEAD
+
 2조 : 김동욱(P280), 김민정(P282), 김태동(P287), 박규리(P289), 이재겸(P298), 임동건(P301)
 
-- 김민정(P282) : 데이터 전처리 (PDF 파싱, 2단 레이아웃·표·수식 처리, 참고문헌 제외, 청킹)
-- 김동욱(P280) : LangGraph 기반 Master/6-Agent 오케스트레이션, RAG 파이프라인, 보고서 생성·PDF export 구현
-- 이재겸(P298) : Agent별 페르소나 및 프롬프트 계약 작성
-- 김태동(P287) : 웹 검색 도구(Tavily) 연동 및 이해관계자 평가 설계
-- 임동건(P301), 박규리(P289) : Vector DB 구성(ChromaDB), 청킹 개선, 검색 품질 평가(Hit@K/MRR)
-=======
-이름 | 수행 역할 |
+| 이름 | 수행 역할 |
 |---|---|
-| 김동욱(P280) |  전체 시스템 아키텍처 설계 — LangGraph 기반 State(state.py)·Graph 노드/엣지 배선(graph.py), 실행 설정(config.py) 등 전체 골격 구성  |
-| 김민정(P282) |  데이터 전처리 — 논문 PDF 파싱, 2단 컬럼 분리, 참고문헌 구간 제외, 청킹 파이프라인 구현(preprocessing/)  |
-| 김태동(P287) |  API 툴 정리 — 시장·이해관계자 평가 Agent용 Tavily 웹 검색 도구 구현(tools/web_search.py)  |
-| 박규리(P289) |  데이터 전처리(파싱·참고문헌 구간 제외·청킹), 임베딩·벡터 색인, 검색 품질 평가 세트 및 하네스 |
-| 이재겸(P298) |  페르소나 및 프롬프트 작성 — Agent별 System/Task 프롬프트 패키지(prompts/), 공통 계약·Evidence 스키마 설계  |
-| 임동건(P301) |  vector DB 구성(박규리님과 공동) — Chroma 기반 벡터DB 셋업(vectordb.py, data/chroma/) |
->>>>>>> facd63eb4d8c15761bdd724d634bf08af60e128c
+| 김동욱(P280) | 전체 시스템 아키텍처 설계 — LangGraph 기반 Master/6-Agent 오케스트레이션, State(`state.py`)·Graph 노드/엣지 배선(`graph.py`), RAG 파이프라인, 보고서 생성·PDF export 구현 |
+| 김민정(P282) | 데이터 전처리 — 논문 PDF 파싱, 2단 레이아웃·표·수식 처리, 참고문헌 구간 제외, 청킹 파이프라인 구현(`preprocessing/`) |
+| 김태동(P287) | API 툴 정리 — 시장·이해관계자 평가 Agent용 Tavily 웹 검색 도구 연동 및 이해관계자 평가 설계(`tools/web_search.py`) |
+| 박규리(P289) | 데이터 전처리(파싱·참고문헌 구간 제외·청킹), 임베딩·벡터 색인, 검색 품질 평가 세트 및 하네스(Hit@K/MRR) |
+| 이재겸(P298) | 페르소나 및 프롬프트 작성 — Agent별 System/Task 프롬프트 패키지(`prompts/`), 공통 계약·Evidence 스키마 설계 |
+| 임동건(P301) | vector DB 구성(박규리님과 공동) — ChromaDB 기반 벡터DB 셋업(`vectordb.py`, `data/chroma/`), 청킹 개선 |
