@@ -103,21 +103,66 @@ flowchart TD
 
 ## Directory Structure
 
+```text
+kv-cache-optimization/
 ├── data/                    # 문서 풀
+├── data/
 │   ├── manifest.json        # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
 │   ├── raw/                 # 원문 PDF (git 미포함, 로컬에 직접 배치)
 │   └── processed/           # 전처리 결과 (chunks.jsonl, summary.json)
 ├── preprocessing/           # 데이터 전처리 (파싱·참고문헌 제외·청킹·페이지 예산 검증)
 ├── agents/                  # Agent 모듈
 ├── prompts/                 # 프롬프트 템플릿
+├── prompts/                 # Agent 프롬프트 패키지 (00_common_contract 등)
+├── schemas/                 # Evidence 등 공통 JSON Schema
+├── scripts/                 # 프롬프트 패키지 정적 검증 스크립트
+├── src/kv_eval/             # 백엔드 패키지 (src 레이아웃)
+│   ├── config.py / state.py / graph.py / llm.py
+│   ├── agents/              # master, technology, market, stakeholder, domain, synthesis, report
+│   ├── rag/                 # ingest, index, retrieve, workflow
+│   ├── tools/                # web_search.py
+│   └── reporting/            # sections, export
+├── tests/
 ├── outputs/                 # 평가 결과 저장
 ├── app.py                   # 실행 스크립트
+├── pyproject.toml
 └── README.md
+```
+
 
 ## Usage
 
+
+```bash
+pip install -e .          # pyproject.toml (langgraph, openai, tavily-python, faiss-cpu, rank-bm25 등)
+pip install -r requirements.txt   # 전처리 전용 (pdfplumber, chromadb 등)
+```
+
+**2. 환경변수 설정**
+
+`.env.example`을 복사해 `.env`를 만들고 키를 채운다.
+
+```bash
+cp .env.example .env
+```
+
+```text
+OPENAI_API_KEY=          # 필수
+OPENAI_MODEL=gpt-5.6-sol # 고정값, 다른 모델로 바꾸면 즉시 에러
+TAVILY_API_KEY=          # 필수
+PAPERS_DIR=data/raw      # 원문 PDF 4편이 있는 경로
+OUTPUT_DIR=outputs
+```
+
+**3. 원문 PDF 배치**
+
+`data/manifest.json`에 정의된 파일명대로 `data/raw/`에 4편을 넣는다 (`deepseek_v2_mla.pdf`, `itme.pdf`, `infinigen.pdf`, `cxl_pnm.pdf`).
+
+**4. 실행**
+
 ```bash
 python {app.py}
+python app.py
 ```
 
 ## Contributors
