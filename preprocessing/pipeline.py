@@ -79,7 +79,13 @@ def _pages_with_vector_diagrams(raw_pages: list[RawPage]) -> list[int]:
     ]
 
 
-def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]:
+def _process_document(
+    doc: dict,
+    doc_index: int,
+    *,
+    chunk_size: int,
+    overlap: int,
+) -> tuple[list[dict], dict, int]:
     pdf_path = RAW_DIR / doc["filename"]
     if not pdf_path.exists():
         raise FileNotFoundError(
@@ -123,7 +129,12 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
     if reference_start_page is not None:
         all_tables = [t for t in all_tables if t.page_number < reference_start_page]
 
-    text_chunks, review_flags = chunk_document(doc["doc_id"], body_pages, chunk_size=CHUNK_SIZE, overlap=OVERLAP)
+    text_chunks, review_flags = chunk_document(
+        doc["doc_id"],
+        body_pages,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
 
     doc_chunks: list[dict] = []
     for chunk in text_chunks:
@@ -199,7 +210,12 @@ def run(chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> dict:
     doc_summaries: list[dict] = []
 
     for doc_index, doc in enumerate(documents, start=1):
-        doc_chunks, doc_summary, total_pages = _process_document(doc, doc_index)
+        doc_chunks, doc_summary, total_pages = _process_document(
+            doc,
+            doc_index,
+            chunk_size=chunk_size,
+            overlap=overlap,
+        )
         all_chunks.extend(doc_chunks)
         doc_summaries.append(doc_summary)
         document_page_counts[doc["doc_id"]] = total_pages
