@@ -55,7 +55,7 @@ flowchart TD
 
     subgraph PARALLEL["관점별 병렬 평가"]
         direction LR
-        MARKET["시장 평가 에이전트<br/>RAG"]
+        MARKET["시장 평가 에이전트<br/>외부 검색 도구"]
         STAKEHOLDER["이해관계자 평가 에이전트<br/>외부 검색 도구"]
         DOMAIN["도메인 평가 에이전트<br/>논문 RAG"]
     end
