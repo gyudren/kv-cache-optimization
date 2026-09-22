@@ -1,0 +1,45 @@
+{
+  "page_budget": 200,
+  "documents": [
+    {
+      "doc_id": "deepseek_v2_mla",
+      "filename": "deepseek_v2_mla.pdf",
+      "title": "DeepSeek-V2 (MLA)",
+      "camp": "SW",
+      "role": "primary",
+      "arxiv_id": "2405.04434",
+      "expected_pages": 52,
+      "reference_start_page": null
+    },
+    {
+      "doc_id": "itme",
+      "filename": "itme.pdf",
+      "title": "ITME",
+      "camp": "HW",
+      "role": "primary",
+      "arxiv_id": "2606.12556",
+      "expected_pages": 13,
+      "reference_start_page": null
+    },
+    {
+      "doc_id": "infinigen",
+      "filename": "infinigen.pdf",
+      "title": "InfiniGen",
+      "camp": "HW",
+      "role": "baseline",
+      "arxiv_id": null,
+      "expected_pages": 18,
+      "reference_start_page": null
+    },
+    {
+      "doc_id": "cxl_pnm",
+      "filename": "cxl_pnm.pdf",
+      "title": "CXL-PNM",
+      "camp": "HW",
+      "role": "baseline",
+      "arxiv_id": null,
+      "expected_pages": 13,
+      "reference_start_page": null
+    }
+  ]
+}
