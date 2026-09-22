@@ -1,96 +1,47 @@
-"""실행 환경과 설계 고정값.
-
-A-1 도메인, A-4 선정 기술, C-3 이해관계자 평가 기준, D-1 단계·재시도 한도를 한곳에 모은다.
-"""
-
+"""Fixed project configuration. No auto-selection or model fallback."""
+from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
 import os
 
-# ── A-1 평가 도메인 ──────────────────────────────────────────────
-DOMAIN = "데이터센터·클라우드 장문맥 LLM 서빙"
+MODEL_ID = "gpt-5.6-sol"
+DOMAIN = "데이터센터·클라우드 기반 장문맥 LLM 서빙"
+TECHNOLOGIES = {"mla": "DeepSeek-V2 MLA", "itme": "ITME"}
+EMBEDDING_ID = "Qwen/Qwen3-Embedding-0.6B"
+MAX_PAGES = 200
+DECLARED_PAGES = {"deepseek_v2": 52, "itme": 13, "infinigen": 18, "cxl_pnm": 13}
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 200
+RETRIEVAL_K = 6  # Implementation detail; same setting across technologies.
+RRF_CONSTANT = 60
+MIN_RELEVANT = 2
+RAG_REWRITES = 2
+RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2}
+REPORT_STEM = "RAG-Output_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"
 
-# ── A-4 선정 기술 ────────────────────────────────────────────────
-# 이해관계자는 기술명이 아니라 그 기술을 담은 주체·제품을 두고 발언하므로
-# 검색 질의 레벨을 기술(tech)과 주체·제품(entity)으로 나눈다.
-TECHNOLOGIES = {
-    "MLA": {
-        "label": "DeepSeek-V2 MLA",
-        "camp": "SW",
-        "tech_ko": "DeepSeek-V2 MLA 멀티헤드 잠재 어텐션 KV 캐시",
-        "tech_en": "DeepSeek-V2 Multi-head Latent Attention MLA KV cache",
-        "entity_ko": "딥시크 DeepSeek 모델 추론 비용",
-        "entity_en": "DeepSeek AI model inference efficiency cost",
-    },
-    "ITME": {
-        "label": "ITME (CXL-Hybrid 계층 메모리 확장)",
-        "camp": "HW",
-        "tech_ko": "CXL 하이브리드 메모리 KV 캐시 계층 확장",
-        "tech_en": "CXL hybrid memory tiering LLM KV cache offloading",
-        "entity_ko": "SK하이닉스 CXL 메모리 확장 AI 서버",
-        "entity_en": "SK hynix CXL memory expansion AI server",
-    },
-}
+@dataclass(frozen=True)
+class Settings:
+    papers_dir: Path
+    output_dir: Path
+    openai_key: str
+    tavily_key: str
+    model: str = MODEL_ID
 
-# ── C-3 이해관계자 관점: 평가 대상·근거원·판정 기준 ──────────────
-STAKEHOLDER_CATEGORIES = {
-    "competitor": {
-        "label": "경쟁 진영",
-        "question": "경쟁사는 이 기술을 어떻게 보는가",
-        "sources": ["경쟁사 발표", "기술 비교 기사"],
-        "criteria": "- 경쟁사가 병행·협력 가능성을 언급하면 긍정\n"
-        "- 한계를 지적하거나 대체 기술을 내세우면 우려",
-        "ko_terms": "경쟁사 입장 채택하지 않은 이유 대체 기술 내세워 한계 지적",
-        "en_terms": "why competitors did not adopt criticized limitation rival vendor said alternative instead",
-        "topic": "general",
-        "levels": ["entity"],
-    },
-    "adopter_developer": {
-        "label": "도입 기업·개발자",
-        "question": "실제 사용자는 어떻게 평가하는가",
-        "sources": ["개발자 커뮤니티", "기업 기술 블로그"],
-        "criteria": "- 사용 효과(메모리 절감, 속도 향상) 후기가 있으면 긍정\n"
-        "- 품질 저하·도입 복잡도가 지적되면 우려",
-        "ko_terms": "도입 후기 운영 경험 실제 적용해보니 문제점 불편",
-        "en_terms": "engineers report production experience lessons learned pain points complained serving in practice",
-        "topic": "general",
-        "levels": ["tech", "entity"],
-    },
-    "investor": {
-        "label": "투자 업계",
-        "question": "투자자/전문가는 어떻게 보는가",
-        "sources": ["애널리스트 보고서", "경제 언론", "주가 반응 기사"],
-        "criteria": "- 성장 기대 및 투자 확대 평가가 있으면 긍정\n"
-        "- 과대평가, 수요 감소 우려가 있으면 우려",
-        "ko_terms": "애널리스트 전망 투자 확대 과대평가 우려 수요 감소 주가 반응",
-        "en_terms": "analysts say investors outlook overhyped concerns demand forecast stock reaction",
-        "topic": "news",
-        "levels": ["entity"],
-    },
-}
+    @classmethod
+    def from_env(cls) -> "Settings":
+        from dotenv import load_dotenv
+        load_dotenv()
+        model = os.getenv("OPENAI_MODEL", MODEL_ID)
+        if model != MODEL_ID:
+            raise ValueError(f"Generator/Judge model must be {MODEL_ID}; got {model!r}")
+        return cls(
+            papers_dir=Path(os.getenv("PAPERS_DIR", "data/papers")),
+            output_dir=Path(os.getenv("OUTPUT_DIR", "outputs")),
+            openai_key=os.getenv("OPENAI_API_KEY", ""),
+            tavily_key=os.getenv("TAVILY_API_KEY", ""),
+            model=model,
+        )
 
-# 관점당 이 건수 미만이면 미충족으로 보고 missing에 넣는다
-MIN_EVIDENCE_PER_CATEGORY = 2
-
-# 관측된 노이즈(프로필·북마크 페이지)는 0.27 이하, 유효 근거는 0.30 이상에 분포
-MIN_SCORE = 0.28
-
-# ── D-1 실행 단계와 재시도 한도 ──────────────────────────────────
-PHASES = ["init", "tech_research", "parallel_eval", "synthesis", "report", "done"]
-PARALLEL_AGENTS = ["market", "stakeholder", "domain"]
-RETRY_LIMITS = {
-    "tech": 2,
-    "market": 2,
-    "stakeholder": 2,
-    "domain": 2,
-    "synthesis": 1,
-    "report": 2,
-}
-
-# ── 실행 환경 ────────────────────────────────────────────────────
-# README의 LLM 버전이 미확정이라 환경변수로 받는다
-JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "gpt-4o-mini")
-GENERATOR_MODEL = os.environ.get("GENERATOR_MODEL", "gpt-4o")
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
-
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-PAPERS_DIR = os.path.join(_ROOT, "data", "papers")
-OUTPUT_DIR = os.path.join(_ROOT, "outputs")
+    def require_credentials(self) -> None:
+        if not self.openai_key or not self.tavily_key:
+            raise RuntimeError("OPENAI_API_KEY and TAVILY_API_KEY are required; see .env.example")

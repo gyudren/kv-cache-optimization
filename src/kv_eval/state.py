@@ -1,67 +1,44 @@
-"""D-1 State 및 reducer.
-
-병렬 Agent가 같은 key를 동시에 쓰지 않도록 관점별 결과를 전용 key로 분리하고,
-공통 누적분(evidence, logs)만 reducer를 쓴다.
-단계 값·재시도 한도 같은 설계 고정값은 config에 둔다.
-"""
-
-import hashlib
+"""D-1 state contract; only Master modifies control-flow keys."""
+from __future__ import annotations
 import operator
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
+from .config import RETRY_LIMITS
 
-
-class EvalState(TypedDict, total=False):
+class GraphState(TypedDict):
     user_query: str
-    phase: str
+    phase: Literal["init", "tech_research", "parallel_eval", "synthesis", "report", "done"]
     next_agents: list[str]
-
-    # 관점별 결과 — 각 Agent 전용 key (병렬 충돌 방지)
-    tech_result: dict
-    market_result: dict
-    stakeholder_result: dict
-    domain_result: dict
-
-    # 공통 누적 — reducer
-    evidence: Annotated[list, operator.add]
-    logs: Annotated[list, operator.add]
-
-    review_feedback: dict
-    synthesis_result: dict
+    tech_result: dict[str, Any]
+    market_result: dict[str, Any]
+    stakeholder_result: dict[str, Any]
+    domain_result: dict[str, Any]
+    evidence: Annotated[list[dict[str, Any]], operator.add]
+    logs: Annotated[list[dict[str, Any]], operator.add]
+    review_feedback: dict[str, Any]
+    synthesis_result: dict[str, Any]
     report_draft: str
+    retry_counts: dict[str, int]
+    status: Literal["running", "completed", "failed"]
 
-    # 작성 주체는 Master. 병렬 노드가 쓰면 동시 갱신으로 InvalidUpdateError가 난다.
-    retry_counts: dict
-    status: str
-
-
-def source_id(url: str) -> str:
-    """URL 기반 안정 식별자. 전 Agent가 같은 함수를 써야 종합 단계 중복 제거가 성립한다."""
-    return hashlib.sha1(url.encode()).hexdigest()[:12]
+RESULT_KEY = {"tech": "tech_result", "market": "market_result", "stakeholder": "stakeholder_result", "domain": "domain_result"}
 
 
-def to_evidence(hit: dict, *, agent: str, attempt: int, **fields) -> dict:
-    """검색 결과 1건을 D-1 evidence 항목으로 변환한다. 필수 3필드를 여기서 강제한다."""
-    url = hit.get("url", "")
+def initial_state(query: str) -> GraphState:
     return {
-        "source_id": source_id(url),
-        "agent": agent,
-        "attempt": attempt,
-        "title": hit.get("title", ""),
-        "url": url,
-        "content": hit.get("content", ""),
-        "score": hit.get("score"),
-        **fields,
+        "user_query": query,
+        "phase": "init", "next_agents": [],
+        "tech_result": {}, "market_result": {}, "stakeholder_result": {}, "domain_result": {},
+        "evidence": [], "logs": [], "review_feedback": {}, "synthesis_result": {},
+        "report_draft": "", "retry_counts": {name: 0 for name in RETRY_LIMITS}, "status": "running",
     }
 
 
-def initial_state(user_query: str) -> EvalState:
-    return {
-        "user_query": user_query,
-        "phase": "init",
-        "next_agents": [],
-        "evidence": [],
-        "logs": [],
-        "review_feedback": {},
-        "retry_counts": {},
-        "status": "running",
-    }
+def deduplicate_evidence(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str, object]] = set()
+    out = []
+    for ev in items:
+        key = (ev.get("source_id", ""), ev.get("claim", ""), ev.get("page") or ev.get("url"))
+        if key not in seen:
+            seen.add(key)
+            out.append(ev)
+    return out
