@@ -42,7 +42,7 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
         results[tech] = {**assessment.model_dump(), "sufficient": assessment.sufficient and bool(cited) and not bool(issues), "missing": issues}
         evidence.extend({"source_id": r["source_id"], "agent": "market", "attempt": attempt,
                          "claim": f"{name}: 시장·채택·생태계", "excerpt": r["excerpt"],
-                         "technology": tech, "source_type": "web", "url": r["url"],
+                         "technology": tech, "source_type": "web", "url": r["url"], "title": r["title"],
                          "publisher": r["publisher"], "published_at": r["published_at"]} for r in cited)
     return {"market_result": {"technologies": results, "sufficient": all(r.get("sufficient", False) for r in results.values()),
                               "missing": list(dict.fromkeys(missing))}, "evidence": evidence,

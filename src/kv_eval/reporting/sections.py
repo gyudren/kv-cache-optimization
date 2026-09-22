@@ -22,7 +22,11 @@ def bibliography() -> dict[str, dict]:
 
 
 def format_paper_reference(number: int, doc_id: str, pages: list[int]) -> str:
-    """설계 E의 논문 인용 형식: 저자(YYYY). 제목. 발표처. (인용 페이지)"""
+    """가이드 REFERENCE 형식(논문): 저자(YYYY). 논문제목. 학술지/학회명, 권(호), 페이지.
+
+    확인되지 않은 항목은 추정하지 않고 '미확인'으로 적는다. 페이지에는 보고서가 실제로
+    인용한 원문 페이지만 기재한다(활용한 자료만 기재한다는 규칙에 맞춘다).
+    """
     meta = bibliography().get(doc_id, {})
     authors = meta.get("authors") or "저자 미확인"
     year = meta.get("year") or "연도 미확인"
@@ -30,11 +34,11 @@ def format_paper_reference(number: int, doc_id: str, pages: list[int]) -> str:
     if meta.get("venue"):
         venue = meta["venue"]
     elif meta.get("arxiv_id"):
-        venue = f"arXiv:{meta['arxiv_id']}"
+        venue = f"arXiv preprint arXiv:{meta['arxiv_id']}"
     else:
-        venue = "발표처 미확인"
+        venue = "학술지/학회명 미확인"
     cited = ", ".join(f"p.{page}" for page in sorted(set(pages)))
-    return f"[{number}] {authors} ({year}). {title}. {venue}. (인용: {cited})"
+    return f"[{number}] {authors} ({year}). {title}. {venue}, {cited}."
 
 MANDATORY = ["SUMMARY", "1. 분석 배경", "2. 기술 선정", "3. 기술 개요", "4. 관점별 평가", "5. 종합 의견", "6. 시사점", "7. 한계점", "REFERENCE"]
 PAPER_CITATION = re.compile(r"\[(\d+),\s*p\.(\d+)\]")
@@ -83,9 +87,11 @@ def used_references(report: str, evidence: list[dict]) -> tuple[list[str], list[
         if ev is None:
             issues.append(f"웹 인용 [W{number}]의 URL 근거 없음")
         else:
+            # 가이드 REFERENCE 형식(기타/웹): 기관명 또는 작성자(YYYY-MM-DD). 제목. 사이트명, URL
             publisher = ev.get("publisher") or "발행 주체 미확인"
             date = ev.get("published_at") or "게시일 미확인"
-            refs.append(f"[W{number}] {publisher} ({date}). {ev['url']}")
+            title = ev.get("title") or "제목 미확인"
+            refs.append(f"[W{number}] {publisher} ({date}). {title}. {publisher}, {ev['url']}")
     return refs, issues
 
 

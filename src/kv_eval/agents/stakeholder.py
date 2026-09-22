@@ -42,7 +42,7 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
         results[tech] = {**assessment.model_dump(), "sufficient": assessment.sufficient and bool(cited) and not bool(issues), "missing": issues}
         evidence.extend({"source_id": r["source_id"], "agent": "stakeholder", "attempt": attempt,
                          "claim": f"{name}: 이해관계자 평가", "excerpt": r["excerpt"],
-                         "technology": tech, "source_type": "web", "url": r["url"],
+                         "technology": tech, "source_type": "web", "url": r["url"], "title": r["title"],
                          "publisher": r["publisher"], "published_at": r["published_at"],
                          "speaker": r.get("speaker", "기타")} for r in cited)
     return {"stakeholder_result": {"technologies": results, "sufficient": all(r.get("sufficient", False) for r in results.values()),

@@ -42,7 +42,8 @@ def _trl_web_evidence(web: Any, tech: str, attempt: int) -> tuple[list[dict], li
         "agent": "tech", "attempt": attempt,
         "claim": f"{TECH_LABEL[tech]}: 구현·통합·상용화 발표(TRL 근거)",
         "excerpt": item["excerpt"], "technology": tech, "source_type": "web",
-        "url": item["url"], "publisher": item["publisher"], "published_at": item["published_at"],
+        "url": item["url"], "title": item["title"],
+        "publisher": item["publisher"], "published_at": item["published_at"],
     } for item in unique]
     missing = [] if evidence else [f"{TECH_LABEL[tech]}: 상용화·통합 웹 근거 없음(TRL 7~9 판정 불가)"]
     return evidence, missing
