@@ -18,6 +18,7 @@
       "text_chunk_count": 9,
       "table_count": 0,
       "removed_boilerplate_line_count": 79,
+      "removed_equation_line_count": 231,
       "pages_with_charts": [],
       "page_boundary_review_flags": [
         {
@@ -66,7 +67,7 @@
             7
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "three matrices ℎ , respectively:\n= 𝑊𝑄\nq𝑡 h𝑡, (1)\n= 𝑊𝐾\nk𝑡 h𝑡, (2)\n= 𝑊𝑉\nv𝑡 h𝑡, (3)",
+          "tail_preview": "ndard MHA first produces\nq𝑡, k𝑡, v𝑡 ℎ ℎ through three matrices ℎ , respectively:",
           "head_preview": "Cached During Inference\nMulti-Head Attention (MHA) Grouped-Query Attention (GQA)",
           "doc_id": "deepseek_v2_mla"
         },
@@ -77,7 +78,7 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "eover, in order to reduce the activation memory during training, we also perform",
-          "head_preview": "low-rank compression for the queries, even if it cannot reduce the KV cache:\n𝑄 𝑊",
+          "head_preview": "low-rank compression for the queries, even if it cannot reduce the KV cache:\nq =",
           "doc_id": "deepseek_v2_mla"
         },
         {
@@ -164,6 +165,7 @@
       "text_chunk_count": 8,
       "table_count": 7,
       "removed_boilerplate_line_count": 0,
+      "removed_equation_line_count": 0,
       "pages_with_charts": [],
       "page_boundary_review_flags": [
         {
@@ -270,6 +272,7 @@
       "text_chunk_count": 16,
       "table_count": 3,
       "removed_boilerplate_line_count": 79,
+      "removed_equation_line_count": 18,
       "pages_with_charts": [],
       "page_boundary_review_flags": [
         {
@@ -309,7 +312,7 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "enotes the at-\nK a\ntention input. We set the orthogonal matrix A whose direction",
-          "head_preview": "Offline\nSkewing\nPrefill Decoding\nPartial Layer (𝒊−𝟏) Layer 𝒊\nW e ig h t I d x K ",
+          "head_preview": "Offline\nSkewing\nPrefill Decoding\nW e ig h t I d x K V K V L ig h t\nG e n er a t ",
           "doc_id": "infinigen"
         },
         {
@@ -376,6 +379,7 @@
       "text_chunk_count": 14,
       "table_count": 1,
       "removed_boilerplate_line_count": 2,
+      "removed_equation_line_count": 30,
       "pages_with_charts": [],
       "page_boundary_review_flags": [
         {

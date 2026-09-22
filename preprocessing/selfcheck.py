@@ -13,6 +13,7 @@ reportlab이 설치되어 있으면 실제 2단 레이아웃 + header/footer + �
 
 from preprocessing.chunker import chunk_document, split_into_paragraphs, stitch_cross_page_paragraphs
 from preprocessing.columns import is_two_column, reconstruct_reading_order_text
+from preprocessing.equations import strip_equation_lines
 from preprocessing.headers_footers import collect_band_lines, detect_boilerplate_lines, strip_boilerplate_lines
 from preprocessing.loader import Word
 from preprocessing.noise_filter import drop_reference_pages, find_reference_start_page
@@ -207,6 +208,29 @@ def check_table_normalization() -> None:
     print("[OK] 표 캡션·각주 분리 및 병합 셀 forward-fill")
 
 
+def check_equation_line_stripping() -> None:
+    # LaTeX 논문에서 실제로 관찰된 패턴: 수식의 이탤릭 변수가 유니코드
+    # Mathematical Alphanumeric Symbols(U+1D400대)로 추출되어 깨진 기호 나열이 된다.
+    equation_line_1 = "\U0001D444 =\U0001D44A\U0001D437\U0001D444"
+    equation_line_2 = "c h\U0001D461, (1)"
+    text = "\n".join(
+        [
+            "We compress the query as follows:",
+            equation_line_1,
+            equation_line_2,
+            "This reduces memory usage.",
+        ]
+    )
+
+    cleaned, removed = strip_equation_lines(text)
+    assert equation_line_1 not in cleaned
+    assert equation_line_2 not in cleaned
+    assert "We compress the query as follows:" in cleaned
+    assert "This reduces memory usage." in cleaned
+    assert len(removed) == 2
+    print("[OK] 수식(유니코드 이탤릭 변수) 줄 제거, 앞뒤 자연어 문장은 보존")
+
+
 def check_synthetic_pdf_pipeline() -> None:
     try:
         from reportlab.pdfgen import canvas
@@ -267,6 +291,7 @@ def main() -> None:
     check_table_exclusion_from_body_text()
     check_header_footer_detection()
     check_table_normalization()
+    check_equation_line_stripping()
     check_synthetic_pdf_pipeline()
     print("\n모든 자체 점검 통과")
 
