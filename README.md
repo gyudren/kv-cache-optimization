@@ -24,9 +24,10 @@
 ## Tech Stack
 
 - Framework : LangGraph
-- LLM/Generator : {GPT version}
-- LLM/Judge : {GPT version}
-- Retrieval : FAISS(Dense) + BM25(Sparse), RRF 순위 융합 - {Hit Rate@K}, {MRR}
+- LLM/Generator : gpt-5.6-terra (OpenAI Responses API, 구조화 출력)
+- LLM/Judge : gpt-5.6-terra (보고서 검수 게이트에서 동일 모델 사용, 대체 모델 없음)
+- Retrieval : FAISS(Dense) + BM25(Sparse), RRF 순위 융합 — 측정값은 `outputs/retrieval_eval.json` 참고
+- Web Search : Tavily API (시장·이해관계자 평가 및 TRL 상용화 근거)
 - Embedding : Qwen3-Embedding-0.6B (다국어·교차언어 검색, 최대 32K 토큰, Apache 2.0 라이선스)
 
 ## Agents
@@ -113,12 +114,25 @@ RAG 적재 문서 4편(DeepSeek-V2/MLA, ITME, InfiniGen, CXL-PNM)을 다음 순�
 
 각 청크에는 `doc_id`, `camp`(SW/HW), `role`(primary/baseline), `content_type`(text/table), `start_page`/`end_page`, `citation`(`[n, p.X]` 형식) 메타데이터가 포함되어 있어 기술별 문서 필터링과 보고서 인용에 사용할 수 있다.
 
+**설계 산출물 기재값과 실측값의 차이**
+
+설계서 B-3은 파싱 도구와 산출 수치를 설계 시점 기준으로 적었고, 구현하면서 아래와 같이 달라졌다.
+수치를 문서에 맞추지 않고, 실측값을 그대로 쓰되 차이를 `outputs/corpus_stats.json`의 `warnings`로 남긴다.
+
+| 항목 | 설계서 기재 | 실측 | 차이 원인 |
+|---|---|---|---|
+| 파싱 도구 | pypdf | pdfplumber | 2단 레이아웃 읽기 순서와 표 좌표 처리를 위해 교체 |
+| 참고문헌 제외 | 11p | 14p | References 구간을 페이지 단위로 실제 탐지(부록은 색인 유지) |
+| 색인 페이지 | 85p | 84p | 위 탐지 결과에 따른 차이 (총 96p ≤ 200p 예산은 동일) |
+| 청크 수 | 333개 | 359개 | 1,200자/겹침 200자 기준은 동일하나, 큰 표를 행 단위로 분할하면서 증가 |
+
 **처리 세부 사항**
 
 - **2단 컬럼 분리** : 논문은 좌/우 컬럼의 줄 높이가 완전히 같거나 미세하게 어긋나는 경우가 섞여 있어, 단순히 "같은 줄 안의 간격"만 보면 컬럼이 자주 뒤섞인다. 줄 시작 x좌표가 아니라 각 줄이 실제로 차지하는 가로 범위(x0~x1)를 모아 겹치는 구간을 병합하고, 그 사이의 빈 거터를 컬럼 분리선으로 찾는다. 페이지 번호·각주처럼 아주 짧은 줄과, 페이지 상/하단에 걸쳐 전체 폭으로 반복되는 running header(저자 목록 등)는 이 탐지에서 제외해 거터를 가리거나 두 컬럼을 잘못 잇지 않게 한다.
 - **문단 경계(들여쓰기) 인식** : 이 논문들은 문단 사이에 빈 줄이 없고 첫 줄만 들여쓰기로 구분된다. 컬럼의 일반적인 좌측 여백보다 들여써진 줄을 새 문단의 시작으로 보고 명시적으로 문단을 나눈다(이게 없으면 페이지 전체가 하나의 문단이 되어 청킹이 사실상 무의미해짐).
-- **References 이후 구간(부록 포함) 제외** : References 제목이 페이지 맨 앞이 아니라 중간/끝에 나와도 탐지하고, 그 줄 이전 본문은 계속 색인 대상으로 남긴다. DeepSeek-V2(MLA)처럼 References 뒤에 부록(Appendix B/C 등 기술 부연 설명)이 이어지는 경우도 있는데, 참고문헌 구간과 함께 통째로 제외하기로 결정함 — Appendix만 따로 살리고 싶다면 `data/manifest.json`의 `reference_start_page`를 직접 지정해 경계를 조정할 수 있다.
-- **수식 줄은 원문 그대로 유지** : LaTeX로 조판된 논문은 수식의 이탤릭 변수(𝑄, 𝑊, 𝐷 등)가 유니코드 Mathematical Alphanumeric Symbols 문자로 추출되어 기호가 깨져 보인다. 한때 이런 줄을 통째로 제거해봤으나, 수식과 같은 줄에 있던 "where 𝑐 denotes ..." 같은 설명 문장까지 함께 잘려 문장이 조각나고, borderless 표(예: DeepSeek-V2 Table 1의 KV cache 비교 수치)의 수치까지 같이 삭제되는 부작용이 확인되어 되돌렸다. 기호는 깨져도 문장 구조와 표 수치가 온전한 쪽이 검색 품질에 더 낫다고 판단.
+- **참고문헌 "구간"만 제외 (부록은 색인 유지)** : References 제목이 페이지 맨 앞이 아니라 중간/끝에 나와도 탐지하고, 그 줄 이전 본문은 계속 색인 대상으로 남긴다. DeepSeek-V2(MLA)는 References(p.21~26) 뒤에 Appendix A~G(p.27~52)가 이어지는데, 여기에 **MLA 전체 수식(Appendix C)과 MHA/GQA/MQA ablation(Appendix D)** 처럼 기술 조사에 직접 쓰이는 내용이 들어 있다. 이를 통째로 버리면 52p 중 32p가 색인에서 사라지므로, `data/manifest.json`에 `reference_start_page`/`reference_end_page`를 지정해 **참고문헌 구간만** 제외한다(해당 값이 없으면 References 이후 전체를 제외하는 기존 동작을 유지).
+- **수식 줄은 전처리 산출물에 원문 그대로 유지** : LaTeX로 조판된 논문은 수식의 이탤릭 변수(𝑄, 𝑊, 𝐷 등)가 유니코드 Mathematical Alphanumeric Symbols 문자로 추출되어 기호가 깨져 보인다. 한때 이런 줄을 통째로 제거해봤으나, 수식과 같은 줄에 있던 "where 𝑐 denotes ..." 같은 설명 문장까지 함께 잘려 문장이 조각나고, borderless 표(예: DeepSeek-V2 Table 1의 KV cache 비교 수치)의 수치까지 같이 삭제되는 부작용이 확인되어 되돌렸다. 따라서 `chunks.jsonl`에는 원문을 그대로 남긴다.
+- **색인 단계의 선택적 정제** : 위 부작용을 피하기 위해, 색인 직전 정제는 "비율"이 아니라 **3자 이상 영단어가 하나도 없는 줄만** 제거하는 보수적 기준을 쓴다(`src/kv_eval/rag/ingest.py:clean_formula_noise`). 설명 문장과 `GiB`·`Token` 같은 단어가 섞인 표 행은 살아남고, `𝐡𝐡𝑡𝑡`·`4 …` 같은 글리프 잔해만 걸러진다. 적용 여부는 `CLEAN_FORMULA_NOISE=0/1` 환경변수로 바꿀 수 있으며, 어느 쪽이 나은지는 `python -m eval.evaluate_retrieval`로 두 설정을 각각 측정해 판단한다.
 - **표/다이어그램 오탐지 필터링** : pdfplumber의 표 탐지가 선(line)만 보고 판단하다 보니 아키텍처 다이어그램·차트도 표로 오인하는 경우가 많아, 실제 데이터 표처럼 보이는지(행/열 개수, 빈 셀 비율, 셀당 줄바꿈 수) 최소 조건으로 걸러낸다. 표로도 기각된 다이어그램 영역은 표로 만들지는 않되, 라벨 텍스트가 본문 문장 사이에 끼어들어 뒤섞이지 않도록 본문 재구성에서도 제외한다.
 
 자동으로 판단하기 위험한 항목은 넘겨짚지 않고 `summary.json`에 표시만 하므로, 색인 전에 아래 항목을 사람이 한 번 확인해야 한다.
@@ -136,38 +150,84 @@ RAG 적재 문서 4편(DeepSeek-V2/MLA, ITME, InfiniGen, CXL-PNM)을 다음 순�
 
 ## Retrieval Evaluation
 
-LLM 생성 없이 ChromaDB 검색 결과만 평가한다. 평가 세트는 개념·표·수식 질의 12개로 구성되며,
-청크 ID가 재청킹 때 바뀌는 점을 고려해 `doc_id + 원문 페이지`를 정답 기준으로 사용한다.
+LLM 생성 없이, 파이프라인이 실제로 쓰는 검색기(FAISS + BM25 → RRF)만 떼어 평가한다.
+청크 ID는 재청킹 때 바뀌므로 `doc_id`(+ 정밀 케이스는 원문 페이지·필수 용어)를 정답 기준으로 삼는다.
 
 ```bash
-python -m retrieval_eval
-python -m retrieval_eval --show-results
+python -m eval.evaluate_retrieval              # 지표 + 합격 기준 판정
+python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과까지 출력(사람 검토용)
 ```
 
-- 평가 입력: `evaluation/retrieval_cases.json`
-- 평가 결과: `outputs/retrieval_eval.json`
-- 지표: Hit@1/3/5, MRR, 문서 오염률, 표 노이즈 비율, 필수 근거 용어 포함률
-- 기본 임베딩 장치: MPS (`--device cpu` 또는 `--device cuda`로 변경 가능)
-
-현재 색인을 기준으로 먼저 평가하고, 표·수식 전처리 개선 후 동일 평가 세트를 다시 실행해 지표를 비교한다.
+- 평가 입력: `eval/retrieval_cases.json` (총 92케이스)
+  - `concept`/`table`/`formula` 12개 — 기대 페이지·필수 용어까지 확인하는 정밀 케이스
+  - `coverage` 80개 — 문서당 20개씩, 정답 문서가 상위에 오는지 확인
+- 평가 결과: `outputs/retrieval_eval.json` (케이스별 `human_feedback` 칸에 사람이 판단을 적을 수 있다)
+- 지표: Hit@1/3/5, MRR, 기대 페이지 적중률, 필수 용어 커버리지, 정밀 케이스 노이즈율
+- 합격 기준은 입력 파일의 `acceptance`에 명시되어 있고, 전부 만족해야 `passed: true`가 된다.
 
 ## Directory Structure
 
-├── data/                    # 문서 풀
-│   ├── manifest.json        # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
-│   ├── raw/                 # 원문 PDF (git 미포함, 로컬에 직접 배치)
-│   └── processed/           # 전처리 결과 (chunks.jsonl, summary.json)
-├── preprocessing/           # 데이터 전처리 (파싱·참고문헌 제외·청킹·페이지 예산 검증)
-├── agents/                  # Agent 모듈
-├── prompts/                 # 프롬프트 템플릿
-├── outputs/                 # 평가 결과 저장
-├── app.py                   # 실행 스크립트
-└── README.md
+```
+├── app.py                       # 실행 진입점 (전처리 산출물 적재 → 색인 → LangGraph 실행 → 보고서 저장)
+├── data/
+│   ├── manifest.json            # 문서 4편 메타데이터(진영/역할/참고문헌 구간)
+│   ├── raw/                     # 원문 PDF (git 미포함, 로컬에 직접 배치)
+│   └── processed/               # 전처리 결과 (chunks.jsonl, summary.json)
+├── preprocessing/               # 파싱·header/footer 제거·표 분리·참고문헌 제외·청킹·페이지 예산 검증
+├── src/kv_eval/
+│   ├── config.py                # 고정 설정(모델·청킹·검색·재시도 한도)
+│   ├── state.py                 # 설계 D-1 State 스키마
+│   ├── graph.py                 # 설계 D-2 LangGraph 노드·엣지 정의
+│   ├── agents/                  # master, technology, market, stakeholder, domain, synthesis, report
+│   ├── rag/                     # ingest(적재) · index(FAISS/BM25) · retrieve(RRF) · workflow(Agentic RAG)
+│   ├── tools/web_search.py      # Tavily 검색 (RAG 미사용 Agent 전용)
+│   └── reporting/               # 목차·인용 검증(sections) 및 Markdown/PDF 내보내기(export)
+├── prompts/                     # 공통 계약(00) + 역할별 시스템 프롬프트(01~08)
+├── eval/                        # 검색 품질 평가 세트 및 하네스
+├── outputs/                     # 최종 보고서(.md/.pdf), 검증 결과, 실행 로그
+├── tests/                       # 단위 테스트 (네트워크·API 키 불필요)
+└── scripts/                     # 프롬프트 패키지 검증 스크립트
+```
 
 ## Usage
 
+### 1. 설치
+
 ```bash
-python {app.py}
+pip install -e ".[dev]"        # 의존성의 단일 출처는 pyproject.toml
+cp .env.example .env           # OPENAI_API_KEY, TAVILY_API_KEY 입력 (.env는 git에 올라가지 않음)
+```
+
+### 2. 원문 PDF 배치 및 전처리
+
+`data/manifest.json`의 `filename`대로 논문 4편을 `data/raw/`에 두고 실행한다.
+
+```bash
+python -m preprocessing.pipeline   # → data/processed/chunks.jsonl, summary.json
+```
+
+### 3. 전체 파이프라인 실행
+
+```bash
+python app.py
+```
+
+`outputs/`에 다음이 생성된다.
+
+| 파일 | 내용 |
+|---|---|
+| `RAG-Output_판교_9반_....md` / `.pdf` | 최종 평가 보고서 (SUMMARY ~ REFERENCE) |
+| `validation.json` | 필수 목차·인용·REFERENCE 검증 결과 |
+| `corpus_stats.json` | 페이지 예산(≤200p)·청크 수 등 색인 통계 |
+| `run_logs.json` | 노드별 실행 로그(시도 횟수, 게이트 판정) |
+
+종료 코드는 보고서가 검증까지 통과하면 `0`, 생성됐으나 검증에 실패하면 `2`, 실행 자체가 실패하면 `1`이다.
+
+### 4. 테스트 / 검색 품질 평가
+
+```bash
+pytest -q                          # 단위 테스트 (API 키·네트워크 불필요)
+python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판정
 ```
 
 ## Contributors

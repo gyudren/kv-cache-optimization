@@ -59,7 +59,11 @@ class HybridRetriever:
         if not subset:
             return []
 
-        query_embedding = np.asarray(self.store.model.encode([query]), dtype="float32")
+        # Qwen3-Embedding은 검색 질의에 instruction을 붙여 임베딩하도록 학습돼 있다
+        # (설계 B-4가 이 모델을 고른 근거). 문서는 instruction 없이 임베딩한다.
+        query_embedding = np.asarray(
+            self.store.model.encode([query], prompt_name="query"), dtype="float32"
+        )
         faiss.normalize_L2(query_embedding)
         # 허용된 문서만 점수를 매긴다(제외된 기술이 top-k 자리를 차지하지 못하게).
         dense_scores = self.store.vectors[subset] @ query_embedding[0]

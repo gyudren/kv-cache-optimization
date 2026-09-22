@@ -12,7 +12,7 @@ def build_graph(rag: Any, web: Any, llm: Any):
 
     graph = StateGraph(GraphState)
     graph.add_node("master_init", master.master_init_node)
-    graph.add_node("technology", partial(technology.technology_node, rag=rag, llm=llm))
+    graph.add_node("technology", partial(technology.technology_node, rag=rag, llm=llm, web=web))
     graph.add_node("master_tech_gate", master.master_tech_gate_node)
     graph.add_node("master_query_rewrite", master.master_query_rewrite_node)
     graph.add_node("master_dispatch", master.master_dispatch_node)

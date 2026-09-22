@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
-from ..config import MAX_PAGES, MIN_INDEXED_CHARS
+from ..config import CLEAN_FORMULA_NOISE, MAX_PAGES, MIN_INDEXED_CHARS
 
 Technology = Literal["mla", "itme", "baseline"]
 
@@ -100,7 +100,7 @@ def load_processed_chunks(chunks_path: Path, manifest: list[PaperSpec]) -> list[
                 f"(manifest 문서: {sorted(specs)})"
             )
         text = record["text"]
-        if record["content_type"] == "text":
+        if CLEAN_FORMULA_NOISE and record["content_type"] == "text":
             text = clean_formula_noise(text)
         if len(text) < MIN_INDEXED_CHARS:
             continue
