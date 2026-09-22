@@ -58,5 +58,5 @@ def test_reference_formats_follow_guide():
 
 def test_reference_marks_unconfirmed_fields_instead_of_guessing():
     from kv_eval.reporting.sections import format_paper_reference
-    ref = format_paper_reference(3, "infinigen", [12])
+    ref = format_paper_reference(3, "unlisted_paper", [12])
     assert "연도 미확인" in ref and "학술지/학회명 미확인" in ref

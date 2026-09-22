@@ -227,6 +227,9 @@ python app.py
 | `validation.json` | 필수 목차·인용·REFERENCE 검증 결과 |
 | `corpus_stats.json` | 페이지 예산(≤200p)·청크 수 등 색인 통계 |
 | `run_logs.json` | 노드별 실행 로그(시도 횟수, 게이트 판정) |
+| `final_state.json` | 최종 LangGraph State(결과·Evidence 전체). `python app.py --export-only`로 LLM 호출 없이 보고서만 다시 내보낼 때 사용 |
+
+보고서 PDF는 Markdown 표·소제목·목록을 그대로 렌더링하며, 기준별 신호표(TRL·시장·이해관계자·D1~D7)와 증거 균형표는 LLM이 아니라 코드가 State의 Agent 판정값에서 직접 만든다(표와 판정이 어긋나지 않도록).
 
 종료 코드는 보고서가 검증까지 통과하면 `0`, 생성됐으나 검증에 실패하면 `2`, 실행 자체가 실패하면 `1`이다.
 
@@ -260,4 +263,4 @@ python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판�
 | 김태동(P287) |  API 툴 정리 — 시장·이해관계자 평가 Agent용 Tavily 웹 검색 도구 구현(tools/web_search.py)  |
 | 박규리(P289) |  데이터 전처리(파싱·참고문헌 구간 제외·청킹), 임베딩·벡터 색인, 검색 품질 평가 세트 및 하네스 |
 | 이재겸(P298) |  페르소나 및 프롬프트 작성 — Agent별 System/Task 프롬프트 패키지(prompts/), 공통 계약·Evidence 스키마 설계  |
-| 임동건(P301) |  vector DB 구성(박규리님과 공동) — Chroma 기반 벡터DB 셋업(vectordb.py, data/chroma/) |
+| 임동건(P301) |  vector DB 구성(박규리님과 공동) — 초기 Chroma 기반 벡터DB 셋업 및 검증(이후 설계 B-3에 맞춰 FAISS + BM25 하이브리드 색인으로 통합)  |

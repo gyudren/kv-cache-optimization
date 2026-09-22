@@ -36,11 +36,11 @@
       "title": "InfiniGen",
       "camp": "HW",
       "role": "baseline",
-      "arxiv_id": null,
+      "arxiv_id": "2406.19707",
       "expected_pages": 18,
       "reference_start_page": null,
       "authors": "Lee, W., Lee, J., Seo, J., & Sim, J. (Seoul National University)",
-      "year": null,
+      "year": 2024,
       "full_title": "InfiniGen: Efficient Generative Inference of Large Language Models with Dynamic KV Cache Management",
       "venue": null
     },
@@ -50,11 +50,11 @@
       "title": "CXL-PNM",
       "camp": "HW",
       "role": "baseline",
-      "arxiv_id": null,
+      "arxiv_id": "2511.00321",
       "expected_pages": 13,
       "reference_start_page": null,
       "authors": "Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics)",
-      "year": null,
+      "year": 2025,
       "full_title": "Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits",
       "venue": null
     }

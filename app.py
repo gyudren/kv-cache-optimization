@@ -55,21 +55,38 @@ def run(query: str = DEFAULT_QUERY) -> dict:
         seen_logs = len(state.get("logs", []))
     if state is None:
         raise RuntimeError("Graph produced no state")
+    # 최종 State를 남겨 두면 LLM을 다시 호출하지 않고 보고서만 재내보내기할 수 있다(--export-only).
+    (settings.output_dir / "final_state.json").write_text(
+        json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return finalize(state, settings.output_dir)
+
+
+def finalize(state: dict, output_dir: Path) -> dict:
+    """검증 → validation.json / 보고서 .md·.pdf / run_logs.json 저장."""
     validation = validate_report(state["report_draft"], state["evidence"])
     gate = next((x for x in reversed(state["logs"]) if x.get("node") == "master_report_gate"), {})
     validation["passed"] = bool(validation["passed"] and gate.get("gate") is True)
     if not gate.get("gate"):
         validation["issues"] = list(dict.fromkeys(validation["issues"] + state.get("review_feedback", {}).get("report", {}).get("issues", [])))
-    (settings.output_dir / "validation.json").write_text(json.dumps(validation, ensure_ascii=False, indent=2), encoding="utf-8")
-    export = export_report(state["report_draft"], str(settings.output_dir), REPORT_STEM)
-    (settings.output_dir / "run_logs.json").write_text(json.dumps(state["logs"], ensure_ascii=False, indent=2), encoding="utf-8")
+    (output_dir / "validation.json").write_text(json.dumps(validation, ensure_ascii=False, indent=2), encoding="utf-8")
+    export = export_report(state["report_draft"], str(output_dir), REPORT_STEM)
+    (output_dir / "run_logs.json").write_text(json.dumps(state["logs"], ensure_ascii=False, indent=2), encoding="utf-8")
     return {"status": state["status"], "verified": validation["passed"],
             "issues": validation["issues"], **export}
 
 
+def export_only() -> dict:
+    """직전 실행의 outputs/final_state.json으로 검증·내보내기만 다시 한다(LLM·웹 호출 없음)."""
+    output_dir = Path(os.getenv("OUTPUT_DIR", "outputs"))
+    state_path = output_dir / "final_state.json"
+    if not state_path.is_file():
+        raise FileNotFoundError(f"{state_path} 없음: 먼저 python app.py 로 전체 파이프라인을 실행하세요")
+    return finalize(json.loads(state_path.read_text(encoding="utf-8")), output_dir)
+
+
 if __name__ == "__main__":
     try:
-        result = run()
+        result = export_only() if "--export-only" in sys.argv[1:] else run()
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if not result["verified"]:
             print("WARNING: report generated but NOT verified for submission", file=sys.stderr)
