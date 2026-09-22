@@ -33,6 +33,9 @@ def permitted_technologies(technology_filter: str) -> set[str]:
         return {"itme"}
     if technology_filter == "itme_baseline":
         return {"itme", "baseline"}
+    if technology_filter == "all":
+        # 문서 4편 전체 검색. 운영 Agent는 쓰지 않고, 검색 순위 품질 측정(eval)에만 사용한다.
+        return {"mla", "itme", "baseline"}
     raise ValueError(f"Unsupported research filter: {technology_filter!r}")
 
 

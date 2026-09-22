@@ -93,7 +93,8 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
         TechnologyAssessment,
     )
     missing.extend(result.missing)
-    if set(result.trl) != {"mla", "itme"} or set(result.trl_basis) != {"mla", "itme"}:
+    if not all(getattr(result.trl, tech).strip() and getattr(result.trl_basis, tech).strip()
+               for tech in ("mla", "itme")):
         missing.append("MLA/ITME의 독립적 TRL 근거 미기재")
     return {"tech_result": {**result.model_dump(), "details": findings,
                             "sufficient": result.sufficient and not bool(missing), "missing": list(dict.fromkeys(missing))},

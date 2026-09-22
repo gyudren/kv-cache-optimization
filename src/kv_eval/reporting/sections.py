@@ -1,7 +1,40 @@
 """E: eight mandatory sections, provenance and citation validation."""
 from __future__ import annotations
+import json
+import os
 import re
+from functools import lru_cache
+from pathlib import Path
 from ..state import deduplicate_evidence
+
+
+@lru_cache(maxsize=1)
+def bibliography() -> dict[str, dict]:
+    """manifest.json의 서지 정보를 doc_id로 찾을 수 있게 읽어 둔다.
+
+    확인되지 않은 항목(학회/권호 등)은 추정하지 않고 '미확인'으로 표기한다.
+    """
+    path = Path(os.getenv("MANIFEST_PATH", "data/manifest.json"))
+    if not path.is_file():
+        return {}
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    return {doc["doc_id"]: doc for doc in manifest.get("documents", [])}
+
+
+def format_paper_reference(number: int, doc_id: str, pages: list[int]) -> str:
+    """설계 E의 논문 인용 형식: 저자(YYYY). 제목. 발표처. (인용 페이지)"""
+    meta = bibliography().get(doc_id, {})
+    authors = meta.get("authors") or "저자 미확인"
+    year = meta.get("year") or "연도 미확인"
+    title = meta.get("full_title") or meta.get("title") or doc_id
+    if meta.get("venue"):
+        venue = meta["venue"]
+    elif meta.get("arxiv_id"):
+        venue = f"arXiv:{meta['arxiv_id']}"
+    else:
+        venue = "발표처 미확인"
+    cited = ", ".join(f"p.{page}" for page in sorted(set(pages)))
+    return f"[{number}] {authors} ({year}). {title}. {venue}. (인용: {cited})"
 
 MANDATORY = ["SUMMARY", "1. 분석 배경", "2. 기술 선정", "3. 기술 개요", "4. 관점별 평가", "5. 종합 의견", "6. 시사점", "7. 한계점", "REFERENCE"]
 PAPER_CITATION = re.compile(r"\[(\d+),\s*p\.(\d+)\]")
@@ -34,13 +67,17 @@ def used_references(report: str, evidence: list[dict]) -> tuple[list[str], list[
     refs = []
     # Do not count references themselves as proof of an in-text citation.
     body = report.split("\n## REFERENCE", 1)[0]
+    # 같은 논문의 여러 페이지를 인용하면 REFERENCE에는 한 항목으로 모아 쓴다(설계 E).
+    paper_pages: dict[tuple[int, str], list[int]] = {}
     for n_str, p_str in dict.fromkeys(PAPER_CITATION.findall(body)):
         key = (int(n_str), int(p_str))
         ev = catalog["paper"].get(key)
         if ev is None:
             issues.append(f"인용 [{n_str}, p.{p_str}]에 대응하는 검증된 원문 근거 없음")
         else:
-            refs.append(f"[{n_str}] {ev['doc_id']}, PDF p.{p_str} (원문 출처; 서지 정보는 별도 확인 필요)")
+            paper_pages.setdefault((int(n_str), ev["doc_id"]), []).append(int(p_str))
+    for (number, doc_id), pages in sorted(paper_pages.items()):
+        refs.append(format_paper_reference(number, doc_id, pages))
     for number in dict.fromkeys(int(x) for x in WEB_CITATION.findall(body)):
         ev = catalog["web"].get(number)
         if ev is None:

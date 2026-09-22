@@ -37,12 +37,22 @@ PRECISE_CATEGORIES = ("concept", "table", "formula")
 
 
 def _technology_filter(expected_doc_ids: list[str]) -> str:
-    """케이스의 정답 문서에 맞는 기술 필터를 고른다(운영과 동일한 필터 경로)."""
+    """케이스의 정답 문서에 맞는 기술 필터(운영에서 Agent가 지정하는 값과 동일)."""
     if expected_doc_ids == ["deepseek_v2_mla"]:
         return "mla"
     if expected_doc_ids == ["itme"]:
         return "itme"
     return "itme_baseline"
+
+
+def _search_all_documents(retriever: HybridRetriever, query: str, top_k: int) -> list:
+    """문서 4편 전체를 하나의 순위로 검색한다(순위 품질 측정용).
+
+    정답 문서로 필터를 정해놓고 Hit@1을 재면 단일 문서 케이스는 오답이 나올 수 없어
+    지표가 항상 1.00이 된다. 또한 필터별로 따로 검색해 합치면 RRF 점수가 각 부분집합
+    안에서만 계산돼 서로 비교할 수 없으므로, 반드시 한 번의 검색으로 측정한다.
+    """
+    return retriever.hybrid_search(query, "all", top_k)
 
 
 def evaluate(top_k: int = RETRIEVAL_K, show_hits: bool = False) -> dict:
@@ -60,9 +70,12 @@ def evaluate(top_k: int = RETRIEVAL_K, show_hits: bool = False) -> dict:
     per_category: dict[str, list[dict]] = defaultdict(list)
 
     for case in cases:
-        hits = retriever.hybrid_search(case["query"], _technology_filter(case["expected_doc_ids"]), top_k)
         expected_docs = set(case["expected_doc_ids"])
-        rank = next((i + 1 for i, h in enumerate(hits) if h.doc_id in expected_docs), None)
+        # (1) 순위 품질: 문서 필터 없이 4편 전체에서 정답 문서를 찾아내는가
+        ranked = _search_all_documents(retriever, case["query"], top_k)
+        rank = next((i + 1 for i, h in enumerate(ranked) if h.doc_id in expected_docs), None)
+        # (2) 정밀도: 운영과 동일한 기술 필터 안에서 기대 페이지·필수 용어를 잡아내는가
+        hits = retriever.hybrid_search(case["query"], _technology_filter(case["expected_doc_ids"]), top_k)
 
         expected_pages = set(case.get("expected_pages", []))
         page_hit = (bool(expected_pages & {h.page for h in hits if h.doc_id in expected_docs})
@@ -70,12 +83,13 @@ def evaluate(top_k: int = RETRIEVAL_K, show_hits: bool = False) -> dict:
         terms = case.get("required_terms", [])
         retrieved_text = " ".join(h.text for h in hits if h.doc_id in expected_docs).lower()
         term_cov = (sum(t.lower() in retrieved_text for t in terms) / len(terms)) if terms else None
-        # 정밀 케이스에서 정답 문서가 아닌 청크가 1위를 차지하면 노이즈로 센다.
-        noise = bool(hits) and hits[0].doc_id not in expected_docs
+        # 정밀 케이스에서 정답 문서가 아닌 청크가 1위를 차지하면 노이즈로 센다(필터 없는 결과 기준).
+        noise = bool(ranked) and ranked[0].doc_id not in expected_docs
 
         record = {
             "id": case["id"], "category": case["category"], "query": case["query"],
             "expected_doc_ids": case["expected_doc_ids"], "rank_of_correct_doc": rank,
+            "unfiltered_top_docs": [h.doc_id for h in ranked],
             "page_hit": page_hit, "required_term_coverage": term_cov, "top1_is_noise": noise,
             "hits": [{"rank": i + 1, "chunk_id": h.chunk_id, "doc_id": h.doc_id,
                       "citation": f"[{h.citation_number}, p.{h.page}]", "score": round(h.score, 5),

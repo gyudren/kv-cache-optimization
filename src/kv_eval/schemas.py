@@ -21,10 +21,15 @@ class EvidenceAssessment(BaseModel):
     missing: list[str] = Field(default_factory=list)
     reason: str = ""
 
+class PerTechnologyText(BaseModel):
+    """기술별 값. OpenAI 구조화 출력(strict)은 자유형 dict를 허용하지 않아 키를 명시한다."""
+    mla: str
+    itme: str
+
 class TechnologyAssessment(BaseModel):
     summary: str
-    trl: dict[str, str]        # mla and itme independently
-    trl_basis: dict[str, str]  # distinct evidence and limitations per technology
+    trl: PerTechnologyText        # mla and itme independently
+    trl_basis: PerTechnologyText  # distinct evidence and limitations per technology
     sufficient: bool
     missing: list[str] = Field(default_factory=list)
 
@@ -67,11 +72,16 @@ class DomainAssessment(BaseModel):
     sufficient: bool
     missing: list[str] = Field(default_factory=list)
 
+class PerTechnologyItems(BaseModel):
+    """기술별 목록(상충 사례 등). strict 스키마 제약으로 키를 명시한다."""
+    mla: list[str] = Field(default_factory=list)
+    itme: list[str] = Field(default_factory=list)
+
 class SynthesisAssessment(BaseModel):
     summary: str
     perspective_matrix: str
     agreements: list[str]
-    conflicts: dict[str, list[str]]
+    conflicts: PerTechnologyItems
     evidence_gaps: list[str]
     implications: str
     limitations: str
