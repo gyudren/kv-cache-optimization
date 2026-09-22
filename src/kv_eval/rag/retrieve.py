@@ -1,9 +1,14 @@
-"""Evidence-preserving retrieval: fixed RRF, prefilter per source paper."""
+"""Dense(FAISS) + BM25 하이브리드 검색을 RRF로 융합하고 기술별 문서 필터를 적용한다.
+
+설계 B-3): "Dense(FAISS) + BM25(키워드) → RRF 순위 융합, 기술별 문서 필터로 다른 기술
+수치 혼입 방지". 필터를 먼저 적용해 허용된 문서만 순위 경쟁에 참여시키므로, 예를 들어
+MLA 질의의 상위 k에 ITME 수치가 섞여 들어가지 않는다.
+"""
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any
 from ..config import RRF_CONSTANT, RETRIEVAL_K
 from .index import RetrievalStore, tokenize
+
 
 @dataclass(frozen=True)
 class RetrievedChunk:
@@ -16,13 +21,18 @@ class RetrievedChunk:
     chunk_id: str
 
 
-def permitted_docs(technology_filter: str) -> set[str]:
+def permitted_technologies(technology_filter: str) -> set[str]:
+    """질의 대상 기술에 따라 검색을 허용할 문서 그룹을 정한다.
+
+    itme_baseline은 ITME 원문과 HW 베이스라인 2편(InfiniGen, CXL-PNM)을 함께 검색해
+    선정 기술의 한계를 제3의 시각에서 교차 확인하기 위한 필터다(설계 B-3 ②).
+    """
     if technology_filter == "mla":
-        return {"deepseek_v2"}
+        return {"mla"}
     if technology_filter == "itme":
         return {"itme"}
     if technology_filter == "itme_baseline":
-        return {"itme", "infinigen", "cxl_pnm"}
+        return {"itme", "baseline"}
     raise ValueError(f"Unsupported research filter: {technology_filter!r}")
 
 
@@ -33,6 +43,7 @@ def rrf_fuse(dense_rank: list[str], lexical_rank: list[str], constant: int = RRF
             scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (constant + rank)
     return sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
 
+
 class HybridRetriever:
     def __init__(self, store: RetrievalStore):
         self.store = store
@@ -40,24 +51,36 @@ class HybridRetriever:
     def hybrid_search(self, query: str, technology_filter: str, k: int = RETRIEVAL_K) -> list[RetrievedChunk]:
         import faiss
         import numpy as np
+
         if k < 1:
             raise ValueError("k must be >=1")
-        permitted = permitted_docs(technology_filter)
-        subset = [i for i, c in enumerate(self.store.chunks) if c["doc_id"] in permitted]
+        permitted = permitted_technologies(technology_filter)
+        subset = [i for i, chunk in enumerate(self.store.chunks) if chunk["technology"] in permitted]
         if not subset:
             return []
+
         query_embedding = np.asarray(self.store.model.encode([query]), dtype="float32")
         faiss.normalize_L2(query_embedding)
-        # Score only the permitted corpus; no discarded technology consumes top-k budget.
-        vectors = np.vstack([self.store.dense_index.reconstruct(i) for i in subset]).astype("float32")
-        dense_scores = vectors @ query_embedding[0]
+        # 허용된 문서만 점수를 매긴다(제외된 기술이 top-k 자리를 차지하지 못하게).
+        dense_scores = self.store.vectors[subset] @ query_embedding[0]
         lexical_scores = self.store.bm25.get_scores(tokenize(query))
+
         local_top = min(max(k, 1), len(subset))
-        dense_order = sorted(subset, key=lambda i: (-float(dense_scores[subset.index(i)]), i))[:local_top]
+        # 점수 동률이면 전역 인덱스 순으로 정렬해 실행마다 결과가 흔들리지 않게 한다.
+        dense_order = sorted(range(len(subset)), key=lambda j: (-float(dense_scores[j]), subset[j]))[:local_top]
         lexical_order = sorted(subset, key=lambda i: (-float(lexical_scores[i]), i))[:local_top]
-        fused = rrf_fuse([self.store.chunks[i]["chunk_id"] for i in dense_order],
-                         [self.store.chunks[i]["chunk_id"] for i in lexical_order])
-        indices = {c["chunk_id"]: c for c in self.store.chunks if c["doc_id"] in permitted}
-        return [RetrievedChunk(**{field: chunk[field] for field in
-                                ("doc_id", "page", "text", "technology", "citation_number", "chunk_id")}, score=score)
-                for cid, score in fused[:k] if (chunk := indices.get(cid))]
+
+        fused = rrf_fuse(
+            [self.store.chunks[subset[j]]["chunk_id"] for j in dense_order],
+            [self.store.chunks[i]["chunk_id"] for i in lexical_order],
+        )
+        by_id = {self.store.chunks[i]["chunk_id"]: self.store.chunks[i] for i in subset}
+        return [
+            RetrievedChunk(
+                **{field: chunk[field] for field in
+                   ("doc_id", "page", "text", "technology", "citation_number", "chunk_id")},
+                score=score,
+            )
+            for chunk_id, score in fused[:k]
+            if (chunk := by_id.get(chunk_id))
+        ]

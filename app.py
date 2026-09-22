@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 from kv_eval.config import Settings, REPORT_STEM
-from kv_eval.rag.ingest import paper_manifest, load_papers, chunk_pages, corpus_stats
+from kv_eval.rag.ingest import paper_manifest, load_processed_chunks, corpus_stats
 from kv_eval.rag.index import build_index
 from kv_eval.rag.retrieve import HybridRetriever
 from kv_eval.rag.workflow import RAGWorkflow
@@ -27,13 +27,14 @@ DEFAULT_QUERY = ("데이터센터·클라우드 장문맥 LLM 서빙에서 DeepS
 def run(query: str = DEFAULT_QUERY) -> dict:
     settings = Settings.from_env()
     settings.require_credentials()
-    pages = load_papers(paper_manifest(settings.papers_dir))
-    chunks = chunk_pages(pages)
-    stats = corpus_stats(pages, chunks)
+    # 파싱·노이즈 제거·청킹은 preprocessing 파이프라인이 이미 수행했다(python -m preprocessing.pipeline).
+    manifest = paper_manifest(settings.manifest_path)
+    chunks = load_processed_chunks(settings.chunks_path, manifest)
+    stats = corpus_stats(chunks, manifest, settings.summary_path)
     # Do not fabricate the design's 333 chunks or 11 bibliography pages.
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     (settings.output_dir / "corpus_stats.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
-    rag = RAGWorkflow(HybridRetriever(build_index(pages)), StructuredLLM(settings.openai_key))
+    rag = RAGWorkflow(HybridRetriever(build_index(chunks)), StructuredLLM(settings.openai_key))
     web = WebSearch(settings.tavily_key)
     llm = rag.llm
     graph = build_graph(rag, web, llm)

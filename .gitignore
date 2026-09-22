@@ -7,6 +7,7 @@ venv/
 # Env & secrets
 .env
 .env.*
+!.env.example
 
 # OS / Editor
 .DS_Store
@@ -21,3 +22,6 @@ uv.lock
 # 데이터 전처리 산출물 (원문 PDF 및 생성된 청크)
 #  나중에 추가
 /data/chroma/
+
+# 빌드 산출물
+*.egg-info/
