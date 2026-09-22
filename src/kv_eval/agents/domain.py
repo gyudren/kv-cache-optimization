@@ -1,6 +1,8 @@
 """7 shared domain dimensions, grounded in each selected primary paper only."""
 from __future__ import annotations
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from ..config import MAX_PARALLEL_QUESTIONS
 from ..prompts import prompt_template
 from ..schemas import DomainAssessment
 
@@ -21,13 +23,16 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
     research = []
     evidence = []
     missing = []
-    for tech in ("mla", "itme"):
-        for code, title, question in DIMENSIONS:
-            answer = rag.rag_answer(f"{tech} {code} {title}: {question}", tech, feedback)
-            research.append({"technology": tech, "dimension": f"{code} {title}", "question": question, "answer": answer["answer"],
-                             "sufficient": answer["sufficient"]})
-            missing.extend(answer["missing"])
-            evidence.extend({**item, "agent": "domain", "attempt": attempt} for item in answer["evidence"])
+    tasks = [(tech, code, title, question)
+             for tech in ("mla", "itme") for code, title, question in DIMENSIONS]
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
+        answers = list(pool.map(
+            lambda t: rag.rag_answer(f"{t[0]} {t[1]} {t[2]}: {t[3]}", t[0], feedback), tasks))
+    for (tech, code, title, question), answer in zip(tasks, answers):
+        research.append({"technology": tech, "dimension": f"{code} {title}", "question": question,
+                         "answer": answer["answer"], "sufficient": answer["sufficient"]})
+        missing.extend(answer["missing"])
+        evidence.extend({**item, "agent": "domain", "attempt": attempt} for item in answer["evidence"])
     sources = "\n".join(f"{ev['source_id']}: [{ev['citation_number']}, p.{ev['page']}] {ev['excerpt'][:320]}" for ev in evidence)
     assessed = llm.generate_structured(
         prompt_template("domain") + "\n" + "Evaluate each of D1–D7 for each technology separately. Return 14 distinct items; verdict only 적합/조건부/제약/근거 부족. "

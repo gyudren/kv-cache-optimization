@@ -6,8 +6,10 @@ TRL 판정 근거는 설계 C-1에 따라 두 갈래를 모두 쓴다.
 논문만으로는 "제품 출시·상용 서비스 적용" 근거를 얻을 수 없어 TRL 7~9를 판정할 수 없다.
 """
 from __future__ import annotations
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from typing import Any
+from ..config import MAX_PARALLEL_QUESTIONS
 from ..prompts import prompt_template
 from ..schemas import TechnologyAssessment
 
@@ -55,23 +57,34 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     missing: list[str] = []
     attempt = state["retry_counts"]["tech"]
     feedback = state.get("review_feedback", {}).get("tech", {})
+    # 질문끼리 독립이므로 병렬로 검색·답변한다(순서는 아래에서 원래대로 복원).
+    tasks = [(tech, question) for tech in ("mla", "itme") for question in TECH_QUESTIONS]
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
+        answers_by_task = list(pool.map(
+            lambda item: rag.rag_answer(f"[{item[0]}] {item[1]}", item[0], feedback), tasks))
+        baseline_future = pool.submit(rag.rag_answer, BASELINE_QUESTION, "itme_baseline", feedback)
+        web_by_tech = {tech: pool.submit(_trl_web_evidence, web, tech, attempt)
+                       for tech in ("mla", "itme")}
+        baseline = baseline_future.result()
+        web_results = {tech: future.result() for tech, future in web_by_tech.items()}
+
     for tech in ("mla", "itme"):
         answers = []
-        for question in TECH_QUESTIONS:
-            response = rag.rag_answer(f"[{tech}] {question}", tech, feedback)
+        for (task_tech, _), response in zip(tasks, answers_by_task):
+            if task_tech != tech:
+                continue
             answers.append(response["answer"])
             missing.extend(response["missing"])
             for item in response["evidence"]:
                 evidence.append({**item, "agent": "tech", "attempt": attempt})
         findings[tech] = {"answers": answers}
         # 논문(RAG)만으로는 확인할 수 없는 상용화·통합 근거를 웹에서 따로 모은다.
-        web_evidence, web_missing = _trl_web_evidence(web, tech, attempt)
+        web_evidence, web_missing = web_results[tech]
         evidence.extend(web_evidence)
         missing.extend(web_missing)
         findings[tech]["trl_web_sources"] = [
             f"{item['source_id']}: {item['publisher']} | {item['excerpt'][:400]}" for item in web_evidence
         ]
-    baseline = rag.rag_answer(BASELINE_QUESTION, "itme_baseline", feedback)
     findings["itme_baseline"] = baseline["answer"]
     missing.extend(baseline["missing"])
     evidence.extend({**item, "agent": "tech", "attempt": attempt} for item in baseline["evidence"])

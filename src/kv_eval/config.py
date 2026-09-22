@@ -24,6 +24,8 @@ RETRIEVAL_K = 6  # Implementation detail; same setting across technologies.
 RRF_CONSTANT = 60
 MIN_RELEVANT = 2
 RAG_REWRITES = 2
+# 질문 단위 RAG 호출 동시 실행 수. 질문끼리 독립이라 결과는 같고 대기 시간만 줄어든다.
+MAX_PARALLEL_QUESTIONS = int(os.getenv("MAX_PARALLEL_QUESTIONS", "12"))
 RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2}
 REPORT_STEM = "RAG-Output_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 # Source checkout invocation (also supports pip editable install).
@@ -25,20 +26,35 @@ DEFAULT_QUERY = ("데이터센터·클라우드 장문맥 LLM 서빙에서 DeepS
 
 
 def run(query: str = DEFAULT_QUERY) -> dict:
+    started_at = time.time()
     settings = Settings.from_env()
     settings.require_credentials()
     # 파싱·노이즈 제거·청킹은 preprocessing 파이프라인이 이미 수행했다(python -m preprocessing.pipeline).
     manifest = paper_manifest(settings.manifest_path)
     chunks = load_processed_chunks(settings.chunks_path, manifest)
+    print(f"[     0s] 청크 {len(chunks)}개 적재 · 색인 생성 중(FAISS + BM25)...", flush=True)
     stats = corpus_stats(chunks, manifest, settings.summary_path)
     # Do not fabricate the design's 333 chunks or 11 bibliography pages.
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     (settings.output_dir / "corpus_stats.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
     rag = RAGWorkflow(HybridRetriever(build_index(chunks)), StructuredLLM(settings.openai_key))
+    print(f"[{time.time()-started_at:6.0f}s] 색인 완료 · 그래프 실행 시작", flush=True)
     web = WebSearch(settings.tavily_key)
     llm = rag.llm
     graph = build_graph(rag, web, llm)
-    state = graph.invoke(initial_state(query), config={"recursion_limit": 100})
+    # invoke() 대신 stream()을 쓰면 노드가 끝날 때마다 상태를 받아볼 수 있다.
+    # LLM 호출이 100회 이상 순차로 일어나므로 어느 단계인지 보이지 않으면 멈춘 것과 구분할 수 없다.
+    state = None
+    seen_logs = 0
+    for state in graph.stream(initial_state(query), config={"recursion_limit": 100},
+                              stream_mode="values"):
+        for entry in state.get("logs", [])[seen_logs:]:
+            elapsed = time.time() - started_at
+            detail = f" ({entry['result']})" if entry.get("result") else ""
+            print(f"[{elapsed:6.0f}s] {entry['node']}{detail}", flush=True)
+        seen_logs = len(state.get("logs", []))
+    if state is None:
+        raise RuntimeError("Graph produced no state")
     validation = validate_report(state["report_draft"], state["evidence"])
     gate = next((x for x in reversed(state["logs"]) if x.get("node") == "master_report_gate"), {})
     validation["passed"] = bool(validation["passed"] and gate.get("gate") is True)
