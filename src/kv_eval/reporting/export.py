@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.units import mm
 
 
@@ -33,7 +33,10 @@ def korean_font() -> str:
 
 
 def _safe(text: str) -> str:
-    return escape(text, quote=False).replace("\n", "<br/>")
+    text = escape(text, quote=False)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return text.replace("\n", "<br/>")
 
 
 def summary_fits_half_page(summary: str) -> bool:
@@ -73,16 +76,48 @@ def export_report(report_md: str, output_dir: str, stem: str) -> dict:
             story.append(Paragraph(_safe(lines[0][3:]), heading))
             lines = lines[1:]
         paragraph_lines = []
+        table_lines = []
         def flush() -> None:
             if paragraph_lines:
                 story.append(Paragraph(_safe("\n".join(paragraph_lines)), normal))
                 paragraph_lines.clear()
+        def flush_table() -> None:
+            if not table_lines:
+                return
+            rows = [[cell.strip() for cell in line.strip().strip("|").split("|")]
+                    for line in table_lines]
+            rows = [row for row in rows if not all(re.fullmatch(r":?-{3,}:?", cell) for cell in row)]
+            columns = max(map(len, rows))
+            cell_style = ParagraphStyle("KCell", parent=normal, fontSize=8, leading=11.5, spaceAfter=0)
+            data = [[Paragraph(_safe(cell), cell_style) for cell in row + [""] * (columns-len(row))]
+                    for row in rows]
+            table = Table(data, colWidths=[(A4[0]-48*mm)/columns]*columns, repeatRows=1, hAlign="LEFT")
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eef5")),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#bac6d2")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]))
+            story.extend([table, Spacer(1, 8)])
+            table_lines.clear()
         for line in lines:
-            if line.strip():
+            if line.strip().startswith("|") and line.strip().endswith("|"):
+                flush()
+                table_lines.append(line)
+                continue
+            flush_table()
+            if line.startswith("### "):
+                flush()
+                story.append(Paragraph(_safe(line[4:]), heading))
+            elif line.strip():
                 paragraph_lines.append(line)
             else:
                 flush()
         flush()
+        flush_table()
         story.append(Spacer(1, 5))
     doc.build(story)
     return {"md": str(md_path), "pdf": str(pdf_path)}

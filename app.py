@@ -53,6 +53,10 @@ def run(query: str = DEFAULT_QUERY) -> dict:
             detail = f" ({entry['result']})" if entry.get("result") else ""
             print(f"[{elapsed:6.0f}s] {entry['node']}{detail}", flush=True)
         seen_logs = len(state.get("logs", []))
+        (settings.output_dir / "run_state.json").write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        (settings.output_dir / "run_logs.json").write_text(
+            json.dumps(state.get("logs", []), ensure_ascii=False, indent=2), encoding="utf-8")
     if state is None:
         raise RuntimeError("Graph produced no state")
     validation = validate_report(state["report_draft"], state["evidence"])

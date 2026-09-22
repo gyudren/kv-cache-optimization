@@ -58,8 +58,9 @@ def citation_catalog(evidence: list[dict]) -> dict:
 def citeable_evidence(evidence: list[dict]) -> list[dict]:
     catalog = citation_catalog(evidence)
     ret = []
-    for (number, page), ev in catalog["paper"].items():
-        ret.append({**ev, "citation": f"[{number}, p.{page}]"})
+    for ev in deduplicate_evidence(evidence):
+        if ev.get("source_type") == "paper" and ev.get("citation_number") and ev.get("page"):
+            ret.append({**ev, "citation": f"[{ev['citation_number']}, p.{ev['page']}]"})
     for i, ev in catalog["web"].items():
         ret.append({**ev, "citation": f"[W{i}]"})
     return ret

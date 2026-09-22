@@ -24,7 +24,9 @@ def render_report(state: dict, llm: Any) -> str:
         "Never cite non-catalog ID. If missing, mark 근거 부족 and show evidence gaps. "
         "Avoid changing design category labels.\n"
         + repr({k: state.get(k, {}) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result", "synthesis_result")})
-        + "\nVerified source catalog:\n" + repr(citation_context), ReportParts,
+        + "\nVerified source catalog:\n" + repr(citation_context)
+        + "\nRevision feedback (address every issue):\n" + repr(state.get("review_feedback", {}).get("report", {}))
+        + "\nPrevious draft to revise:\n" + state.get("report_draft", ""), ReportParts,
     )
     parts = sections.model_dump()
     report = "\n\n".join([
