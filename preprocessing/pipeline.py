@@ -104,7 +104,9 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
 
     for raw_page in raw_pages:
         exclude_bboxes = [t.bbox for t in raw_page.tables] + raw_page.rejected_region_bboxes
-        body_text = reconstruct_reading_order_text(raw_page.words, raw_page.width, exclude_bboxes=exclude_bboxes)
+        body_text = reconstruct_reading_order_text(
+            raw_page.words, raw_page.width, raw_page.height, exclude_bboxes=exclude_bboxes
+        )
         clean_text, removed_lines = strip_boilerplate_lines(body_text, boilerplate)
         removed_boilerplate_lines += len(removed_lines)
         clean_text, removed_eq_lines = strip_equation_lines(clean_text)

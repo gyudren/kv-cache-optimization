@@ -105,18 +105,25 @@ def _gutter_row_ratio(lines: list[list[Word]], page_width: float) -> float:
 MIN_WORDS_FOR_COLUMN_GAP_DETECTION = 3  # 페이지 번호·각주 기호 등 짧은 줄은 거터 탐지에서 제외
 
 
-def _detect_column_split_x(lines: list[list[Word]]) -> float | None:
+def _detect_column_split_x(lines: list[list[Word]], page_height: float) -> float | None:
     """줄이 실제로 차지하는 가로 범위(x0~x1)를 모아 컬럼 분리선(빈 거터)을 찾는다.
 
     줄이 "시작하는" x좌표만 보면 왼쪽 컬럼의 긴 줄이 분리선 오른쪽까지 넘어와 있는
     경우를 놓친다(그 줄의 뒷부분 단어가 분리선 너머로 잘못 배정됨). 각 줄이 끝나는
     x좌표까지 함께 봐서, 어느 줄도 걸치지 않는 실제 빈 구간을 거터로 삼는다.
 
-    페이지 번호·각주 기호처럼 단어 수가 아주 적은 줄은 우연히 두 컬럼 사이 애매한
-    위치에 있어 실제 거터를 가리거나 엉뚱하게 이어붙일 수 있으므로 탐지에서 제외한다
-    (분리선이 정해진 뒤 좌/우 배정에는 모든 단어가 그대로 사용된다).
+    페이지 번호·각주 기호처럼 단어 수가 아주 적은 줄과, 페이지 상/하단 여백에 걸친
+    running header/footer(저자 목록 등 전체 폭에 걸치는 줄)는 실제 거터를 가리거나
+    두 컬럼을 다리처럼 이어붙일 수 있으므로 탐지에서 제외한다(분리선이 정해진 뒤
+    좌/우 배정에는 모든 단어가 그대로 사용된다).
     """
-    substantial_lines = [line for line in lines if len(line) >= MIN_WORDS_FOR_COLUMN_GAP_DETECTION]
+    top_cutoff = page_height * TOP_BAND_RATIO
+    bottom_cutoff = page_height * (1 - BOTTOM_BAND_RATIO)
+    substantial_lines = [
+        line
+        for line in lines
+        if len(line) >= MIN_WORDS_FOR_COLUMN_GAP_DETECTION and top_cutoff < line_top(line) < bottom_cutoff
+    ]
     if len(substantial_lines) < 4:
         return None
 
@@ -152,9 +159,9 @@ def _detect_column_split_x(lines: list[list[Word]]) -> float | None:
     return best_split
 
 
-def _resolve_column_split(lines: list[list[Word]], page_width: float) -> float | None:
+def _resolve_column_split(lines: list[list[Word]], page_width: float, page_height: float) -> float | None:
     """x0 분포 기반 분리선을 우선 사용하고, 못 찾으면 같은 줄 내 거터 간격 신호로 보완한다."""
-    split_x = _detect_column_split_x(lines)
+    split_x = _detect_column_split_x(lines, page_height)
     if split_x is not None:
         return split_x
     if _gutter_row_ratio(lines, page_width) >= TWO_COLUMN_ROW_RATIO_THRESHOLD:
@@ -162,9 +169,10 @@ def _resolve_column_split(lines: list[list[Word]], page_width: float) -> float |
     return None
 
 
-def is_two_column(words: list[Word], page_width: float) -> bool:
+def is_two_column(words: list[Word], page_width: float, page_height: float | None = None) -> bool:
     lines = group_into_lines(words)
-    return _resolve_column_split(lines, page_width) is not None
+    resolved_page_height = page_height if page_height is not None else page_width * 1.4142
+    return _resolve_column_split(lines, page_width, resolved_page_height) is not None
 
 
 def _word_in_any_bbox(word: Word, bboxes: list[tuple[float, float, float, float]]) -> bool:
@@ -209,6 +217,7 @@ def _lines_to_text(words: list[Word]) -> str:
 def reconstruct_reading_order_text(
     words: list[Word],
     page_width: float,
+    page_height: float | None = None,
     exclude_bboxes: list[tuple[float, float, float, float]] | None = None,
 ) -> str:
     """단(컬럼) 레이아웃을 좌→우 다음 위→아래 읽기 순서로 재구성한다.
@@ -221,8 +230,9 @@ def reconstruct_reading_order_text(
     if not kept_words:
         return ""
 
+    resolved_page_height = page_height if page_height is not None else page_width * 1.4142
     lines = group_into_lines(kept_words)
-    split_x = _resolve_column_split(lines, page_width)
+    split_x = _resolve_column_split(lines, page_width, resolved_page_height)
 
     if split_x is not None:
         left_words: list[Word] = []

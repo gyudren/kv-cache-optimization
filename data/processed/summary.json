@@ -3,7 +3,7 @@
   "page_budget": 200,
   "chunk_size": 1200,
   "overlap": 200,
-  "total_chunks": 231,
+  "total_chunks": 252,
   "needs_manual_review": true,
   "documents": [
     {
@@ -15,10 +15,10 @@
       "reference_start_page": 21,
       "excluded_reference_pages": 32,
       "indexed_pages": 21,
-      "text_chunk_count": 55,
+      "text_chunk_count": 57,
       "table_count": 0,
-      "removed_boilerplate_line_count": 148,
-      "removed_equation_line_count": 391,
+      "removed_boilerplate_line_count": 149,
+      "removed_equation_line_count": 392,
       "pages_with_charts": [],
       "pages_with_vector_diagrams": [
         1,
@@ -43,8 +43,8 @@
             3
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "DeepSeekMoE",
-          "head_preview": "B.1 Model Description . . . . . . . . . . . . . . . . . . . . . . . .",
+          "tail_preview": "B DeepSeek-V2-Lite: A 16B Model Equipped with MLA and DeepSeekMoE",
+          "head_preview": "B.1 Model Description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . ",
           "doc_id": "deepseek_v2_mla"
         },
         {
@@ -53,7 +53,7 @@
             4
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": ". . . . . . . . . . . . 30\n. . . . . . . . . . . . 31\n. . . . . . . . . . . . 31",
+          "tail_preview": "G Evaluation Formats",
           "head_preview": "1. Introduction\nIn the past few years, Large Language Models (LLMs) (Anthropic, ",
           "doc_id": "deepseek_v2_mla"
         },
@@ -64,7 +64,7 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "generation throughput to 5.76 times. We also evaluate DeepSeek-V2 Chat (SFT) and",
-          "head_preview": "Transformer Block ×",
+          "head_preview": "DeepSeekMoE",
           "doc_id": "deepseek_v2_mla"
         },
         {
@@ -73,7 +73,7 @@
             6
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "s, we demon-\nalignment, encompassing Supervised Fine-Tuning (SFT), Reinforcement",
+          "tail_preview": "r efforts in alignment, encompassing Supervised Fine-Tuning (SFT), Reinforcement",
           "head_preview": "Learning (RL), the evaluation results, and other discussion (Section 4). Finally",
           "doc_id": "deepseek_v2_mla"
         },
@@ -113,8 +113,8 @@
             13
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "faster CUDA kernels for communications, routing algorithms, and fused",
-          "head_preview": "Pressure Testing DeepSeek-V2 Base 128K Context via \"Needle In A",
+          "tail_preview": " customize faster CUDA kernels for communications, routing algorithms, and fused",
+          "head_preview": "Pressure Testing DeepSeek-V2 Base 128K Context via \"Needle In A HayStack\"",
           "doc_id": "deepseek_v2_mla"
         },
         {
@@ -123,7 +123,7 @@
             14
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "K,\ncontext length of\n(NIAH) tests indicate\nof benchmarks in\nframework integrated",
+          "tail_preview": "Chinese. Our evaluation is based on our internal evaluation framework integrated",
           "head_preview": "in our HAI-LLM framework. Included benchmarks are categorized and listed as foll",
           "doc_id": "deepseek_v2_mla"
         },
@@ -134,7 +134,7 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "h benchmarks. As for Chinese benchmarks, Qwen1.5 72B shows better performance on",
-          "head_preview": "Benchmark\nArchitecture\n# Activated\n# Total Params\nPile-test (BPB)\nBBH (EM)\nMMLU ",
+          "head_preview": "DeepSeek Qwen1.5 Mixtral LLaMA 3\nBenchmark (Metric)",
           "doc_id": "deepseek_v2_mla"
         },
         {
@@ -143,7 +143,7 @@
             16
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "h capability\nAlso, as a bilingual language model, DeepSeek-V2 outperforms LLaMA3",
+          "tail_preview": " LLaMA3 70B. Also, as a bilingual language model, DeepSeek-V2 outperforms LLaMA3",
           "head_preview": "70B overwhelmingly on Chinese benchmarks.",
           "doc_id": "deepseek_v2_mla"
         },
@@ -163,7 +163,7 @@
             21
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "rd and\nbenchmarks. Exploring how to align a model with human preferences without",
+          "tail_preview": "-ended benchmarks. Exploring how to align a model with human preferences without",
           "head_preview": "compromising its general performance presents a valuable direction for future re",
           "doc_id": "deepseek_v2_mla"
         }
@@ -178,7 +178,7 @@
       "reference_start_page": 12,
       "excluded_reference_pages": 2,
       "indexed_pages": 11,
-      "text_chunk_count": 45,
+      "text_chunk_count": 60,
       "table_count": 7,
       "removed_boilerplate_line_count": 0,
       "removed_equation_line_count": 0,
@@ -202,7 +202,7 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "gh predictability and dominate\nruntime context data across memory hierarchies.\n1",
-          "head_preview": "Table 1: LLM Data Characteristics\nthe overall memory footprint. Table1\nistics an",
+          "head_preview": "Table 1: LLM Data Characteristics and Target Tiering\nthe overall memory footprin",
           "doc_id": "itme"
         },
         {
@@ -211,18 +211,8 @@
             3
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "hard-\ninference.\nware and complex software stacks to manage the networking and\n2",
-          "head_preview": "Network (i.e., RDMA)\nRDMA read / write\nRDMA read KV Cache\nWeights\nTurn 0 Q0 A0\nL",
-          "doc_id": "itme"
-        },
-        {
-          "page_boundary": [
-            3,
-            4
-          ],
-          "reason": "sentence_incomplete",
-          "tail_preview": "ly growing\nthese larger units to be streamed effectively through the pipeline.\n3",
-          "head_preview": "Table 2: Metadata (SRAM) requirements",
+          "tail_preview": "high-compute hard-\nware and complex software stacks to manage the networking and",
+          "head_preview": "Network (i.e., RDMA)",
           "doc_id": "itme"
         },
         {
@@ -231,8 +221,8 @@
             5
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "4",
-          "head_preview": "Table 3: Bandwidth of Internal Channel Configurations",
+          "tail_preview": "requires only one additional tag bit (10-bit tag). This results",
+          "head_preview": "Table 3: Bandwidth of Internal Channel Configurations\nDRAM SSD Host ↔ DRAM (GB/s",
           "doc_id": "itme"
         },
         {
@@ -241,8 +231,8 @@
             6
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": " storage\nas a tensor. Finally, chm_prefetch_size(addr, count) reduces software\n5",
-          "head_preview": "overhead for large deterministic streams by fetching\npages from a base address.\n",
+          "tail_preview": "ject, such\nas a tensor. Finally, chm_prefetch_size(addr, count) reduces software",
+          "head_preview": "overhead for large deterministic streams by fetching 𝑁 contiguous\npages from a b",
           "doc_id": "itme"
         },
         {
@@ -251,8 +241,8 @@
             7
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": ") within the\never a slot in the load ring buffer becomes available, triggering\n6",
-          "head_preview": "an immediate data fetch, the scheduler\nwrites. The I/O slot is yielded to the\nis",
+          "tail_preview": "equests. When-\never a slot in the load ring buffer becomes available, triggering",
+          "head_preview": "an immediate data fetch, the scheduler suppresses any pending\nwrites. The I/O sl",
           "doc_id": "itme"
         },
         {
@@ -261,18 +251,8 @@
             8
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "trigger the\ndevice’s internal hardware prefetch engine via user-level prefetch\n7",
-          "head_preview": "APIs for CXL-hybrid memory (see\nagement is synchronized with the\ndecode phase of",
-          "doc_id": "itme"
-        },
-        {
-          "page_boundary": [
-            8,
-            9
-          ],
-          "reason": "sentence_incomplete",
-          "tail_preview": "characterizing the\nfull performance potential of the CXL-hybrid memory (T3.5).\n8",
-          "head_preview": "CPU-offload (128GB) Speedup",
+          "tail_preview": "o trigger the\ndevice’s internal hardware prefetch engine via user-level prefetch",
+          "head_preview": "APIs for CXL-hybrid memory (see Section 3.2). This proactive man-\nagement is syn",
           "doc_id": "itme"
         },
         {
@@ -281,8 +261,8 @@
             10
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": " performance bound\ncontention within the CXL-hybrid memory. This prevents some\n9",
-          "head_preview": "Baseline (CPU-offload)",
+          "tail_preview": "traffic triggers I/O\ncontention within the CXL-hybrid memory. This prevents some",
+          "head_preview": "Local NVMe-oF (CPU staging buffer 30GB) Speedup",
           "doc_id": "itme"
         },
         {
@@ -291,8 +271,8 @@
             11
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": " I/O efficiency\nduring DRAM cache hits, representing a 20–25% performance gap\n10",
-          "head_preview": "Multi-tier KV Cache and Prefetching. The substantial memory\nRecomp. ITME (FPGA)\n",
+          "tail_preview": "12 GB/s for writes\nduring DRAM cache hits, representing a 20–25% performance gap",
+          "head_preview": "Recomp. ITME (FPGA)",
           "doc_id": "itme"
         }
       ]
@@ -306,7 +286,7 @@
       "reference_start_page": 15,
       "excluded_reference_pages": 4,
       "indexed_pages": 14,
-      "text_chunk_count": 72,
+      "text_chunk_count": 66,
       "table_count": 3,
       "removed_boilerplate_line_count": 274,
       "removed_equation_line_count": 6,
@@ -333,7 +313,7 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "e to make the speculation far more efficient and precise, by\n†Equal contribution",
-          "head_preview": "skewing the Transformer architecture\nto emphasize certain important\nstage, while",
+          "head_preview": "skewing the Transformer architecture query and key matrices\nto emphasize certain",
           "doc_id": "infinigen"
         },
         {
@@ -343,7 +323,17 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "In this context, several recent works propose to reduce",
-          "head_preview": "the KV cache size through key/value evictions at runtime",
+          "head_preview": "the KV cache size through key/value evictions at runtime\nwithin a constrained KV",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            5,
+            6
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": " properly represent\nthe attention weight of the baseline model. Furthermore, the",
+          "head_preview": "number of key tokens required to reach 0.9 varies even for the\nadjacent query to",
           "doc_id": "infinigen"
         },
         {
@@ -352,7 +342,7 @@
             8
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": " whose direction\nlayers, as the attention input is a layer-normalized one of the",
+          "tail_preview": "a\ntention input. We set the orthogonal matrix A whose direction",
           "head_preview": "Offline",
           "doc_id": "infinigen"
         },
@@ -362,8 +352,8 @@
             9
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "h we do not use this\nwith the corresponding row in the transposed key matrix, it",
-          "head_preview": "token, it does not noticeably hurt\nsince it accounts for less than 1%\nafter soft",
+          "tail_preview": "e maximum attention\nweight divided by e5 ≈ 148.4. Even though we do not use this",
+          "head_preview": "token, it does not noticeably hurt the accuracy of the model\nsince it accounts f",
           "doc_id": "infinigen"
         },
         {
@@ -373,7 +363,7 @@
           ],
           "reason": "sentence_incomplete",
           "tail_preview": "remains consistently comparable to the full-cache baseline,",
-          "head_preview": "Table 2: Perplexity on WikiText-2\nlength with or without KV cache",
+          "head_preview": "Table 2: Perplexity on WikiText-2 and PTB with 2048 sequence\nlength with or with",
           "doc_id": "infinigen"
         },
         {
@@ -382,7 +372,7 @@
             12
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": " memory updates.\ndifferent batch sizes. The results show that InfiniGen achieves",
+          "tail_preview": "e latency across\ndifferent batch sizes. The results show that InfiniGen achieves",
           "head_preview": "INT4 H2O H2O InfiniGen",
           "doc_id": "infinigen"
         },
@@ -392,8 +382,8 @@
             13
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "shows the accuracy and\nnon-linear increase in the number of important tokens) by",
-          "head_preview": "Figure 18: Latency breakdown\nwith a sequence length of\ninference latency across\n",
+          "tail_preview": " latency and accuracy.\nPartial Weight Ratio. Figure 17(b) shows the accuracy and",
+          "head_preview": "Figure 18: Latency breakdown of a Transformer block for OPT-13B\nwith a sequence ",
           "doc_id": "infinigen"
         },
         {
@@ -402,8 +392,8 @@
             14
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "n on the CPU after\nattention weights of key tokens can change across iterations;",
-          "head_preview": "ploit quantization or sparsity to make LLMs efficient through\nLayer 18, Head 30\n",
+          "tail_preview": "her shows that the\nattention weights of key tokens can change across iterations;",
+          "head_preview": "Layer 18, Head 30",
           "doc_id": "infinigen"
         }
       ]
@@ -416,11 +406,11 @@
       "total_pages": 13,
       "reference_start_page": 12,
       "excluded_reference_pages": 2,
-      "indexed_pages": 11,
-      "text_chunk_count": 48,
+      "indexed_pages": 12,
+      "text_chunk_count": 58,
       "table_count": 1,
-      "removed_boilerplate_line_count": 5,
-      "removed_equation_line_count": 38,
+      "removed_boilerplate_line_count": 3,
+      "removed_equation_line_count": 37,
       "pages_with_charts": [],
       "pages_with_vector_diagrams": [
         3,
@@ -436,8 +426,8 @@
             3
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": " to PNM, we relieve\nprocessing of extended contexts, with modern LLMs supporting",
-          "head_preview": "Model\nCW\nthe remaining GPU memory is still insufficient to hold a 1M-token\nKV ca",
+          "tail_preview": "d on inference-time\nprocessing of extended contexts, with modern LLMs supporting",
+          "head_preview": "Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache",
           "doc_id": "cxl_pnm"
         },
         {
@@ -446,8 +436,8 @@
             4
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "0-80GB GPUs,\n3.0 switch that supports PCIe 6.0 physical layers and device links,",
-          "head_preview": "Dowon Kim, MinJae Lee, Janghyeon Kim,\neach configured with x8 lanes per\nthe swit",
+          "tail_preview": "ed via a CXL\n3.0 switch that supports PCIe 6.0 physical layers and device links,",
+          "head_preview": "Dowon Kim, MinJae Lee, Janghyeon Kim, HyuckSung Kwon, Hyeonggyu Jeong,\neach conf",
           "doc_id": "cxl_pnm"
         },
         {
@@ -456,8 +446,8 @@
             8
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "er sample (𝑇\n)\nto fit within the capacity that can accommodate all batch samples",
-          "head_preview": "enabled by the proposed PNM-KV configuration. During the gener-\ndata transfers. ",
+          "tail_preview": " is determined\nto fit within the capacity that can accommodate all batch samples",
+          "head_preview": "Dowon Kim, MinJae Lee, Janghyeon Kim, HyuckSung Kwon, Hyeonggyu Jeong,\nenabled b",
           "doc_id": "cxl_pnm"
         },
         {
@@ -466,8 +456,8 @@
             10
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "nce both GPU and\nKV). We evaluate on Llama3.1-405B with a 1M-token context using",
-          "head_preview": "Dowon Kim, MinJae Lee, Janghyeon\nFigure 13: Breakdown of\nEvaluated on Llama3.1-4",
+          "tail_preview": "KV). We evaluate on Llama3.1-405B with a 1M-token context using",
+          "head_preview": "Figure 13: Breakdown of per-token latency. (a) Evaluated on Llama3.1-8B at 128K ",
           "doc_id": "cxl_pnm"
         },
         {
@@ -476,8 +466,8 @@
             11
           ],
           "reason": "sentence_incomplete",
-          "tail_preview": "l balances the\ncompute and memory-intensive phases of LLM inference.\n0.266$/hour",
-          "head_preview": "Scalable Processing-Near-Memory\n5 Related Work\n5.1 KV-Cache\nKV Cache Selection\nc",
+          "tail_preview": "0.266$/hour",
+          "head_preview": "Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache",
           "doc_id": "cxl_pnm"
         }
       ]

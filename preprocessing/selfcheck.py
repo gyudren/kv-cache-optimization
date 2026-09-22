@@ -119,21 +119,33 @@ def check_cross_page_sentence_stitching() -> None:
     print("[OK] 페이지 경계 문장 이어붙이기 + review_flags 기록")
 
 
+def _make_text_line(words_text: list[str], x0: float, top: float) -> list[Word]:
+    words = []
+    x = x0
+    for text in words_text:
+        width = 6.0 * len(text)
+        words.append(Word(text=text, x0=x, x1=x + width, top=top, bottom=top + 10))
+        x += width + 3.0
+    return words
+
+
 def check_two_column_detection_and_reorder() -> None:
     # 페이지 폭 600pt, 좌 컬럼(왼쪽) 3줄 + 우 컬럼(오른쪽) 3줄인 2단 레이아웃을 흉내낸다.
+    # 실제 본문 줄처럼 한 줄에 여러 단어가 있어야 하고(짧은 줄은 거터 탐지에서 제외됨),
+    # 좌/우 줄의 높이가 완전히 같은(우연히 겹치는) 상황까지 함께 검증한다.
     page_width = 600.0
     words = []
-    for i, token in enumerate(["Left1", "Left2", "Left3"]):
-        words.append(Word(text=token, x0=50, x1=90, top=100 + i * 20, bottom=110 + i * 20))
-    for i, token in enumerate(["Right1", "Right2", "Right3"]):
-        words.append(Word(text=token, x0=350, x1=400, top=100 + i * 20, bottom=110 + i * 20))
+    for i, text in enumerate(["Left one two", "Left three four", "Left five six"]):
+        words.extend(_make_text_line(text.split(), x0=50, top=100 + i * 20))
+    for i, text in enumerate(["Right one two", "Right three four", "Right five six"]):
+        words.extend(_make_text_line(text.split(), x0=350, top=100 + i * 20))
 
     assert is_two_column(words, page_width), "2단 레이아웃이 감지되지 않음"
 
     text = reconstruct_reading_order_text(words, page_width)
     left_part, right_part = text.split("\n\n")
-    assert left_part.splitlines() == ["Left1", "Left2", "Left3"]
-    assert right_part.splitlines() == ["Right1", "Right2", "Right3"]
+    assert left_part.splitlines() == ["Left one two", "Left three four", "Left five six"]
+    assert right_part.splitlines() == ["Right one two", "Right three four", "Right five six"]
     print("[OK] 2단 레이아웃 감지 및 좌→우 읽기 순서 재구성")
 
 
@@ -144,17 +156,17 @@ def check_two_column_with_offset_row_baselines() -> None:
     page_width = 600.0
     words = []
     for i in range(6):
-        words.append(Word(text=f"Left{i}", x0=50, x1=90, top=100 + i * 20, bottom=110 + i * 20))
+        words.extend(_make_text_line([f"Left{i}", "word", "word"], x0=50, top=100 + i * 20))
     for i in range(6):
         # 우측 컬럼 줄 높이를 좌측과 살짝 어긋나게 배치(실제 관측된 패턴)
-        words.append(Word(text=f"Right{i}", x0=350, x1=400, top=103 + i * 20, bottom=113 + i * 20))
+        words.extend(_make_text_line([f"Right{i}", "word", "word"], x0=350, top=103 + i * 20))
 
     assert is_two_column(words, page_width), "줄 높이가 어긋난 2단 레이아웃이 감지되지 않음"
 
     text = reconstruct_reading_order_text(words, page_width)
     left_part, right_part = text.split("\n\n")
-    assert left_part.splitlines() == [f"Left{i}" for i in range(6)]
-    assert right_part.splitlines() == [f"Right{i}" for i in range(6)]
+    assert left_part.splitlines() == [f"Left{i} word word" for i in range(6)]
+    assert right_part.splitlines() == [f"Right{i} word word" for i in range(6)]
     print("[OK] 줄 높이가 어긋난 2단 레이아웃도 좌/우가 뒤섞이지 않고 분리됨")
 
 
@@ -225,7 +237,6 @@ def check_header_footer_detection() -> None:
 
 
 def check_table_normalization() -> None:
-    page_width = 600.0
     words = [
         Word(text="Table", x0=50, x1=80, top=90, bottom=100),
         Word(text="1.", x0=85, x1=95, top=90, bottom=100),
