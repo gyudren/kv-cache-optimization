@@ -1,8 +1,9 @@
 """문단 경계를 보존하는 청킹 (1,200자 / 겹침 200자).
 
-설계 산출물 B-3): "1,200자 / 겹침 200자 → 333개 청크 (수식·표 문단 경계 보존)".
-문단(빈 줄로 구분되는 블록) 중간에서 자르지 않는 것을 최우선으로 하고,
+설계 산출물 B-3)의 "1,200자 / 겹침 200자" 기준을 적용한다.
+문단(빈 줄로 구분되는 블록)을 중간에서 자르지 않는 것을 최우선으로 하고,
 그 다음으로 목표 청크 길이(chunk_size)와 겹침(overlap)을 맞춘다.
+따라서 단일 문단이 chunk_size보다 길면 해당 청크는 목표 길이를 초과할 수 있다.
 
 페이지 경계에서 문장이 끊기는 경우(표 헤더 이월, 문장이 페이지를 넘어가는 경우 등)를
 대비해, 문장부호로 끝나지 않는 페이지 마지막 문단은 다음 페이지 첫 문단과 이어붙인다.
@@ -98,6 +99,11 @@ def chunk_document(
     chunk_size: int = CHUNK_SIZE,
     overlap: int = OVERLAP,
 ) -> tuple[list[Chunk], list[dict]]:
+    if chunk_size < 1:
+        raise ValueError("chunk_size는 1 이상이어야 합니다.")
+    if overlap < 0 or overlap >= chunk_size:
+        raise ValueError("overlap은 0 이상이고 chunk_size보다 작아야 합니다.")
+
     paragraphs = split_into_paragraphs(pages)
     stitched_paragraphs, review_flags = stitch_cross_page_paragraphs(paragraphs)
     for flag in review_flags:
@@ -122,18 +128,36 @@ def chunk_document(
         )
 
     for paragraph, start_page, end_page in stitched_paragraphs:
+        if len(paragraph) > chunk_size:
+            review_flags.append(
+                {
+                    "doc_id": doc_id,
+                    "page_boundary": [start_page, end_page],
+                    "reason": "paragraph_exceeds_chunk_size",
+                    "char_count": len(paragraph),
+                    "preview": paragraph[:160],
+                }
+            )
+
         candidate = f"{current_text}\n\n{paragraph}" if current_text else paragraph
 
-        # 문단 경계 보존: 현재 청크가 비어 있으면(=문단 하나가 chunk_size보다 커도)
-        # 그 문단을 통째로 담아 수식·표 등이 중간에 잘리지 않게 한다.
+        # 현재 청크가 비어 있으면 긴 단일 문단도 통째로 담아 문단 경계를 보존한다.
         if len(candidate) <= chunk_size or not current_text:
             current_text = candidate
-            current_start_page = start_page if current_start_page is None else min(current_start_page, start_page)
-            current_end_page = end_page if current_end_page is None else max(current_end_page, end_page)
+            current_start_page = (
+                start_page
+                if current_start_page is None
+                else min(current_start_page, start_page)
+            )
+            current_end_page = (
+                end_page
+                if current_end_page is None
+                else max(current_end_page, end_page)
+            )
             continue
 
-        # 넣으면 chunk_size를 넘으므로 지금까지 쌓인 내용을 청크로 확정하고,
-        # 겹침(overlap) 분량만 이어받아 다음 청크를 시작한다.
+        # 다음 문단을 넣으면 목표 크기를 넘으므로 현재 청크를 확정한다.
+        # 검색 문맥 연결을 위해 끝부분 overlap자와 다음 문단을 새 청크에 함께 넣는다.
         carried_end_page = current_end_page
         flush()
         overlap_text = current_text[-overlap:] if overlap > 0 else ""
@@ -146,4 +170,5 @@ def chunk_document(
         current_end_page = end_page
 
     flush()
+
     return chunks, review_flags

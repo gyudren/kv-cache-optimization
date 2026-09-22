@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "description": "KV cache 기술 문서의 개념, 표, 수식 검색 품질 평가 세트",
+  "acceptance": {
+    "hit_at_5_min": 0.8,
+    "mrr_min": 0.6,
+    "concept_table_noise_rate_max": 0.2,
+    "required_term_coverage_min": 0.8
+  },
+  "cases": [
+    {
+      "id": "concept_mla_compression_ko",
+      "category": "concept",
+      "language": "ko",
+      "query": "DeepSeek-V2의 MLA는 KV cache 크기를 어떤 방식으로 줄이는가?",
+      "expected_doc_ids": ["deepseek_v2_mla"],
+      "expected_pages": [6, 7, 8],
+      "expected_content_types": ["text"],
+      "required_terms": ["Multi-head Latent Attention", "KV cache"]
+    },
+    {
+      "id": "concept_itme_prefetch_ko",
+      "category": "concept",
+      "language": "ko",
+      "query": "ITME의 user-directed prefetch API는 SSD 데이터를 DRAM cache로 어떻게 이동시키는가?",
+      "expected_doc_ids": ["itme"],
+      "expected_pages": [5, 6],
+      "expected_content_types": ["text"],
+      "required_terms": ["prefetch", "DRAM cache"]
+    },
+    {
+      "id": "concept_infinigen_prediction_ko",
+      "category": "concept",
+      "language": "ko",
+      "query": "InfiniGen은 partial query와 partial key cache를 이용해 중요한 토큰을 어떻게 예측하는가?",
+      "expected_doc_ids": ["infinigen"],
+      "expected_pages": [8, 9],
+      "expected_content_types": ["text"],
+      "required_terms": ["partial query", "partial key"]
+    },
+    {
+      "id": "concept_cxl_pnm_vpu_ko",
+      "category": "concept",
+      "language": "ko",
+      "query": "CXL-PNM의 VPU는 KV-cache 관리 연산을 어떻게 가속하는가?",
+      "expected_doc_ids": ["cxl_pnm"],
+      "expected_pages": [4, 5],
+      "expected_content_types": ["text"],
+      "required_terms": ["VPU", "KV-cache"]
+    },
+    {
+      "id": "table_deepseek_alignbench_ko",
+      "category": "table",
+      "language": "ko",
+      "query": "DeepSeek-V2 Chat RL의 AlignBench Overall 점수는 얼마인가?",
+      "expected_doc_ids": ["deepseek_v2_mla"],
+      "expected_pages": [20],
+      "expected_content_types": ["text", "table"],
+      "required_terms": ["DeepSeek-V2 Chat (RL)", "8.10", "Table 5"]
+    },
+    {
+      "id": "table_deepseek_parameters_ko",
+      "category": "table",
+      "language": "ko",
+      "query": "DeepSeek-V2의 전체 파라미터와 토큰당 활성화 파라미터 수는 각각 얼마인가?",
+      "expected_doc_ids": ["deepseek_v2_mla"],
+      "expected_pages": [1, 4],
+      "expected_content_types": ["text"],
+      "required_terms": ["236B", "21B"]
+    },
+    {
+      "id": "table_itme_target_tiering_en",
+      "category": "table",
+      "language": "en",
+      "query": "Which memory tier does ITME use for long-context KV cache according to the data characteristics table?",
+      "expected_doc_ids": ["itme"],
+      "expected_pages": [2],
+      "expected_content_types": ["table"],
+      "required_terms": ["Long-contextKV", "Our(ITME)"]
+    },
+    {
+      "id": "table_itme_internal_bandwidth_ko",
+      "category": "table",
+      "language": "ko",
+      "query": "ITME Table 3에서 4채널 DRAM과 2채널 SSD 구성의 측정 대역폭은 얼마인가?",
+      "expected_doc_ids": ["itme"],
+      "expected_pages": [4, 5],
+      "expected_content_types": ["text", "table"],
+      "required_terms": ["Table 3", "18.0", "9.0"]
+    },
+    {
+      "id": "table_cxl_model_configuration_en",
+      "category": "table",
+      "language": "en",
+      "query": "What layer, head, and GQA configurations are listed for long-context LLMs in the CXL-PNM paper?",
+      "expected_doc_ids": ["cxl_pnm"],
+      "expected_pages": [3],
+      "expected_content_types": ["table", "text"],
+      "required_terms": ["GQA", "128"]
+    },
+    {
+      "id": "formula_mla_cache_elements_en",
+      "category": "formula",
+      "language": "en",
+      "query": "How many elements per token must standard multi-head attention cache during inference, and how does MLA change it?",
+      "expected_doc_ids": ["deepseek_v2_mla"],
+      "expected_pages": [7, 8],
+      "expected_content_types": ["text"],
+      "required_terms": ["elements", "KV cache"]
+    },
+    {
+      "id": "formula_infinigen_attention_score_en",
+      "category": "formula",
+      "language": "en",
+      "query": "How does InfiniGen approximate attention scores using a partial query and partial key cache before softmax?",
+      "expected_doc_ids": ["infinigen"],
+      "expected_pages": [8, 9],
+      "expected_content_types": ["text"],
+      "required_terms": ["partial query", "partial key", "softmax"]
+    },
+    {
+      "id": "formula_cxl_topk_mapping_en",
+      "category": "formula",
+      "language": "en",
+      "query": "How are QK transpose, score computation, and Top-K selection mapped onto the CXL-PNM VPU?",
+      "expected_doc_ids": ["cxl_pnm"],
+      "expected_pages": [5, 6],
+      "expected_content_types": ["text"],
+      "required_terms": ["Top-K", "QK"]
+    }
+  ]
+}
