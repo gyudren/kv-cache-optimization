@@ -7,7 +7,7 @@
 
 - Objective : 하나의 기술을 복수 관점에서 비교 평가
 - Method : Multi-Agent(Distributed) + Agentic RAG
-- Tools : LangGraph, FAISS + BM25(RRF 융합), Tavily Web API, pypdf
+- Tools : LangGraph, FAISS + BM25(RRF 융합), Tavily Web API, pdfplumber (2단 레이아웃·표 좌표 처리를 위해 pypdf 대신 채택)
 
 ## Selected Technologies
 
@@ -100,13 +100,36 @@ flowchart TD
 
 ※ 설계 산출물 PDF(D-2. Graph 흐름 설계) 원본 flowchart 이미지를 Mermaid로 옮긴 것으로, 노드 문구는 원본 이미지를 기준으로 최대한 그대로 옮겼으며 세부 배치·색상은 Mermaid 렌더링 방식에 따라 원본과 다를 수 있음
 
+## Data Preprocessing
+
+RAG 적재 문서 4편(DeepSeek-V2/MLA, ITME, InfiniGen, CXL-PNM)을 다음 순서로 전처리하여, 임베딩/색인 단계에서 바로 쓸 수 있는 청크 목록을 만든다.
+
+파싱(pdfplumber 좌표 기반, 2단 레이아웃 읽기 순서 재정렬) → header/footer 제거 → 표 분리(캡션·각주 묶음, 병합 셀 정규화) → 참고문헌 구간 제외 → 청킹(1,200자/겹침 200자, 문단 경계 보존, 페이지 경계에서 끊긴 문장 이어붙이기) → 페이지 예산(≤200p) 검증
+
+1. `data/manifest.json`에 정의된 파일명대로 원문 PDF 4편을 `data/raw/`에 배치
+2. `pip install -r requirements.txt`
+3. `python -m preprocessing.pipeline` 실행 → `data/processed/chunks.jsonl`(텍스트/표 청크), `data/processed/summary.json`(문서별 통계 + 수동 확인 필요 항목) 생성
+4. (선택) `python -m preprocessing.selfcheck` 로 PDF 없이 파싱·청킹 로직만 별도 검증 가능
+
+각 청크에는 `doc_id`, `camp`(SW/HW), `role`(primary/baseline), `content_type`(text/table), `start_page`/`end_page`, `citation`(`[n, p.X]` 형식) 메타데이터가 포함되어 있어 기술별 문서 필터링과 보고서 인용에 사용할 수 있다.
+
+자동으로 판단하기 위험한 항목은 넘겨짚지 않고 `summary.json`에 표시만 하므로, 색인 전에 아래 항목을 사람이 한 번 확인해야 한다.
+
+- `pages_with_charts` : 페이지 면적의 15% 이상을 차지하는 이미지(차트 등)가 있는 페이지 — 텍스트 레이어와 그래프 내용이 실제로 일치하는지, 그래프 정보가 꼭 필요한지 확인 필요
+- `page_boundary_review_flags` : 페이지 경계에서 문장이 끝나지 않았거나 표처럼 보이는 텍스트가 있는 지점 — 표 헤더가 다음 페이지로 이어지는데 반복되지 않은 경우 등을 확인 필요
+- `table_count` / `removed_boilerplate_line_count` : 문서별 표 추출 개수와 제거된 header/footer 줄 수 — 과다 추출·과다 제거 여부 확인 필요
+
 ## Directory Structure
 
-├── data/ # 문서 풀
-├── agents/ # Agent 모듈
-├── prompts/ # 프롬프트 템플릿
-├── outputs/ # 평가 결과 저장
-├── app.py # 실행 스크립트
+├── data/                    # 문서 풀
+│   ├── manifest.json        # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
+│   ├── raw/                 # 원문 PDF (git 미포함, 로컬에 직접 배치)
+│   └── processed/           # 전처리 결과 (chunks.jsonl, summary.json)
+├── preprocessing/           # 데이터 전처리 (파싱·참고문헌 제외·청킹·페이지 예산 검증)
+├── agents/                  # Agent 모듈
+├── prompts/                 # 프롬프트 템플릿
+├── outputs/                 # 평가 결과 저장
+├── app.py                   # 실행 스크립트
 └── README.md
 
 ## Usage

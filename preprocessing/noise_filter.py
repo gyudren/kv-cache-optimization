@@ -7,7 +7,7 @@ preprocessing.budget 에서 문서 전체 페이지 수 기준으로 별도 수�
 
 import re
 
-from preprocessing.loader import Page
+from preprocessing.page_text import Page
 
 REFERENCE_HEADING_RE = re.compile(
     r"^\s*(references?|bibliography|참고\s*문헌)\s*$",
