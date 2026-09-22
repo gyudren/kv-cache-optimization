@@ -6,6 +6,7 @@ from typing import Any
 from ..config import MAX_PARALLEL_QUESTIONS
 from ..prompts import prompt_template
 from ..schemas import DomainAssessment
+from ..rag.workflow import answer_with_cache
 
 DIMENSIONS = [
     ("D1", "워크로드 수용 능력", "context and concurrent requests given constrained GPU memory"),
@@ -56,11 +57,12 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
     research = []
     evidence = []
     missing = []
+    cache = state.get("domain_result", {}).get("rag_cache", {})
     tasks = [(tech, code, title, question)
              for tech in ("mla", "itme") for code, title, question in DIMENSIONS]
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
         answers = list(pool.map(
-            lambda t: rag.rag_answer(f"{t[0]} {t[1]} {t[2]}: {t[3]}", t[0], feedback), tasks))
+            lambda t: answer_with_cache(rag, cache, f"{t[0]} {t[1]} {t[2]}: {t[3]}", t[0], feedback), tasks))
     for (tech, code, title, question), answer in zip(tasks, answers):
         research.append({"technology": tech, "dimension": f"{code} {title}", "question": question,
                          "answer": answer["answer"], "sufficient": answer["sufficient"]})
@@ -85,7 +87,8 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
         if item["verdict"] != "근거 부족" and not item["cited_ids"]:
             missing.append(f"{item['technology']}/{item['dimension']}: 판정 근거 인용 없음")
     missing.extend(assessed.missing)
-    return {"domain_result": {**assessed.model_dump(), "items": items,
+    rag_cache = {f"{t[0]} {t[1]} {t[2]}: {t[3]}": answer for t, answer in zip(tasks, answers)}
+    return {"domain_result": {**assessed.model_dump(), "items": items, "rag_cache": rag_cache,
                               "sufficient": assessed.sufficient and not bool(missing),
                               "missing": list(dict.fromkeys(missing))},
             "evidence": evidence,

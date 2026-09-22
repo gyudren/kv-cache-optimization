@@ -8,6 +8,10 @@
     url, title, excerpt, publisher, published_at, speaker
 """
 from __future__ import annotations
+import json
+import os
+from hashlib import sha256
+from pathlib import Path
 from urllib.parse import urlparse
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
@@ -77,14 +81,33 @@ class WebSearch:
             return self._client.search(payload)
         import requests
 
+        # 같은 질의는 디스크 캐시에서 읽는다. 재시도·재실행마다 Tavily 크레딧을 다시 쓰지 않고,
+        # 동일 근거로 보고서를 재현할 수 있다(WEB_CACHE_DIR를 빈 값으로 두면 캐시를 끈다).
+        cache_file = None
+        cache_dir = os.getenv("WEB_CACHE_DIR", "data/cache/tavily")
+        if cache_dir:
+            key = sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:24]
+            cache_file = Path(cache_dir) / f"{key}.json"
+            if cache_file.is_file():
+                return json.loads(cache_file.read_text(encoding="utf-8")).get("results", [])
+
         response = requests.post(
             TAVILY_SEARCH_URL,
             headers={"Authorization": f"Bearer {self.api_key}"},
             json=payload,
             timeout=30,
         )
+        if response.status_code in (429, 432, 433):
+            detail = response.text[:200]
+            raise RuntimeError(f"Tavily 사용 한도 초과(HTTP {response.status_code}): {detail} "
+                               "— Tavily 대시보드에서 한도를 확인하거나 다른 TAVILY_API_KEY를 .env에 넣으세요")
         response.raise_for_status()
-        return response.json().get("results", [])
+        results = response.json().get("results", [])
+        if cache_file is not None:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps({"query": payload.get("query"), "results": results},
+                                             ensure_ascii=False, indent=1), encoding="utf-8")
+        return results
 
     def _search(self, query: str, *, topic: str, exclude_domains: list[str],
                 max_results: int = MAX_RESULTS, min_score: float = MIN_SCORE) -> list[dict]:

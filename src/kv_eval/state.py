@@ -42,3 +42,8 @@ def deduplicate_evidence(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             seen.add(key)
             out.append(ev)
     return out
+
+
+def prompt_view(result: dict) -> dict:
+    """LLM 프롬프트에 넣을 결과 사본. 재시도용 내부 캐시(rag_cache)는 근거 원문 전체라 제외한다."""
+    return {k: v for k, v in (result or {}).items() if k != "rag_cache"}

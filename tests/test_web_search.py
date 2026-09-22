@@ -55,3 +55,31 @@ def test_speaker_hint_classifies_known_domains():
     assert speaker_hint("https://news.ycombinator.com/item?id=1") == "개발자 커뮤니티"
     assert speaker_hint("https://www.skhynix.com/news") == "기업 공식 발표"
     assert speaker_hint("https://unknown.example.org/post") == "기타"
+
+
+def test_tavily_quota_error_is_explicit(monkeypatch, tmp_path):
+    import pytest, requests
+    from kv_eval.tools.web_search import WebSearch
+    monkeypatch.setenv("WEB_CACHE_DIR", str(tmp_path))
+    class Resp:
+        status_code = 432
+        text = '{"detail":{"error":"exceeds your plan"}}'
+    monkeypatch.setattr(requests, "post", lambda *a, **k: Resp())
+    with pytest.raises(RuntimeError, match="사용 한도 초과"):
+        WebSearch("key").search_market("q")
+
+
+def test_tavily_responses_are_cached(monkeypatch, tmp_path):
+    import requests
+    from kv_eval.tools.web_search import WebSearch
+    monkeypatch.setenv("WEB_CACHE_DIR", str(tmp_path))
+    calls = []
+    class Resp:
+        status_code = 200
+        text = ""
+        def raise_for_status(self): pass
+        def json(self): return {"results": [{"url": "https://a.org", "content": "x", "score": 0.9, "title": "t"}]}
+    monkeypatch.setattr(requests, "post", lambda *a, **k: calls.append(1) or Resp())
+    web = WebSearch("key")
+    assert web.search_market("q") == web.search_market("q")
+    assert len(calls) == 1

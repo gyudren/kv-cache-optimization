@@ -9,7 +9,7 @@ from collections import Counter
 from typing import Any
 from ..prompts import prompt_template
 from ..schemas import ReportParts
-from ..state import deduplicate_evidence
+from ..state import deduplicate_evidence, prompt_view
 from ..reporting.sections import citation_catalog, citeable_evidence, used_references
 
 TECHS = (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME"))
@@ -205,7 +205,7 @@ def render_report(state: dict, llm: Any) -> str:
         "The following signal tables are inserted verbatim by the code; your narrative MUST use exactly the same verdicts "
         "(if you believe a verdict is wrong, explain the nuance but do not state a different verdict):\n"
         + "\n\n".join(f"[{k}]\n{v}" for k, v in tables.items()) + "\n"
-        + repr({k: state.get(k, {}) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result", "synthesis_result")})
+        + repr({k: prompt_view(state.get(k, {})) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result", "synthesis_result")})
         + "\nVerified source catalog:\n" + repr(citation_context), ReportParts,
     )
     parts = {k: sanitize_field(v) for k, v in sections.model_dump().items()}

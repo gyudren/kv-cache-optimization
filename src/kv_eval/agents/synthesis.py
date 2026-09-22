@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any
 from ..prompts import prompt_template
-from ..state import deduplicate_evidence
+from ..state import deduplicate_evidence, prompt_view
 from ..schemas import SynthesisAssessment
 
 
@@ -16,7 +16,7 @@ def synthesis_node(state: dict, llm: Any) -> dict:
         "Present agreements and at least two EVIDENCED conflicts per technology if possible; if not, list gap rather than fabricate. "
         "Describe trade-offs neutrally, no winner/recommendation. If sources must be revisited, return names in needs_source_agents. "
         "Set needs_revision for synthesis-only expression problems.\n"
-        + repr({k: state.get(k, {}) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result")})
+        + repr({k: prompt_view(state.get(k, {})) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result")})
         + "\nEvidence source IDs: " + repr(src)
         + "\nRevision feedback: " + repr(state.get("review_feedback", {}).get("synthesis", {}))
         + "\nPrevious synthesis: " + repr(state.get("synthesis_result", {})), SynthesisAssessment,

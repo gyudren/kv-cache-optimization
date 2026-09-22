@@ -68,3 +68,16 @@ def test_domain_items_normalize_llm_dimension_names_and_citations():
                               "explanation": "", "cited_ids": ["[1, p.16]", "[9, p.9]"]}], evidence)
     assert items[0]["dimension"] == "D1 워크로드 수용 능력"
     assert items[0]["cited_ids"] == ["deepseek_v2_mla_text_0016", "[9, p.9]"]  # 없는 인용은 검증에서 걸리도록 유지
+
+
+def test_retry_reuses_sufficient_rag_answers_only():
+    from kv_eval.rag.workflow import answer_with_cache
+    class RAG:
+        calls = []
+        def rag_answer(self, q, f, fb):
+            self.calls.append(q); return {"answer": "new", "sufficient": True, "evidence": [], "missing": []}
+    rag = RAG()
+    cache = {"ok": {"answer": "old", "sufficient": True}, "weak": {"answer": "근거 부족", "sufficient": False}}
+    assert answer_with_cache(rag, cache, "ok", "mla", {})["answer"] == "old"
+    assert answer_with_cache(rag, cache, "weak", "mla", {})["answer"] == "new"
+    assert rag.calls == ["weak"]
