@@ -1,4 +1,7 @@
 pdfplumber>=0.11.0
+chromadb>=1.5.0
+sentence-transformers>=5.0.0
+torch>=2.0.0
 
 # 개발용(선택): preprocessing/selfcheck.py의 합성 PDF 통합 테스트에만 필요
 # reportlab
