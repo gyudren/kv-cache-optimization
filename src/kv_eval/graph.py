@@ -34,8 +34,6 @@ def build_graph(rag: Any, web: Any, llm: Any):
                                  "master_dispatch": "master_dispatch"})
     graph.add_edge("master_query_rewrite", "technology")
 
-    # 반환 타입을 주석으로 달면 LangGraph가 모듈 전역에서 Send를 찾다 NameError를 낸다
-    # (Send는 langgraph 의존성 없이도 import되도록 이 함수 안에서만 import한다).
     def dispatch_routes(state: GraphState):
         selected = state["next_agents"]
         if not selected or not set(selected) <= {"market", "stakeholder", "domain"}:

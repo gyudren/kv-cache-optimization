@@ -63,6 +63,7 @@ def run(query: str = DEFAULT_QUERY) -> dict:
 
 def finalize(state: dict, output_dir: Path) -> dict:
     """검증 → validation.json / 보고서 .md·.pdf / run_logs.json 저장."""
+    (output_dir / "failure.json").unlink(missing_ok=True)  # 이전 실행의 실패 기록이 남아 혼동되지 않게
     validation = validate_report(state["report_draft"], state["evidence"])
     gate = next((x for x in reversed(state["logs"]) if x.get("node") == "master_report_gate"), {})
     validation["passed"] = bool(validation["passed"] and gate.get("gate") is True)

@@ -43,6 +43,28 @@ def format_paper_reference(number: int, doc_id: str, pages: list[int]) -> str:
 MANDATORY = ["SUMMARY", "1. 분석 배경", "2. 기술 선정", "3. 기술 개요", "4. 관점별 평가", "5. 종합 의견", "6. 시사점", "7. 한계점", "REFERENCE"]
 PAPER_CITATION = re.compile(r"\[(\d+),\s*p\.(\d+)\]")
 WEB_CITATION = re.compile(r"\[W(\d+)\]")
+# "[1, p.6; p.15]", "[1, p.6, p.15]", "[2, pp.8-9]", "[W1, W2]" 처럼 한 괄호에 여러 쪽·출처를 묶은 인용.
+# 정규 형식이 아니면 검증기를 우회하므로 먼저 "[1, p.6] [1, p.15]" 형태로 펼친다.
+_GROUPED_PAPER = re.compile(r"\[(\d+),\s*(p{1,2}\.\s*\d+(?:\s*[-–]\s*\d+)?(?:\s*[;,]\s*(?:p{1,2}\.)?\s*\d+(?:\s*[-–]\s*\d+)?)+|pp\.\s*\d+\s*[-–]\s*\d+)\]")
+_GROUPED_WEB = re.compile(r"\[(W\d+(?:\s*[,;]\s*W\d+)+)\]")
+MALFORMED_CITATION = re.compile(r"\[\d+,\s*p{1,2}\.[^\]]*[;,–-][^\]]*\]|\[W\d+\s*[,;][^\]]*\]")
+
+
+def normalize_citations(text: str) -> str:
+    """묶음 인용을 페이지·출처별 정규 인용으로 펼친다(검증·REFERENCE 페이지 목록에 모두 반영되도록)."""
+    def paper(match: re.Match) -> str:
+        number, body = match.group(1), match.group(2)
+        pages: list[int] = []
+        for part in re.split(r"[;,]", body):
+            nums = [int(x) for x in re.findall(r"\d+", part)]
+            if len(nums) == 2 and re.search(r"[-–]", part):
+                pages.extend(range(nums[0], nums[1] + 1))
+            else:
+                pages.extend(nums)
+        return " ".join(f"[{number}, p.{page}]" for page in dict.fromkeys(pages))
+
+    text = _GROUPED_PAPER.sub(paper, text)
+    return _GROUPED_WEB.sub(lambda m: " ".join(f"[{w.strip()}]" for w in re.split(r"[,;]", m.group(1))), text)
 
 
 def citation_catalog(evidence: list[dict]) -> dict:
@@ -113,6 +135,9 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
         summary = report.split("## SUMMARY\n", 1)[1].split("\n## 1. 분석 배경", 1)[0].strip()
         if not summary_fits_half_page(summary):
             issues.append("SUMMARY가 PDF 렌더링 기준 1/2페이지 초과")
+    body = report.split("\n## REFERENCE", 1)[0]
+    for bad in dict.fromkeys(MALFORMED_CITATION.findall(body)):
+        issues.append(f"정규 형식이 아닌 묶음 인용 {bad}: [n, p.X] / [Wn] 단위로 나눠야 검증 가능")
     refs, citation_issues = used_references(report, evidence)
     issues.extend(citation_issues)
     if not PAPER_CITATION.search(report) and not WEB_CITATION.search(report):

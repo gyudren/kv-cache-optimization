@@ -178,7 +178,7 @@ python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과까�
 ├── app.py                       # 실행 진입점 (전처리 산출물 적재 → 색인 → LangGraph 실행 → 보고서 저장)
 ├── data/
 │   ├── manifest.json            # 문서 4편 메타데이터(진영/역할/참고문헌 구간)
-│   ├── raw/                     # 원문 PDF (git 미포함, 로컬에 직접 배치)
+│   ├── raw/                     # 원문 PDF 4편 (arXiv 공개본, 전처리 입력)
 │   └── processed/               # 전처리 결과 (chunks.jsonl, summary.json)
 ├── preprocessing/               # 파싱·header/footer 제거·표 분리·참고문헌 제외·청킹·페이지 예산 검증
 ├── src/kv_eval/
@@ -192,7 +192,6 @@ python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과까�
 ├── prompts/                     # 공통 계약(00) + 역할별 시스템 프롬프트(01~08)
 ├── eval/                        # 검색 품질 평가 세트 및 하네스
 ├── outputs/                     # 최종 보고서(.md/.pdf), 검증 결과, 실행 로그
-├── tests/                       # 단위 테스트 (네트워크·API 키 불필요)
 └── scripts/                     # 프롬프트 패키지 검증 스크립트
 ```
 
@@ -201,13 +200,13 @@ python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과까�
 ### 1. 설치
 
 ```bash
-pip install -e ".[dev]"        # 의존성의 단일 출처는 pyproject.toml
+pip install -e .               # 의존성의 단일 출처는 pyproject.toml
 cp .env.example .env           # OPENAI_API_KEY, TAVILY_API_KEY 입력 (.env는 git에 올라가지 않음)
 ```
 
 ### 2. 원문 PDF 배치 및 전처리
 
-`data/manifest.json`의 `filename`대로 논문 4편을 `data/raw/`에 두고 실행한다.
+원문 PDF 4편은 `data/raw/`에, 전처리 결과는 `data/processed/`에 이미 포함돼 있어 이 단계는 생략할 수 있다. 전처리를 다시 하려면 아래를 실행한다.
 
 ```bash
 python -m preprocessing.pipeline   # → data/processed/chunks.jsonl, summary.json
@@ -233,11 +232,21 @@ python app.py
 
 종료 코드는 보고서가 검증까지 통과하면 `0`, 생성됐으나 검증에 실패하면 `2`, 실행 자체가 실패하면 `1`이다.
 
-### 4. 테스트 / 검색 품질 평가
+### 4. 부분 재실행 (선택)
+
+전체 실행(약 15분)이 끝나면 `outputs/final_state.json`에 조사·평가 결과와 Evidence가 저장된다.
 
 ```bash
-pytest -q                          # 단위 테스트 (API 키·네트워크 불필요)
-python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판정
+python app.py --report-only   # 수집된 Evidence로 보고서 작성 → 검수 루프만 재실행 (새 검색 없음, 약 4분)
+python app.py --export-only   # LLM 호출 없이 검증·Markdown/PDF 내보내기만 재실행
+```
+
+웹 검색 응답은 `data/cache/tavily/`에 캐시되어, 같은 질의를 다시 실행해도 Tavily 크레딧을 쓰지 않는다.
+
+### 5. 검색 품질 평가
+
+```bash
+python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판정 (LLM 호출 없음)
 ```
 
 ## 차별점
@@ -250,7 +259,7 @@ python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판�
 ## Lessons Learned
 
 - **설계서와 코드의 불일치는 조용히 쌓인다.** 그래프·State는 설계와 일치했지만 RAG 색인이 전처리 산출물과 끊겨 있어 실행 자체가 불가능한 상태였다. "코드가 설계대로인가"와 "코드가 돌아가는가"는 별개로 점검해야 했다.
-- **실패는 마지막 단계에서 터진다.** OpenAI 구조화 출력이 자유형 `dict` 스키마를 거부해 파이프라인이 중간에 죽었다. 이후 네트워크 없이 스키마 제약을 검사하는 테스트를 추가해 같은 실패를 사전에 잡도록 했다.
+- **실패는 마지막 단계에서 터진다.** OpenAI 구조화 출력이 자유형 `dict` 스키마를 거부해 파이프라인이 중간에 죽었다. 이후 스키마를 기술별 필드로 명시해(`PerTechnologyText` 등) 같은 실패가 재발하지 않도록 했다.
 - **지표는 만들자마자 의심해야 한다.** 첫 검색 평가는 정답 문서로 필터를 정해 놓고 Hit@1을 재는 바람에 항상 1.00이 나왔다. 측정 설계가 틀리면 "좋다"는 숫자가 가장 위험하다.
 - **팀원이 남긴 판단 근거는 데이터로 반박하기 전까지 존중해야 한다.** 수식 줄 제거는 이미 부작용이 기록돼 있었고, 재측정 결과도 같은 결론이었다.
 

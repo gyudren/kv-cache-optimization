@@ -10,7 +10,7 @@ from typing import Any
 from ..prompts import prompt_template
 from ..schemas import ReportParts
 from ..state import deduplicate_evidence, prompt_view
-from ..reporting.sections import citation_catalog, citeable_evidence, used_references
+from ..reporting.sections import citation_catalog, citeable_evidence, normalize_citations, used_references
 
 TECHS = (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME"))
 
@@ -73,7 +73,7 @@ def readable(text: str) -> str:
 
 
 def _cell(text: Any) -> str:
-    return readable(" ".join(str(text or "").split()).replace("|", "/"))
+    return normalize_citations(readable(" ".join(str(text or "").split()).replace("|", "/")))
 
 
 _OWN_HEADING = re.compile(r"^\s*#{1,6}\s*(REFERENCE|참고\s*문헌|참고자료|References?)\b", re.IGNORECASE)
@@ -222,7 +222,7 @@ def render_report(state: dict, llm: Any) -> str:
         + repr({k: prompt_view(state.get(k, {})) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result", "synthesis_result")})
         + "\nVerified source catalog:\n" + repr(citation_context), ReportParts,
     )
-    parts = {k: sanitize_field(v) for k, v in sections.model_dump().items()}
+    parts = {k: normalize_citations(sanitize_field(v)) for k, v in sections.model_dump().items()}
     report = "\n\n".join([
         f"## SUMMARY\n{parts['summary']}",
         f"## 1. 분석 배경\n{parts['background']}\n\n#### 표 1. KV cache 규모 예시 (Llama-3.1-70B, FP16 — 설계 산출물 A-2) [D]\n{KV_SCALE_TABLE}\n\n{KV_SCALE_FORMULA}",
