@@ -9,7 +9,12 @@
       "role": "primary",
       "arxiv_id": "2405.04434",
       "expected_pages": 52,
-      "reference_start_page": null
+      "reference_start_page": 21,
+      "reference_end_page": 26,
+      "authors": "DeepSeek-AI",
+      "year": 2024,
+      "full_title": "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model",
+      "venue": null
     },
     {
       "doc_id": "itme",
@@ -19,7 +24,11 @@
       "role": "primary",
       "arxiv_id": "2606.12556",
       "expected_pages": 13,
-      "reference_start_page": null
+      "reference_start_page": null,
+      "authors": "Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix)",
+      "year": 2026,
+      "full_title": "ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories",
+      "venue": null
     },
     {
       "doc_id": "infinigen",
@@ -29,7 +38,11 @@
       "role": "baseline",
       "arxiv_id": null,
       "expected_pages": 18,
-      "reference_start_page": null
+      "reference_start_page": null,
+      "authors": "Lee, W., Lee, J., Seo, J., & Sim, J. (Seoul National University)",
+      "year": null,
+      "full_title": "InfiniGen: Efficient Generative Inference of Large Language Models with Dynamic KV Cache Management",
+      "venue": null
     },
     {
       "doc_id": "cxl_pnm",
@@ -39,7 +52,11 @@
       "role": "baseline",
       "arxiv_id": null,
       "expected_pages": 13,
-      "reference_start_page": null
+      "reference_start_page": null,
+      "authors": "Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics)",
+      "year": null,
+      "full_title": "Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits",
+      "venue": null
     }
   ]
 }

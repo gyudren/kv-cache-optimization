@@ -1,16 +1,16 @@
-"""외부 검색 도구 (Tavily). 시장 평가·이해관계자 평가 Agent 공용.
+"""외부 검색 도구 (Tavily 우선, 키 누락·호출 실패 시 DuckDuckGo). 시장 평가·이해관계자 평가 Agent 공용.
 
-RAG를 쓰지 않는 두 Agent(B-2에서 RAG 여부 X)가 함께 쓴다.
-- web_search : 공용 저수준 호출부 (Tavily, 키 없으면 DuckDuckGo로 자동 대체)
-- WebClient : agents/market.py·agents/stakeholder.py가 기대하는
-  ``web.search_market(query)`` / ``web.search_stakeholder(query)`` 인터페이스 어댑터
-판정(긍정/우려/혼재)은 Agent의 LLM 몫이며 여기서는 근거만 모은다.
+설계 B-2에서 두 Agent는 RAG 여부 X로, 논문 풀 대신 웹 검색만 근거로 쓴다
+(논문 4편에는 시장 규모·채택 현황·이해관계자 발언 근거가 없기 때문).
+이 모듈은 근거 수집까지만 담당하고, 긍정/우려/혼재 판정은 Agent의 LLM이 한다.
+
+반환 항목은 Agent가 evidence로 바로 옮길 수 있도록 정규화한다:
+    url, title, excerpt, publisher, published_at, speaker
 """
-
+from __future__ import annotations
 import os
+import warnings
 from urllib.parse import urlparse
-
-import requests
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
@@ -19,11 +19,13 @@ DEFAULT_EXCLUDED_DOMAINS = ["youtube.com", "udemy.com", "coursera.org"]
 
 # 이해관계자 전용 추가 제외: 프로필 페이지는 입장 표명이 아니고, 논문은 RAG 담당
 STAKEHOLDER_EXCLUDED_DOMAINS = DEFAULT_EXCLUDED_DOMAINS + ["linkedin.com", "arxiv.org"]
-
-# 시장 평가 전용 추가 제외: 커뮤니티 잡담은 시장 규모/채택 근거로 약함
 MARKET_EXCLUDED_DOMAINS = DEFAULT_EXCLUDED_DOMAINS + ["reddit.com"]
 
-# 발언 주체 구분용 도메인 힌트. 최종 귀속은 Agent가 본문을 보고 판단한다.
+MIN_SCORE = 0.4  # Tavily 관련도 점수가 이보다 낮은 결과는 근거로 쓰지 않는다
+MAX_RESULTS = 4
+
+# 발언 주체 구분용 도메인 힌트(설계 C-3: 발언 주체를 함께 기록).
+# 최종 귀속은 Agent가 본문을 보고 판단하며, 여기서는 후보만 붙인다.
 SPEAKER_HINTS = {
     "언론": ("reuters.", "bloomberg.", "cnbc.", "zdnet.", "theelec.", "hankyung.",
              "mk.co.kr", "etnews.", "chosun.", "yna.co.kr", "techcrunch."),
@@ -39,131 +41,112 @@ SPEAKER_HINTS = {
 def speaker_hint(url: str) -> str:
     lowered = url.lower()
     for speaker, patterns in SPEAKER_HINTS.items():
-        if any(p in lowered for p in patterns):
+        if any(pattern in lowered for pattern in patterns):
             return speaker
     return "기타"
 
 
-def _publisher_from_url(url: str) -> str:
-    netloc = urlparse(url).netloc
-    return netloc or "발행 주체 미확인"
+def _publisher(url: str) -> str:
+    host = urlparse(url).netloc.lower()
+    return host[4:] if host.startswith("www.") else host
 
 
-def _ddg_search_fallback(
-    query: str, *, max_results: int, exclude_domains: list[str]
-) -> list[dict]:
-    """TAVILY_API_KEY가 없을 때 쓰는 무료 대체 검색(DuckDuckGo, 키 불필요).
+def _excluded(url: str, domains: list[str]) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return any(host == domain or host.endswith("." + domain) for domain in domains)
 
-    README에 명시적으로 밝히는 도구 대체 — 재현성을 위해 기본값으로 동작하되,
-    TAVILY_API_KEY가 있으면 항상 Tavily를 우선 사용한다.
-    """
+
+def _ddg_search_fallback(query: str, *, max_results: int, exclude_domains: list[str]) -> list[dict]:
     from ddgs import DDGS
-
-    excluded = tuple(exclude_domains)
-    with DDGS() as ddgs:
-        raw_hits = list(ddgs.text(query, max_results=max_results * 2))
-
-    hits = []
-    for rank, hit in enumerate(raw_hits):
-        url = hit.get("href", "")
-        if any(domain in url.lower() for domain in excluded):
-            continue
-        hits.append(
-            {
-                "title": hit.get("title", ""),
-                "url": url,
-                "content": hit.get("body", ""),
-                # DDG는 점수를 주지 않으므로 순위 기반으로 합리적인 값을 근사한다.
-                "score": max(0.3, 0.9 - rank * 0.07),
-            }
-        )
-        if len(hits) >= max_results:
-            break
-    return hits
+    with DDGS() as client:
+        hits = list(client.text(query, max_results=max_results * 2))
+    return [{"url": hit.get("href", ""), "title": hit.get("title", ""),
+             "content": hit.get("body", ""), "score": None, "provider": "duckduckgo"}
+            for hit in hits if hit.get("href") and not _excluded(hit["href"], exclude_domains)][:max_results]
 
 
-def web_search(
-    query: str,
-    *,
-    max_results: int = 4,
-    search_depth: str = "basic",
-    topic: str = "general",
-    exclude_domains: list[str] | None = None,
-    min_score: float | None = None,
-    include_answer: bool = False,
-) -> list[dict]:
-    """웹 검색 호출. TAVILY_API_KEY가 있으면 Tavily, 없으면 DuckDuckGo로 대체한다.
-
-    min_score를 주면 그 미만은 걸러낸다.
-    """
-    exclude = exclude_domains or DEFAULT_EXCLUDED_DOMAINS
-    api_key = os.environ.get("TAVILY_API_KEY")
-
-    try:
-        if api_key:
-            response = requests.post(
-                TAVILY_SEARCH_URL,
-                headers={"Authorization": f"Bearer {api_key}"},
-                json={
-                    "query": query,
-                    "max_results": max_results,
-                    "search_depth": search_depth,
-                    "topic": topic,
-                    "exclude_domains": exclude,
-                    "include_answer": include_answer,
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
-            hits = response.json().get("results", [])
-        else:
-            hits = _ddg_search_fallback(query, max_results=max_results, exclude_domains=exclude)
-    except Exception as exc:
-        # 검색 엔진의 일시적 오류로 전체 실행이 죽지 않게 한다. 검색 실패는 evidence
-        # 부족으로 이어져 sufficient=false / "근거 부족"으로 자연스럽게 처리된다.
-        print(f"[web_search] '{query}' 검색 실패, 이 질의는 건너뜀: {exc}")
-        hits = []
-
-    if min_score is None:
-        return hits
-    return [h for h in hits if (h.get("score") or 0) >= min_score]
+def _normalize(hit: dict) -> dict:
+    """Tavily 응답 1건을 Agent가 쓰는 근거 형식으로 바꾼다."""
+    url = hit.get("url", "")
+    return {
+        "url": url,
+        "title": hit.get("title", ""),
+        "excerpt": hit.get("content", ""),
+        "publisher": _publisher(url),
+        # 게시일이 없는 결과가 많다. 없으면 빈 값으로 두고 REFERENCE에서 "게시일 미확인"으로 표기된다.
+        "published_at": hit.get("published_date", "") or "",
+        "speaker": speaker_hint(url),
+        "score": hit.get("score"),
+        "provider": hit.get("provider", "tavily"),
+    }
 
 
-class WebClient:
-    """market/stakeholder Agent가 기대하는 얇은 검색 어댑터.
+class WebSearch:
+    """시장·이해관계자 Agent가 쓰는 Tavily 검색 클라이언트."""
 
-    agents/market.py·agents/stakeholder.py는 ``web.search_market(query)`` /
-    ``web.search_stakeholder(query)`` 형태로 질의 문자열 하나를 넘기고
-    ``{url, title, excerpt, publisher, published_at}`` 딕셔너리 리스트를 기대한다.
-    실제 검색은 위 ``web_search()``(Tavily, 키 없으면 DuckDuckGo)를 그대로 쓰고
-    필드만 이 계약에 맞게 다시 포장한다.
-    """
-
-    def __init__(self, max_results: int = 4, min_score: float | None = None):
+    def __init__(self, api_key: str, client: object | None = None, *, fallback=None,
+                 max_results: int = MAX_RESULTS, min_score: float = MIN_SCORE):
+        self.api_key = api_key
+        self._client = client  # 테스트용 주입 지점. 실제 실행에서는 requests를 쓴다.
+        self._fallback = fallback or _ddg_search_fallback
+        self._fallback_only = not api_key and client is None
         self.max_results = max_results
         self.min_score = min_score
 
-    def _search(self, query: str, *, exclude_domains: list[str]) -> list[dict]:
-        hits = web_search(
-            query,
-            max_results=self.max_results,
-            exclude_domains=exclude_domains,
-            min_score=self.min_score,
+    def _post(self, payload: dict) -> list[dict]:
+        if self._client is not None:
+            return self._client.search(payload)
+        import requests
+
+        response = requests.post(
+            TAVILY_SEARCH_URL,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json=payload,
+            timeout=30,
         )
-        return [
-            {
-                "url": h.get("url", ""),
-                "title": h.get("title", ""),
-                "excerpt": h.get("content", ""),
-                "publisher": _publisher_from_url(h.get("url", "")),
-                "published_at": h.get("published_date") or h.get("published_at"),
-            }
-            for h in hits
-            if h.get("url")
-        ]
+        response.raise_for_status()
+        return response.json().get("results", [])
+
+    def _search(self, query: str, *, topic: str, exclude_domains: list[str]) -> list[dict]:
+        import requests
+        payload = {
+            "query": query,
+            "max_results": self.max_results,
+            "search_depth": "basic",
+            "topic": topic,
+            "exclude_domains": exclude_domains,
+            "include_answer": False,
+        }
+        if not self._fallback_only:
+            try:
+                hits = self._post(payload)
+            except requests.RequestException as exc:
+                warnings.warn(f"Tavily 검색 실패({type(exc).__name__}); DuckDuckGo로 전환합니다.", RuntimeWarning)
+                self._fallback_only = True
+        if self._fallback_only:
+            try:
+                hits = self._fallback(query, max_results=self.max_results, exclude_domains=exclude_domains)
+                hits = [{**hit, "score": None, "provider": "duckduckgo"} for hit in hits]
+            except Exception as exc:
+                warnings.warn(f"대체 검색 실패({type(exc).__name__}); 근거 부족으로 기록합니다.", RuntimeWarning)
+                return []
+        results = [_normalize(hit) for hit in hits if hit.get("url")
+                   and not _excluded(hit["url"], exclude_domains)
+                   and (self._fallback_only or (hit.get("score") or 0) >= self.min_score)]
+        # 근거로 쓸 수 없는 빈 본문은 버린다(인용해도 검증이 불가능하므로).
+        return [item for item in results if item["excerpt"].strip()]
 
     def search_market(self, query: str) -> list[dict]:
-        return self._search(query, exclude_domains=MARKET_EXCLUDED_DOMAINS)
+        """C-2 시장 규모·성장성, 상용화·채택, 생태계 지지 근거 수집."""
+        return self._search(query, topic="news", exclude_domains=MARKET_EXCLUDED_DOMAINS)
 
     def search_stakeholder(self, query: str) -> list[dict]:
-        return self._search(query, exclude_domains=STAKEHOLDER_EXCLUDED_DOMAINS)
+        """C-3 경쟁사·개발자/도입기업·투자업계의 '발언' 근거 수집."""
+        return self._search(query, topic="general", exclude_domains=STAKEHOLDER_EXCLUDED_DOMAINS)
+
+
+class WebClient(WebSearch):
+    """Compatibility name for callers introduced on main."""
+    def __init__(self, max_results: int = MAX_RESULTS, min_score: float | None = None):
+        super().__init__(os.getenv("TAVILY_API_KEY", "").strip(), max_results=max_results,
+                         min_score=MIN_SCORE if min_score is None else min_score)

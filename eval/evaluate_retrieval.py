@@ -1,173 +1,184 @@
-"""eval/queries.json의 질의로 ChromaDB 검색을 실제로 돌려서 검색 품질을 평가한다.
+"""운영 검색기(FAISS + BM25 → RRF)의 검색 품질을 LLM 생성과 분리해 평가한다.
 
-queries.json은 [{"query": "...", "expected_doc_id": "..."}, ...] 형태로,
-각 질의가 원래 어느 문서 내용에 대한 질문인지 정답(ground truth)을 함께 들고 있다.
-이 정답을 기준으로, 질의를 검색했을 때 상위 결과에 그 doc_id의 청크가 실제로
-나오는지를 Hit@1 / Hit@3 / Hit@5 / MRR로 계산한다.
+app.py가 실제로 쓰는 것과 동일한 경로(전처리 청크 → Qwen3 임베딩 → FAISS/BM25 → RRF)를
+그대로 사용하므로, 여기서 나온 수치가 곧 파이프라인의 검색 성능이다.
 
-- Hit@K: 상위 K개 결과 안에 정답 문서(doc_id)의 청크가 하나라도 있으면 1, 없으면 0
-- MRR(Mean Reciprocal Rank): 정답 문서가 처음 등장한 순위의 역수 평균 (1등이면 1.0, 3등이면 0.33)
+평가 케이스: eval/retrieval_cases.json
+- concept/table/formula : 기대 페이지·필수 용어까지 확인하는 정밀 케이스
+- coverage              : 문서당 20개씩, 정답 문서가 상위에 오는지 확인하는 커버리지 케이스
+
+지표
+- Hit@K : 상위 K개 안에 정답 문서(expected_doc_ids)의 청크가 있으면 1
+- MRR   : 정답 문서가 처음 등장한 순위의 역수 평균
+- page_hit           : 기대 페이지(expected_pages)가 상위 K개에 포함된 비율
+- required_term_cov  : 필수 용어(required_terms)가 검색된 본문에 등장한 비율
+합격 기준(acceptance)을 모두 만족해야 passed=True 가 된다.
 
 Usage:
-    python -m eval.evaluate_retrieval
+    python -m eval.evaluate_retrieval [--top-k 5] [--show-hits]
 """
+from __future__ import annotations
+import argparse
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
 
-import chromadb
-
-from vectordb import COLLECTION_NAME, PERSIST_DIR, Qwen3EmbeddingFunction, log
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))  # 소스 체크아웃 실행 지원
+from kv_eval.config import RETRIEVAL_K
+from kv_eval.rag.index import build_index
+from kv_eval.rag.ingest import load_processed_chunks, paper_manifest
+from kv_eval.rag.retrieve import HybridRetriever
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-QUERIES_PATH = BASE_DIR / "eval" / "queries.json"
-RESULTS_PATH = BASE_DIR / "eval" / "retrieval_eval_results.json"
-TOP_K = 5
+CASES_PATH = BASE_DIR / "eval" / "retrieval_cases.json"
+RESULTS_PATH = BASE_DIR / "outputs" / "retrieval_eval.json"
+PRECISE_CATEGORIES = ("concept", "table", "formula")
 
 
-def load_queries(path: Path = QUERIES_PATH) -> List[Dict[str, str]]:
-    return json.loads(path.read_text(encoding="utf-8"))
+def _technology_filter(expected_doc_ids: list[str]) -> str:
+    """케이스의 정답 문서에 맞는 기술 필터(운영에서 Agent가 지정하는 값과 동일)."""
+    if expected_doc_ids == ["deepseek_v2_mla"]:
+        return "mla"
+    if expected_doc_ids == ["itme"]:
+        return "itme"
+    return "itme_baseline"
 
 
-def evaluate(top_k: int = TOP_K) -> dict:
-    queries = load_queries()
-    log(f"질의 {len(queries)}개 로드 완료 (query + 정답 expected_doc_id 쌍)")
+def _search_all_documents(retriever: HybridRetriever, query: str, top_k: int) -> list:
+    """문서 4편 전체를 하나의 순위로 검색한다(순위 품질 측정용).
 
-    client = chromadb.PersistentClient(path=str(PERSIST_DIR))
-    collection = client.get_collection(
-        name=COLLECTION_NAME,
-        embedding_function=Qwen3EmbeddingFunction(),
-    )
-    log(f"컬렉션 '{COLLECTION_NAME}' 로드 완료 (총 {collection.count()}개 청크)")
+    정답 문서로 필터를 정해놓고 Hit@1을 재면 단일 문서 케이스는 오답이 나올 수 없어
+    지표가 항상 1.00이 된다. 또한 필터별로 따로 검색해 합치면 RRF 점수가 각 부분집합
+    안에서만 계산돼 서로 비교할 수 없으므로, 반드시 한 번의 검색으로 측정한다.
+    """
+    return retriever.hybrid_search(query, "all", top_k)
 
-    per_query_results = []
-    per_doc_stats = defaultdict(lambda: {"hit@1": 0, "hit@3": 0, "hit@5": 0, "rr_sum": 0.0, "n": 0})
 
-    for item in queries:
-        question = item["query"]
-        doc_id = item["expected_doc_id"]
+def evaluate(top_k: int = RETRIEVAL_K, show_hits: bool = False) -> dict:
+    spec = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    cases, acceptance = spec["cases"], spec["acceptance"]
+    print(f"평가 케이스 {len(cases)}개 로드", flush=True)
 
-        result = collection.query(
-            query_texts=[question],
-            n_results=top_k,
-            include=["metadatas", "distances", "documents"],
-        )
-        retrieved_metas = result["metadatas"][0]
-        retrieved_doc_ids = [m["doc_id"] for m in retrieved_metas]
-        retrieved_chunk_ids = result["ids"][0]
-        distances = result["distances"][0]
-        retrieved_texts = result["documents"][0]
+    manifest = paper_manifest(BASE_DIR / "data" / "manifest.json")
+    chunks = load_processed_chunks(BASE_DIR / "data" / "processed" / "chunks.jsonl", manifest)
+    print(f"청크 {len(chunks)}개 색인 중(FAISS + BM25)...", flush=True)
+    retriever = HybridRetriever(build_index(chunks))
+    print("색인 완료", flush=True)
 
-        # 정답 doc_id가 상위 결과에서 몇 번째로 처음 나오는지(1-based). 없으면 None.
-        rank = next((i + 1 for i, d in enumerate(retrieved_doc_ids) if d == doc_id), None)
-        reciprocal_rank = 1.0 / rank if rank else 0.0
+    results: list[dict] = []
+    per_category: dict[str, list[dict]] = defaultdict(list)
 
-        stats = per_doc_stats[doc_id]
-        stats["n"] += 1
-        stats["hit@1"] += int(rank == 1)
-        stats["hit@3"] += int(rank is not None and rank <= 3)
-        stats["hit@5"] += int(rank is not None and rank <= 5)
-        stats["rr_sum"] += reciprocal_rank
+    for case in cases:
+        expected_docs = set(case["expected_doc_ids"])
+        # (1) 순위 품질: 문서 필터 없이 4편 전체에서 정답 문서를 찾아내는가
+        ranked = _search_all_documents(retriever, case["query"], top_k)
+        rank = next((i + 1 for i, h in enumerate(ranked) if h.doc_id in expected_docs), None)
+        # (2) 정밀도: 운영과 동일한 기술 필터 안에서 기대 페이지·필수 용어를 잡아내는가
+        hits = retriever.hybrid_search(case["query"], _technology_filter(case["expected_doc_ids"]), top_k)
 
-        # 사람이 직접 눈으로 보고 "이 청크가 실제로 질문에 답이 되는 내용인가"를
-        # 판단할 수 있도록, hit된 문서 각각의 청크ID/인용/본문 스니펫을 남겨둔다.
-        hits = [
-            {
-                "rank": i + 1,
-                "chunk_id": retrieved_chunk_ids[i],
-                "doc_id": retrieved_doc_ids[i],
-                "citation": retrieved_metas[i]["citation"],
-                "content_type": retrieved_metas[i]["content_type"],
-                "distance": distances[i],
-                "snippet": retrieved_texts[i][:200].replace("\n", " "),
-            }
-            for i in range(len(retrieved_chunk_ids))
-        ]
+        expected_pages = set(case.get("expected_pages", []))
+        page_hit = (bool(expected_pages & {h.page for h in hits if h.doc_id in expected_docs})
+                    if expected_pages else None)
+        terms = case.get("required_terms", [])
+        retrieved_text = " ".join(h.text for h in hits if h.doc_id in expected_docs).lower()
+        term_cov = (sum(t.lower() in retrieved_text for t in terms) / len(terms)) if terms else None
+        # 정밀 케이스에서 정답 문서가 아닌 청크가 1위를 차지하면 노이즈로 센다(필터 없는 결과 기준).
+        noise = bool(ranked) and ranked[0].doc_id not in expected_docs
 
-        per_query_results.append(
-            {
-                "expected_doc_id": doc_id,
-                "query": question,
-                "rank_of_correct_doc": rank,
-                "top1_chunk_id": retrieved_chunk_ids[0],
-                "top1_doc_id": retrieved_doc_ids[0],
-                "top1_distance": distances[0],
-                "retrieved_doc_ids": retrieved_doc_ids,
-                "hits": hits,
-                "human_feedback": None,  # 사람이 검토 후 "ok" / "bad" / 메모 등을 직접 채워 넣는 칸
-            }
-        )
-
-    # 문서별 요약 지표 계산
-    per_doc_summary = {}
-    for doc_id, stats in per_doc_stats.items():
-        n = stats["n"]
-        per_doc_summary[doc_id] = {
-            "n_queries": n,
-            "hit@1": stats["hit@1"] / n,
-            "hit@3": stats["hit@3"] / n,
-            "hit@5": stats["hit@5"] / n,
-            "mrr": stats["rr_sum"] / n,
+        record = {
+            "id": case["id"], "category": case["category"], "query": case["query"],
+            "expected_doc_ids": case["expected_doc_ids"], "rank_of_correct_doc": rank,
+            "unfiltered_top_docs": [h.doc_id for h in ranked],
+            "page_hit": page_hit, "required_term_coverage": term_cov, "top1_is_noise": noise,
+            "hits": [{"rank": i + 1, "chunk_id": h.chunk_id, "doc_id": h.doc_id,
+                      "citation": f"[{h.citation_number}, p.{h.page}]", "score": round(h.score, 5),
+                      "snippet": h.text[:200].replace("\n", " ")} for i, h in enumerate(hits)],
+            "human_feedback": None,  # 사람이 검토 후 "ok"/"bad"/메모를 직접 채우는 칸
         }
+        results.append(record)
+        per_category[case["category"]].append(record)
 
-    n_total = len(per_query_results)
-    overall = {
-        "n_queries": n_total,
-        "hit@1": sum(r["rank_of_correct_doc"] == 1 for r in per_query_results) / n_total,
-        "hit@3": sum(r["rank_of_correct_doc"] is not None and r["rank_of_correct_doc"] <= 3 for r in per_query_results) / n_total,
-        "hit@5": sum(r["rank_of_correct_doc"] is not None and r["rank_of_correct_doc"] <= 5 for r in per_query_results) / n_total,
-        "mrr": sum((1.0 / r["rank_of_correct_doc"]) if r["rank_of_correct_doc"] else 0.0 for r in per_query_results) / n_total,
+    def _rate(items: list[dict], predicate) -> float:
+        return (sum(bool(predicate(r)) for r in items) / len(items)) if items else 0.0
+
+    precise = [r for r in results if r["category"] in PRECISE_CATEGORIES]
+    page_checked = [r for r in results if r["page_hit"] is not None]
+    term_checked = [r for r in results if r["required_term_coverage"] is not None]
+
+    metrics = {
+        "n_cases": len(results),
+        "hit@1": _rate(results, lambda r: r["rank_of_correct_doc"] == 1),
+        "hit@3": _rate(results, lambda r: r["rank_of_correct_doc"] and r["rank_of_correct_doc"] <= 3),
+        f"hit@{top_k}": _rate(results, lambda r: r["rank_of_correct_doc"] is not None),
+        "mrr": sum(1.0 / r["rank_of_correct_doc"] if r["rank_of_correct_doc"] else 0.0
+                   for r in results) / len(results),
+        "page_hit_rate": _rate(page_checked, lambda r: r["page_hit"]),
+        "required_term_coverage": (sum(r["required_term_coverage"] for r in term_checked) / len(term_checked)
+                                   if term_checked else 0.0),
+        "concept_table_noise_rate": _rate(precise, lambda r: r["top1_is_noise"]),
+        "per_category": {name: {"n": len(items),
+                                "hit@1": _rate(items, lambda r: r["rank_of_correct_doc"] == 1),
+                                f"hit@{top_k}": _rate(items, lambda r: r["rank_of_correct_doc"] is not None)}
+                         for name, items in sorted(per_category.items())},
     }
 
-    report = {"overall": overall, "per_document": per_doc_summary, "queries": per_query_results}
-    RESULTS_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    log(f"결과 저장: {RESULTS_PATH}")
+    checks = {
+        f"hit@{top_k} ≥ {acceptance['hit_at_5_min']}": metrics[f"hit@{top_k}"] >= acceptance["hit_at_5_min"],
+        f"MRR ≥ {acceptance['mrr_min']}": metrics["mrr"] >= acceptance["mrr_min"],
+        f"노이즈율 ≤ {acceptance['concept_table_noise_rate_max']}":
+            metrics["concept_table_noise_rate"] <= acceptance["concept_table_noise_rate_max"],
+        f"필수 용어 커버리지 ≥ {acceptance['required_term_coverage_min']}":
+            metrics["required_term_coverage"] >= acceptance["required_term_coverage_min"],
+    }
+    report = {"top_k": top_k, "acceptance": acceptance, "checks": checks,
+              "passed": all(checks.values()), "metrics": metrics, "cases": results}
 
-    _print_hits_for_human_review(report)
-    _print_report(report)
+    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    RESULTS_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    _print(report, show_hits)
     return report
 
 
-def _print_hits_for_human_review(report: dict) -> None:
-    """질의마다 실제로 hit된(검색된) 문서를 사람이 눈으로 검토할 수 있게 출력한다.
+def _print(report: dict, show_hits: bool) -> None:
+    m = report["metrics"]
+    top_k = report["top_k"]
+    print("\n=== 카테고리별 ===")
+    print(f"{'category':<12}{'n':>4}{'Hit@1':>8}{f'Hit@{top_k}':>8}")
+    for name, s in m["per_category"].items():
+        print(f"{name:<12}{s['n']:>4}{s['hit@1']:>8.2f}{s[f'hit@{top_k}']:>8.2f}")
 
-    Hit@K 같은 자동 지표는 "정답 문서에서 나온 청크인가"만 보므로, 그 청크 내용이
-    실제로 질문에 답이 되는지는 사람이 직접 읽어봐야 판단할 수 있다. 이 함수는 채점이
-    아니라 검토용 출력이고, 판단 결과는 retrieval_eval_results.json의 각 질의
-    "human_feedback" 필드에 직접 적어 넣으면 된다(기본값 None).
-    """
-    print("\n=== 질의별 hit 문서 (사람 검토용) ===")
-    for r in report["queries"]:
-        mark = "OK" if r["rank_of_correct_doc"] == 1 else "MISS"
-        print(f"\n[{mark}] 질의: {r['query']}  (정답 문서: {r['expected_doc_id']})")
-        for hit in r["hits"]:
-            flag = "*" if hit["doc_id"] == r["expected_doc_id"] else " "
-            print(
-                f"  {flag}{hit['rank']}위 {hit['doc_id']:<16}{hit['chunk_id']:<28}"
-                f"{hit['citation']:<14}dist={hit['distance']:.3f}"
-            )
-            print(f"      {hit['snippet']}")
-
-
-def _print_report(report: dict) -> None:
-    print("\n=== 문서별 검색 성능 ===")
-    print(f"{'doc_id':<20}{'n':>4}{'Hit@1':>8}{'Hit@3':>8}{'Hit@5':>8}{'MRR':>8}")
-    for doc_id, s in report["per_document"].items():
-        print(f"{doc_id:<20}{s['n_queries']:>4}{s['hit@1']:>8.2f}{s['hit@3']:>8.2f}{s['hit@5']:>8.2f}{s['mrr']:>8.2f}")
-
-    o = report["overall"]
     print("\n=== 전체 ===")
-    print(f"질의 수: {o['n_queries']}")
-    print(f"Hit@1={o['hit@1']:.2f}  Hit@3={o['hit@3']:.2f}  Hit@5={o['hit@5']:.2f}  MRR={o['mrr']:.2f}")
+    print(f"케이스 {m['n_cases']}개 | Hit@1={m['hit@1']:.2f} Hit@3={m['hit@3']:.2f} "
+          f"Hit@{top_k}={m[f'hit@{top_k}']:.2f} MRR={m['mrr']:.2f}")
+    print(f"기대 페이지 적중={m['page_hit_rate']:.2f} | 필수 용어 커버리지={m['required_term_coverage']:.2f} "
+          f"| 정밀 케이스 노이즈율={m['concept_table_noise_rate']:.2f}")
 
-    # 정답 문서가 top_k 안에도 안 들어온(완전히 놓친) 질의 목록
-    misses = [r for r in report["queries"] if r["rank_of_correct_doc"] is None]
+    print("\n=== 합격 기준 ===")
+    for name, ok in report["checks"].items():
+        print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
+    print(f"→ 종합: {'PASS' if report['passed'] else 'FAIL'}")
+
+    misses = [r for r in report["cases"] if r["rank_of_correct_doc"] is None]
     if misses:
-        print(f"\n=== 검색 실패(top-{TOP_K} 밖) 질의 {len(misses)}건 ===")
-        for m in misses:
-            print(f"- [{m['expected_doc_id']}] {m['query']}  (1위로 대신 나온 문서: {m['top1_doc_id']})")
+        print(f"\n=== 검색 실패(top-{top_k} 밖) {len(misses)}건 ===")
+        for r in misses:
+            print(f"- [{r['id']}] {r['query']}")
+
+    if show_hits:
+        print("\n=== 케이스별 hit 문서 (사람 검토용) ===")
+        for r in report["cases"]:
+            mark = "OK" if r["rank_of_correct_doc"] == 1 else "MISS"
+            print(f"\n[{mark}] {r['id']}: {r['query']} (정답: {', '.join(r['expected_doc_ids'])})")
+            for hit in r["hits"]:
+                flag = "*" if hit["doc_id"] in r["expected_doc_ids"] else " "
+                print(f"  {flag}{hit['rank']}위 {hit['doc_id']:<18}{hit['citation']:<14}{hit['snippet'][:90]}")
+    print(f"\n결과 저장: {RESULTS_PATH}")
 
 
 if __name__ == "__main__":
-    evaluate()
+    parser = argparse.ArgumentParser(description="운영 검색기(FAISS+BM25+RRF) 검색 품질 평가")
+    parser.add_argument("--top-k", type=int, default=RETRIEVAL_K)
+    parser.add_argument("--show-hits", action="store_true", help="케이스별 검색 결과를 모두 출력")
+    args = parser.parse_args()
+    evaluate(top_k=args.top_k, show_hits=args.show_hits)

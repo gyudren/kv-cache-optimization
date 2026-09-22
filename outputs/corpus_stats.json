@@ -1,0 +1,30 @@
+{
+  "actual_pages": {
+    "deepseek_v2_mla": 52,
+    "itme": 13,
+    "infinigen": 18,
+    "cxl_pnm": 13
+  },
+  "declared_pages": {
+    "deepseek_v2_mla": 52,
+    "itme": 13,
+    "infinigen": 18,
+    "cxl_pnm": 13
+  },
+  "total_pages": 96,
+  "page_budget": 200,
+  "indexed_pages": 84,
+  "excluded_reference_pages": 14,
+  "chunks": 359,
+  "chunks_per_document": {
+    "deepseek_v2_mla": 115,
+    "itme": 85,
+    "infinigen": 88,
+    "cxl_pnm": 71
+  },
+  "design_expected_chunks": 333,
+  "warnings": [
+    "측정된 청크 수(359)가 설계서 기재값 333과 다릅니다",
+    "전처리 summary.json에 사람이 확인해야 할 항목이 있습니다"
+  ]
+}

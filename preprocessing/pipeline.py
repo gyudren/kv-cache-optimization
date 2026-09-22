@@ -79,13 +79,7 @@ def _pages_with_vector_diagrams(raw_pages: list[RawPage]) -> list[int]:
     ]
 
 
-def _process_document(
-    doc: dict,
-    doc_index: int,
-    *,
-    chunk_size: int,
-    overlap: int,
-) -> tuple[list[dict], dict, int]:
+def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]:
     pdf_path = RAW_DIR / doc["filename"]
     if not pdf_path.exists():
         raise FileNotFoundError(
@@ -125,16 +119,15 @@ def _process_document(
     reference_start_page = find_reference_start_page(
         text_pages, manual_start_page=doc.get("reference_start_page")
     )
-    body_pages, excluded_pages = drop_reference_pages(text_pages, reference_start_page)
-    if reference_start_page is not None:
-        all_tables = [t for t in all_tables if t.page_number < reference_start_page]
-
-    text_chunks, review_flags = chunk_document(
-        doc["doc_id"],
-        body_pages,
-        chunk_size=chunk_size,
-        overlap=overlap,
+    reference_end_page = doc.get("reference_end_page")
+    body_pages, excluded_pages = drop_reference_pages(
+        text_pages, reference_start_page, reference_end_page
     )
+    if reference_start_page is not None:
+        indexed_page_numbers = {page.page_number for page in body_pages}
+        all_tables = [t for t in all_tables if t.page_number in indexed_page_numbers]
+
+    text_chunks, review_flags = chunk_document(doc["doc_id"], body_pages, chunk_size=CHUNK_SIZE, overlap=OVERLAP)
 
     doc_chunks: list[dict] = []
     for chunk in text_chunks:
@@ -185,6 +178,7 @@ def _process_document(
         "role": doc["role"],
         "total_pages": total_pages,
         "reference_start_page": reference_start_page,
+        "reference_end_page": reference_end_page,
         "excluded_reference_pages": len(excluded_pages),
         "indexed_pages": len(body_pages),
         "text_chunk_count": len(text_chunks),
@@ -210,12 +204,7 @@ def run(chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> dict:
     doc_summaries: list[dict] = []
 
     for doc_index, doc in enumerate(documents, start=1):
-        doc_chunks, doc_summary, total_pages = _process_document(
-            doc,
-            doc_index,
-            chunk_size=chunk_size,
-            overlap=overlap,
-        )
+        doc_chunks, doc_summary, total_pages = _process_document(doc, doc_index)
         all_chunks.extend(doc_chunks)
         doc_summaries.append(doc_summary)
         document_page_counts[doc["doc_id"]] = total_pages

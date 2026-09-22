@@ -1,7 +1,7 @@
-pdfplumber>=0.11.0
-chromadb>=1.5.0
-sentence-transformers>=5.0.0
-torch>=2.0.0
-
-# 개발용(선택): preprocessing/selfcheck.py의 합성 PDF 통합 테스트에만 필요
-# reportlab
+# 의존성의 단일 출처는 pyproject.toml 이다.
+#   pip install -e ".[dev]"   (개발·테스트 포함)
+#   pip install -e .          (실행만)
+#
+# pip install -r requirements.txt 를 써야 하는 환경을 위한 호환용 파일이며,
+# 아래 한 줄이 pyproject.toml의 dependencies 를 그대로 설치한다.
+-e .

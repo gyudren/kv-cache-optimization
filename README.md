@@ -7,7 +7,7 @@
 
 - Objective : 하나의 기술을 복수 관점에서 비교 평가
 - Method : Multi-Agent(Distributed) + Agentic RAG
-- Tools : LangGraph, FAISS + BM25(RRF 융합), Tavily Web API, pdfplumber (2단 레이아웃·표 좌표 처리를 위해 pypdf 대신 채택)
+- Tools : LangGraph, FAISS + BM25(RRF 융합), Tavily Web API (실패/키 누락 시 DuckDuckGo 대체), pdfplumber (2단 레이아웃·표 좌표 처리를 위해 pypdf 대신 채택)
 
 ## Selected Technologies
 
@@ -23,13 +23,12 @@
 
 ## Tech Stack
 
-- Framework : LangGraph (Master 1개 + Task Agent 6개, `Send` 기반 부분 재할당)
-- LLM/Generator·Judge : 고정 모델 1종(`config.MODEL_ID`), OpenAI Responses API(`responses.parse`)로 Pydantic 스키마 구조화 출력을 강제. 다른 모델로 바꾸면 `Settings.from_env()`가 즉시 에러를 낸다
-- Retrieval : FAISS(Dense) + BM25(Sparse), RRF(k=60) 순위 융합, 기술별 문서 필터(`permitted_docs`)
+- Framework : LangGraph
+- LLM/Generator : gpt-5.6-terra (OpenAI Responses API, 구조화 출력)
+- LLM/Judge : gpt-5.6-terra (보고서 검수 게이트에서 동일 모델 사용, 대체 모델 없음)
+- Retrieval : FAISS(Dense) + BM25(Sparse), RRF 순위 융합 — 92케이스 측정 Hit@1 0.84 / Hit@3 0.99 / MRR 0.92 (`outputs/retrieval_eval.json`)
+- Web Search : Tavily API (시장·이해관계자 평가 및 TRL 상용화 근거)
 - Embedding : Qwen3-Embedding-0.6B (다국어·교차언어 검색, 최대 32K 토큰, Apache 2.0 라이선스)
-- 웹 검색 : Tavily Web API (`TAVILY_API_KEY` 설정 시) — 없으면 DuckDuckGo(ddgs, 키 불필요)로 자동 대체해 재현성을 보장
-- 보고서 출력 : Markdown + reportlab 기반 한글 PDF(`reporting/export.py`), SUMMARY 1/2페이지 제한을 실제 렌더링 높이로 검증
-- 검색 품질(별도 검증, ChromaDB 기반) : Hit@1 98.75% · Hit@3/5 100% · MRR 0.994 (80개 질의, `eval/evaluate_retrieval.py`)
 
 ## Agents
 
@@ -95,8 +94,8 @@ flowchart TD
     classDef report fill:#fff2cc,stroke:#b8860b,stroke-width:1.5px,color:#3d2f00;
 
     class SUP_INIT,SUP_TECH,QUERY_REWRITE,SUP_FANOUT,SUP_JOIN,RESULT_GATE,RETRY,SUP_SYNTHESIS,SUP_FINAL Master;
-    class TECH,DOMAIN rag;
-    class MARKET,STAKEHOLDER,SYNTHESIS evaluation;
+    class TECH,MARKET,DOMAIN rag;
+    class STAKEHOLDER,SYNTHESIS evaluation;
     class REPORT report;
 ```
 
@@ -135,57 +134,67 @@ kv-cache-optimization/
 ├── pyproject.toml              # 전체 의존성 (kv_eval 패키지 + preprocessing + vectordb)
 ├── .env / .env.example
 └── README.md
+>>>>>>> main
 ```
 
 ## Usage
 
+### 1. 설치
 
 ```bash
-pip install -e .          # pyproject.toml (langgraph, openai, tavily-python, faiss-cpu, rank-bm25 등)
-pip install -r requirements.txt   # 전처리 전용 (pdfplumber, chromadb 등)
+pip install -e ".[dev]"        # 의존성의 단일 출처는 pyproject.toml
+cp .env.example .env           # OPENAI_API_KEY 필수, TAVILY_API_KEY 선택 (.env는 git에 올라가지 않음)
 ```
 
-**2. 환경변수 설정**
+### 2. 원문 PDF 배치 및 전처리
 
-`.env.example`을 복사해 `.env`를 만들고 키를 채운다.
+`data/manifest.json`의 `filename`대로 논문 4편을 `data/raw/`에 두고 실행한다.
 
 ```bash
-cp .env.example .env
+python -m preprocessing.pipeline   # → data/processed/chunks.jsonl, summary.json
 ```
 
-```text
-OPENAI_API_KEY=          # 필수
-OPENAI_MODEL=gpt-5.6-sol # 고정값, 다른 모델로 바꾸면 즉시 에러
-TAVILY_API_KEY=          # 필수
-PAPERS_DIR=data/raw      # 원문 PDF 4편이 있는 경로
-OUTPUT_DIR=outputs
-```
-
-**3. 원문 PDF 배치**
-
-`data/manifest.json`에 정의된 파일명대로 `data/raw/`에 4편을 넣는다 (`deepseek_v2_mla.pdf`, `itme.pdf`, `infinigen.pdf`, `cxl_pnm.pdf`).
-
-**4. 실행**
+### 3. 전체 파이프라인 실행
 
 ```bash
-<<<<<<< HEAD
-pip install -e .                 # kv_eval 패키지 + 의존성 설치
-python -m preprocessing.pipeline # (최초 1회) RAG 적재 문서 4편 전처리 → data/processed/chunks.jsonl
-
-export OPENAI_API_KEY=sk-...     # 필수 (LLM Generator/Judge, .env.example 참고)
-export TAVILY_API_KEY=tvly-...   # 선택 — 없으면 DuckDuckGo(ddgs)로 자동 대체
-
-python -m kv_eval.main           # 그래프 실행 → outputs/{REPORT_STEM}.md, .pdf
-python -m kv_eval.main --query "..."  # 평가 요청 문구를 바꾸고 싶을 때(기본값은 A-3 핵심 질문)
-=======
-python {app.py}
 python app.py
->>>>>>> facd63eb4d8c15761bdd724d634bf08af60e128c
+# 같은 실행 경로 (editable 설치 후)
+python -m kv_eval.main --query "MLA와 ITME를 네 관점으로 비교 평가하라."
 ```
 
-(선택) 검색 품질만 별도로 확인하려면: `python -m vectordb` 로 ChromaDB 색인 후 `python -m eval.evaluate_retrieval`
+웹 검색은 Tavily를 우선 사용하고 키 누락·요청 제한·연결 오류 시 DuckDuckGo로 전환한다. 대체 검색의 점수는 만들지 않으며, 실패는 경고와 빈 검색 결과로 남겨 Agent가 근거 부족으로 처리한다. 두 검색기 모두 시장 평가에서 Reddit을 제외하고, 이해관계자 평가에서는 커뮤니티 발언 검색을 허용한다.
 
-테스트: `pytest` — 전부 오프라인 stub(가짜 LLM/RAG/웹 검색)으로 구성되어 있어 `OPENAI_API_KEY` 없이도 그래프 제어 흐름(게이트·재시도·재할당)과 스키마 계약을 검증한다.
+`outputs/`에 다음이 생성된다.
+
+| 파일 | 내용 |
+|---|---|
+| `RAG-Output_판교_9반_....md` / `.pdf` | 최종 평가 보고서 (SUMMARY ~ REFERENCE) |
+| `validation.json` | 필수 목차·인용·REFERENCE 검증 결과 |
+| `corpus_stats.json` | 페이지 예산(≤200p)·청크 수 등 색인 통계 |
+| `run_logs.json` | 노드별 실행 로그(시도 횟수, 게이트 판정) |
+
+종료 코드는 보고서가 검증까지 통과하면 `0`, 생성됐으나 검증에 실패하면 `2`, 실행 자체가 실패하면 `1`이다.
+
+### 4. 테스트 / 검색 품질 평가
+
+```bash
+pytest -q                          # 단위 테스트 (API 키·네트워크 불필요)
+python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판정
+```
+
+## 차별점
+
+1. **전처리를 검색 품질 문제로 다뤘다** — pdfplumber 좌표 기반으로 2단 레이아웃 읽기 순서를 재구성하고, 들여쓰기로 문단을 인식하며(빈 줄이 없는 논문 조판 대응), 참고문헌은 페이지가 아니라 **구간**으로만 제외해 DeepSeek-V2의 Appendix A~G(MLA 전체 수식·어텐션 ablation)를 색인에 살렸다. 이 한 가지로 색인 페이지가 21p → 47p로 늘었다.
+2. **판단을 의견이 아니라 측정으로 정했다** — "깨진 수식 줄을 지울 것인가"를 92케이스 A/B로 측정해, 순위는 같고(Hit@1 0.86→0.84) 근거 용어 커버리지가 0.75→0.92로 좋아지는 쪽(정제 OFF)을 기본값으로 택했다. 합격 기준을 파일에 박아 두고 `passed` 판정까지 자동화했다.
+3. **근거 없는 문장을 구조적으로 막았다** — 답변은 실제 검색된 청크 ID를 인용해야만 통과하고(없으면 "근거 부족"), 보고서는 필수 목차·인용·REFERENCE 대조를 코드로 검증한 뒤 같은 모델이 한 번 더 검수한다. 확인되지 않은 서지 정보는 추정하지 않고 "미확인"으로 남긴다.
+4. **TRL 근거를 두 갈래로 분리했다** — 논문(RAG)은 TRL 1~6(구현·검증)까지만 뒷받침할 수 있게 하고, TRL 7~9(제품 출시·상용 적용)는 웹 근거가 있을 때만 부여하도록 프롬프트와 근거 경로를 나눴다.
+
+## Lessons Learned
+
+- **설계서와 코드의 불일치는 조용히 쌓인다.** 그래프·State는 설계와 일치했지만 RAG 색인이 전처리 산출물과 끊겨 있어 실행 자체가 불가능한 상태였다. "코드가 설계대로인가"와 "코드가 돌아가는가"는 별개로 점검해야 했다.
+- **실패는 마지막 단계에서 터진다.** OpenAI 구조화 출력이 자유형 `dict` 스키마를 거부해 파이프라인이 중간에 죽었다. 이후 네트워크 없이 스키마 제약을 검사하는 테스트를 추가해 같은 실패를 사전에 잡도록 했다.
+- **지표는 만들자마자 의심해야 한다.** 첫 검색 평가는 정답 문서로 필터를 정해 놓고 Hit@1을 재는 바람에 항상 1.00이 나왔다. 측정 설계가 틀리면 "좋다"는 숫자가 가장 위험하다.
+- **팀원이 남긴 판단 근거는 데이터로 반박하기 전까지 존중해야 한다.** 수식 줄 제거는 이미 부작용이 기록돼 있었고, 재측정 결과도 같은 결론이었다.
 
 ## Contributors
 
