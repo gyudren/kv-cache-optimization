@@ -101,99 +101,40 @@ flowchart TD
 
 ※ 설계 산출물 PDF(D-2. Graph 흐름 설계) 원본 flowchart 이미지를 Mermaid로 옮긴 것으로, 노드 문구는 원본 이미지를 기준으로 최대한 그대로 옮겼으며 세부 배치·색상은 Mermaid 렌더링 방식에 따라 원본과 다를 수 있음
 
-## Data Preprocessing
-
-RAG 적재 문서 4편(DeepSeek-V2/MLA, ITME, InfiniGen, CXL-PNM)을 다음 순서로 전처리하여, 임베딩/색인 단계에서 바로 쓸 수 있는 청크 목록을 만든다.
-
-파싱(pdfplumber 좌표 기반, 2단 레이아웃 읽기 순서 재정렬) → header/footer 제거 → 표 분리(캡션·각주 묶음, 병합 셀 정규화, 다이어그램 오탐지 필터링) → 참고문헌 구간(부록 포함) 제외 → 청킹(1,200자/겹침 200자, 문단 경계 보존, 페이지 경계에서 끊긴 문장 이어붙이기) → 페이지 예산(≤200p) 검증
-
-1. `data/manifest.json`에 정의된 파일명대로 원문 PDF 4편을 `data/raw/`에 배치
-2. `pip install -r requirements.txt`
-3. `python -m preprocessing.pipeline` 실행 → `data/processed/chunks.jsonl`(텍스트/표 청크), `data/processed/summary.json`(문서별 통계 + 수동 확인 필요 항목) 생성
-4. (선택) `python -m preprocessing.selfcheck` 로 PDF 없이 파싱·청킹 로직만 별도 검증 가능
-
-각 청크에는 `doc_id`, `camp`(SW/HW), `role`(primary/baseline), `content_type`(text/table), `start_page`/`end_page`, `citation`(`[n, p.X]` 형식) 메타데이터가 포함되어 있어 기술별 문서 필터링과 보고서 인용에 사용할 수 있다.
-
-**설계 산출물 기재값과 실측값의 차이**
-
-설계서 B-3은 파싱 도구와 산출 수치를 설계 시점 기준으로 적었고, 구현하면서 아래와 같이 달라졌다.
-수치를 문서에 맞추지 않고, 실측값을 그대로 쓰되 차이를 `outputs/corpus_stats.json`의 `warnings`로 남긴다.
-
-| 항목 | 설계서 기재 | 실측 | 차이 원인 |
-|---|---|---|---|
-| 파싱 도구 | pypdf | pdfplumber | 2단 레이아웃 읽기 순서와 표 좌표 처리를 위해 교체 |
-| 참고문헌 제외 | 11p | 14p | References 구간을 페이지 단위로 실제 탐지(부록은 색인 유지) |
-| 색인 페이지 | 85p | 84p | 위 탐지 결과에 따른 차이 (총 96p ≤ 200p 예산은 동일) |
-| 청크 수 | 333개 | 359개 | 1,200자/겹침 200자 기준은 동일하나, 큰 표를 행 단위로 분할하면서 증가 |
-
-**처리 세부 사항**
-
-- **2단 컬럼 분리** : 논문은 좌/우 컬럼의 줄 높이가 완전히 같거나 미세하게 어긋나는 경우가 섞여 있어, 단순히 "같은 줄 안의 간격"만 보면 컬럼이 자주 뒤섞인다. 줄 시작 x좌표가 아니라 각 줄이 실제로 차지하는 가로 범위(x0~x1)를 모아 겹치는 구간을 병합하고, 그 사이의 빈 거터를 컬럼 분리선으로 찾는다. 페이지 번호·각주처럼 아주 짧은 줄과, 페이지 상/하단에 걸쳐 전체 폭으로 반복되는 running header(저자 목록 등)는 이 탐지에서 제외해 거터를 가리거나 두 컬럼을 잘못 잇지 않게 한다.
-- **문단 경계(들여쓰기) 인식** : 이 논문들은 문단 사이에 빈 줄이 없고 첫 줄만 들여쓰기로 구분된다. 컬럼의 일반적인 좌측 여백보다 들여써진 줄을 새 문단의 시작으로 보고 명시적으로 문단을 나눈다(이게 없으면 페이지 전체가 하나의 문단이 되어 청킹이 사실상 무의미해짐).
-- **참고문헌 "구간"만 제외 (부록은 색인 유지)** : References 제목이 페이지 맨 앞이 아니라 중간/끝에 나와도 탐지하고, 그 줄 이전 본문은 계속 색인 대상으로 남긴다. DeepSeek-V2(MLA)는 References(p.21~26) 뒤에 Appendix A~G(p.27~52)가 이어지는데, 여기에 **MLA 전체 수식(Appendix C)과 MHA/GQA/MQA ablation(Appendix D)** 처럼 기술 조사에 직접 쓰이는 내용이 들어 있다. 이를 통째로 버리면 52p 중 32p가 색인에서 사라지므로, `data/manifest.json`에 `reference_start_page`/`reference_end_page`를 지정해 **참고문헌 구간만** 제외한다(해당 값이 없으면 References 이후 전체를 제외하는 기존 동작을 유지).
-- **수식 줄은 전처리 산출물에 원문 그대로 유지** : LaTeX로 조판된 논문은 수식의 이탤릭 변수(𝑄, 𝑊, 𝐷 등)가 유니코드 Mathematical Alphanumeric Symbols 문자로 추출되어 기호가 깨져 보인다. 한때 이런 줄을 통째로 제거해봤으나, 수식과 같은 줄에 있던 "where 𝑐 denotes ..." 같은 설명 문장까지 함께 잘려 문장이 조각나고, borderless 표(예: DeepSeek-V2 Table 1의 KV cache 비교 수치)의 수치까지 같이 삭제되는 부작용이 확인되어 되돌렸다. 따라서 `chunks.jsonl`에는 원문을 그대로 남긴다.
-- **색인 단계 정제는 측정 결과 기본 OFF** : 색인 직전에 "3자 이상 영단어가 하나도 없는 줄"만 걷어내는 보수적 정제를 구현해(`src/kv_eval/rag/ingest.py:clean_formula_noise`) 동일 평가 세트 92케이스로 A/B 측정했다.
-
-  | 설정 | Hit@1 | MRR | 필수 용어 커버리지 | 합격 판정 |
-  |---|---|---|---|---|
-  | `CLEAN_FORMULA_NOISE=1` (정제 ON) | 0.86 | 0.93 | 0.75 | FAIL |
-  | `CLEAN_FORMULA_NOISE=0` (정제 OFF, **기본값**) | 0.84 | 0.92 | **0.92** | **PASS** |
-
-  순위 지표는 사실상 같은데(0.02 차이) 정제를 켜면 표·수식 줄에 있던 근거 용어까지 함께 지워져 필수 용어 커버리지가 0.75로 떨어진다. 위 전처리 단계의 판단과 같은 결론이므로 기본값을 OFF로 두고, 코드는 재현 가능하도록 환경변수로 남겨 둔다.
-- **표/다이어그램 오탐지 필터링** : pdfplumber의 표 탐지가 선(line)만 보고 판단하다 보니 아키텍처 다이어그램·차트도 표로 오인하는 경우가 많아, 실제 데이터 표처럼 보이는지(행/열 개수, 빈 셀 비율, 셀당 줄바꿈 수) 최소 조건으로 걸러낸다. 표로도 기각된 다이어그램 영역은 표로 만들지는 않되, 라벨 텍스트가 본문 문장 사이에 끼어들어 뒤섞이지 않도록 본문 재구성에서도 제외한다.
-
-자동으로 판단하기 위험한 항목은 넘겨짚지 않고 `summary.json`에 표시만 하므로, 색인 전에 아래 항목을 사람이 한 번 확인해야 한다.
-
-- `pages_with_charts` : 페이지 면적의 15% 이상을 차지하는 래스터 이미지(차트 등)가 있는 페이지 — 텍스트 레이어와 그래프 내용이 실제로 일치하는지, 그래프 정보가 꼭 필요한지 확인 필요
-- `pages_with_vector_diagrams` : 사각형/선/곡선으로 직접 그린 아키텍처 다이어그램·차트가 있는 페이지(래스터 이미지가 아니라 `pages_with_charts`에는 안 잡힘). itme·infinigen처럼 그림이 많은 논문에 흔하고, 다이어그램 라벨이 본문 근처에서 다소 뒤섞여 보일 수 있어 확인 필요
-- `page_boundary_review_flags` : 페이지 경계에서 문장이 끝나지 않았거나 표처럼 보이는 텍스트가 있는 지점 — 표 헤더가 다음 페이지로 이어지는데 반복되지 않은 경우 등을 확인 필요
-- `table_count` / `removed_boilerplate_line_count` : 문서별 표 추출 개수, 제거된 header/footer 줄 수 — 과다 추출·과다 제거 여부 확인 필요
-
-**알려진 한계**
-
-- 제목·저자·소속이 3단 이상으로 배치된 논문 1페이지는 좌/우 2분할 가정과 맞지 않아 이름·이메일 같은 저자 정보 일부가 뒤섞일 수 있다(본문 내용에는 영향 없음).
-- 테두리 없는(borderless) 결과표(예: 벤치마크 점수 표)는 표로 탐지되지 못해 숫자 나열 형태로 본문에 섞여 들어갈 수 있다.
-- 다이어그램 자체의 라벨 텍스트는 2차원 그림을 1차원 텍스트로 펼치는 과정이라 그 청크 안에서는 다소 어색하게 읽히지만, 더 이상 주변 본문 문장과 뒤섞이지는 않는다.
-
-## Retrieval Evaluation
-
-LLM 생성 없이, 파이프라인이 실제로 쓰는 검색기(FAISS + BM25 → RRF)만 떼어 평가한다.
-청크 ID는 재청킹 때 바뀌므로 `doc_id`(+ 정밀 케이스는 원문 페이지·필수 용어)를 정답 기준으로 삼는다.
-
-```bash
-python -m eval.evaluate_retrieval              # 지표 + 합격 기준 판정
-python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과까지 출력(사람 검토용)
-```
-
-- 평가 입력: `eval/retrieval_cases.json` (총 92케이스)
-  - `concept`/`table`/`formula` 12개 — 기대 페이지·필수 용어까지 확인하는 정밀 케이스
-  - `coverage` 80개 — 문서당 20개씩, 정답 문서가 상위에 오는지 확인
-- 평가 결과: `outputs/retrieval_eval.json` (케이스별 `human_feedback` 칸에 사람이 판단을 적을 수 있다)
-- 지표: Hit@1/3/5, MRR, 기대 페이지 적중률, 필수 용어 커버리지, 정밀 케이스 노이즈율
-- 합격 기준은 입력 파일의 `acceptance`에 명시되어 있고, 전부 만족해야 `passed: true`가 된다.
-
 ## Directory Structure
 
-```
-├── app.py                       # 실행 진입점 (전처리 산출물 적재 → 색인 → LangGraph 실행 → 보고서 저장)
-├── data/
-│   ├── manifest.json            # 문서 4편 메타데이터(진영/역할/참고문헌 구간)
-│   ├── raw/                     # 원문 PDF (git 미포함, 로컬에 직접 배치)
-│   └── processed/               # 전처리 결과 (chunks.jsonl, summary.json)
-├── preprocessing/               # 파싱·header/footer 제거·표 분리·참고문헌 제외·청킹·페이지 예산 검증
-├── src/kv_eval/
-│   ├── config.py                # 고정 설정(모델·청킹·검색·재시도 한도)
-│   ├── state.py                 # 설계 D-1 State 스키마
-│   ├── graph.py                 # 설계 D-2 LangGraph 노드·엣지 정의
-│   ├── agents/                  # master, technology, market, stakeholder, domain, synthesis, report
-│   ├── rag/                     # ingest(적재) · index(FAISS/BM25) · retrieve(RRF) · workflow(Agentic RAG)
-│   ├── tools/web_search.py      # Tavily 검색 (RAG 미사용 Agent 전용)
-│   └── reporting/               # 목차·인용 검증(sections) 및 Markdown/PDF 내보내기(export)
-├── prompts/                     # 공통 계약(00) + 역할별 시스템 프롬프트(01~08)
-├── eval/                        # 검색 품질 평가 세트 및 하네스
-├── outputs/                     # 최종 보고서(.md/.pdf), 검증 결과, 실행 로그
-├── tests/                       # 단위 테스트 (네트워크·API 키 불필요)
-└── scripts/                     # 프롬프트 패키지 검증 스크립트
+```text
+kv-cache-optimization/
+├── data/                      # 문서 풀
+│   ├── manifest.json          # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
+│   ├── raw/                   # 원문 PDF (git 미포함, 로컬에 직접 배치)
+│   ├── processed/             # 전처리 결과 (chunks.jsonl, summary.json)
+│   └── chroma/                # ChromaDB 영속 저장소 (vectordb.py 산출물, 검색 품질 검증용)
+├── preprocessing/             # 데이터 전처리 (파싱·참고문헌 제외·청킹·페이지 예산 검증)
+├── prompts/                   # Agent별 프롬프트 (technology/market/stakeholder/domain/synthesis/report.md)
+│                               #   00_common_contract.md ~ 08_result_validator.md 는 더 상세한 계약 초안(문서화용)
+├── schemas/                   # Evidence 등 공통 JSON Schema
+├── scripts/                   # 정적 검증 스크립트 (validate_prompt_package.py)
+├── eval/                      # 검색 품질 평가 (evaluate_retrieval.py, queries.json, 결과 JSON)
+├── vectordb.py                 # ChromaDB + Qwen3 임베딩 색인 구축 (검색 품질 검증용 별도 경로)
+├── src/kv_eval/                # 실행 패키지
+│   ├── config.py                # 선정 기술·평가 기준·재시도 한도·고정 모델 ID
+│   ├── state.py                 # D-1 State(GraphState) 및 evidence reducer
+│   ├── prompts.py                # prompts/*.md 로더
+│   ├── schemas.py                # Agent 구조화 출력 Pydantic 모델
+│   ├── llm.py                    # StructuredLLM (OpenAI Responses API 구조화 출력)
+│   ├── graph.py                   # Master 1개 + Task Agent 6개 LangGraph 그래프, Send 기반 부분 재할당
+│   ├── main.py                    # 실행 진입점(python -m kv_eval.main)
+│   ├── rag/                       # ingest(전처리 산출물 로드) → index(FAISS+BM25) → retrieve(RRF) → workflow(Agentic RAG)
+│   ├── agents/                    # master(게이트·재시도)/technology/market/stakeholder/domain/synthesis/report
+│   ├── tools/                     # web_search (Tavily, 키 없으면 DuckDuckGo 대체)
+│   └── reporting/                 # 목차·인용 검증(sections.py), Markdown+한글 PDF 출력(export.py)
+├── tests/                      # pytest (전부 오프라인 stub 기반 — 실제 LLM/임베딩/네트워크 호출 없음)
+├── outputs/                    # 평가 결과 저장 (RAG-Output_*.md, *.pdf)
+├── pyproject.toml              # 전체 의존성 (kv_eval 패키지 + preprocessing + vectordb)
+├── .env / .env.example
+└── README.md
+>>>>>>> main
 ```
 
 ## Usage
@@ -257,15 +198,14 @@ python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판�
 
 ## Contributors
 
-2조 (판교 9반)
+
+2조 : 김동욱(P280), 김민정(P282), 김태동(P287), 박규리(P289), 이재겸(P298), 임동건(P301)
 
 | 이름 | 수행 역할 |
 |---|---|
-| 김동욱(P280) | LangGraph 기반 State·Graph 및 실행 설정, 전체 시스템 아키텍처 |
-| 김민정(P282) | 논문 PDF 파싱, 2단 컬럼·표·수식 처리, 참고문헌 제외·청킹 파이프라인 |
-| 김태동(P287) | 시장·이해관계자 평가용 웹 검색 도구 및 API 연동 |
-| 박규리(P289) | 데이터 전처리(파싱·참고문헌 구간 제외·청킹), 임베딩·벡터 색인, 검색 품질 평가 세트 및 하네스 |
-| 이재겸(P298) | Agent별 페르소나·System/Task 프롬프트, 공통 계약·Evidence 스키마 |
-| 임동건(P301) | 박규리와 공동으로 Chroma 기반 벡터 DB 구성 |
-
-> 팀원 역할은 병합한 팀 README 기록을 반영했다. 현재 보고서 실행 경로의 검색기는 FAISS + BM25이며, 기존 Chroma 데이터는 보존한다.
+| 김동욱(P280) | 전체 시스템 아키텍처 설계 — LangGraph 기반 Master/6-Agent 오케스트레이션, State(`state.py`)·Graph 노드/엣지 배선(`graph.py`), RAG 파이프라인, 보고서 생성·PDF export 구현 |
+| 김민정(P282) | 데이터 전처리 — 논문 PDF 파싱, 2단 레이아웃·표·수식 처리, 참고문헌 구간 제외, 청킹 파이프라인 구현(`preprocessing/`) |
+| 김태동(P287) | API 툴 정리 — 시장·이해관계자 평가 Agent용 Tavily 웹 검색 도구 연동 및 이해관계자 평가 설계(`tools/web_search.py`) |
+| 박규리(P289) | 데이터 전처리(파싱·참고문헌 구간 제외·청킹), 임베딩·벡터 색인, 검색 품질 평가 세트 및 하네스(Hit@K/MRR) |
+| 이재겸(P298) | 페르소나 및 프롬프트 작성 — Agent별 System/Task 프롬프트 패키지(`prompts/`), 공통 계약·Evidence 스키마 설계 |
+| 임동건(P301) | vector DB 구성(박규리님과 공동) — ChromaDB 기반 벡터DB 셋업(`vectordb.py`, `data/chroma/`), 청킹 개선 |
