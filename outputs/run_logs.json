@@ -1,0 +1,202 @@
+[
+  {
+    "node": "master_init",
+    "attempt": 0,
+    "result": "initialized"
+  },
+  {
+    "node": "technology",
+    "attempt": 0,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "master_tech_gate",
+    "gate": false,
+    "result": "query_rewrite",
+    "attempt": 0
+  },
+  {
+    "node": "master_query_rewrite",
+    "gate": false,
+    "result": "rewritten",
+    "attempt": 1
+  },
+  {
+    "node": "technology",
+    "attempt": 1,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "master_tech_gate",
+    "gate": false,
+    "result": "query_rewrite",
+    "attempt": 1
+  },
+  {
+    "node": "master_query_rewrite",
+    "gate": false,
+    "result": "rewritten",
+    "attempt": 2
+  },
+  {
+    "node": "technology",
+    "attempt": 2,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "master_tech_gate",
+    "gate": false,
+    "result": "dispatch",
+    "attempt": 2
+  },
+  {
+    "node": "master_dispatch",
+    "result": "market,stakeholder,domain",
+    "attempt": 0
+  },
+  {
+    "node": "market",
+    "attempt": 0,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "stakeholder",
+    "attempt": 0,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "domain",
+    "attempt": 0,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "master_join",
+    "result": "retry",
+    "gate": false,
+    "attempt": 0
+  },
+  {
+    "node": "master_retry",
+    "gate": false,
+    "result": "market,stakeholder,domain",
+    "attempt": 3
+  },
+  {
+    "node": "master_dispatch",
+    "result": "market,stakeholder,domain",
+    "attempt": 0
+  },
+  {
+    "node": "market",
+    "attempt": 1,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "stakeholder",
+    "attempt": 1,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "domain",
+    "attempt": 1,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "master_join",
+    "result": "retry",
+    "gate": false,
+    "attempt": 3
+  },
+  {
+    "node": "master_retry",
+    "gate": false,
+    "result": "market,stakeholder,domain",
+    "attempt": 6
+  },
+  {
+    "node": "master_dispatch",
+    "result": "market,stakeholder,domain",
+    "attempt": 0
+  },
+  {
+    "node": "market",
+    "attempt": 2,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "stakeholder",
+    "attempt": 2,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "domain",
+    "attempt": 2,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "master_join",
+    "result": "synthesis",
+    "gate": true,
+    "attempt": 6
+  },
+  {
+    "node": "synthesis",
+    "attempt": 0,
+    "result": "complete",
+    "gate": false
+  },
+  {
+    "node": "master_synthesis_gate",
+    "result": "report",
+    "gate": false,
+    "attempt": 0
+  },
+  {
+    "node": "report",
+    "attempt": 0,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": false,
+    "result": "revise",
+    "attempt": 1,
+    "reason": "필수 목차 중복/누락: REFERENCE (2회); 결정적 인용 검증 오류: 필수 목차 `REFERENCE`가 2회 존재한다(7장 내부 `#### REFERENCE` 및 문서 말미 `## REFERENCE`). 중복 목차를 제거하고 인용 목록은 단일 `REFERENCE` 섹션으로 통합해야 한다.; 4.4 도메인 적용성 표의 각 행에서 `MLA 근거`와 `ITME 근거`가 모두 `-`로 비어 있다. D1–D7 판정값(적합·조건부·근거 부족)에 본문 인용이 있더라도 표 자체의 핵심 판정은 Evidence ID 또는 페이지 인용으로 연결되어야 한다.; 1장 표 1의 `Llama-3.1-70B, FP16, 토큰당 320KiB`, 8K/128K/1M 문맥별 KV cache 산식, HBM 80GB 대비 비율은 제공된 검증 Evidence에 직접 연결되지 않았다. `설계 산출물 A-2`는 REFERENCE에 없으므로 출처·산식·가정(레이어, KV head 수, head dimension, 정밀도)을 제시하거나 표를 삭제해야 한다.; 1장 본문의 `레이어 수, attention head 수, 문맥 길이, 동시 사용자·batch, 저장 정밀도가 ... 부담을 키운다`, `HBM 점유 증가는 ... GPU 증설 비용 ... 지연 ... 재계산 부담으로 이어질 수 있다`는 외부 검증 가능한 기술 주장인데 직접 인용이 없다. 제공 Evidence로 인용을"
+  },
+  {
+    "node": "report",
+    "attempt": 1,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": false,
+    "result": "revise",
+    "attempt": 2,
+    "reason": "필수 목차 중복/누락: REFERENCE (2회); 결정적 인용 검증 실패: 필수 목차 `REFERENCE`가 2회 존재한다. 7장 내부의 `#### REFERENCE`를 제거하거나 별도 부록으로 명확히 재구성하여, 최종 `## REFERENCE`만 필수 참고문헌 목차로 유지해야 한다.; 지원되지 않은 정량 주장: 1장의 `표 1. KV cache 규모 예시`는 Llama-3.1-70B, FP16, 토큰당 320KiB, 8K/128K/1M별 GiB 값 및 HBM 80GB 대비 비율을 제시한다. 바로 앞 문장에서 제공 근거만으로 재현할 수 없다고 밝혔으며, 해당 표에는 검증 인용도 없다. 표를 삭제하거나 각 산식의 모델 구성·정밀도·단위·출처를 제공해야 한다.; 지원되지 않은 기술 주장: 4.1의 ITME TRL 표에는 `FPGA 기반 하드웨어 프로토타입`, `생산급 SK hynix ...`, `하드웨어 prefetcher와 사용자 수준 prefetch API`, `NVMe-oF ... 처리량` 등의 주장이 포함되어 있으나, 제공된 [2, p.2] 발췌는 이 세부 주장들을 뒷받침하지 않는다. 검증된 Evidence로 교체하거나 삭제해야 한다.; 도메인 표의 인용 연결이 누락되었다. 4.4 D1–D7 표의 모든 `근거` 칸이 `-`인데, 표 자체가 기술별 판정을 제시한다. 각 판정에 해당 Evidence ID/인용을 연결하거나, 표를 아"
+  },
+  {
+    "node": "report",
+    "attempt": 2,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": false,
+    "result": "unverified_exhausted",
+    "attempt": 2,
+    "reason": "필수 목차 중복/누락: REFERENCE (2회); 결정적 인용 검증 실패: 필수 목차 `REFERENCE`가 2회 존재한다. 첫 번째 REFERENCE 뒤에 `표 7` 및 두 번째 REFERENCE가 다시 배치되어 있어, 요구된 단일 REFERENCE 목차를 충족하지 못한다.; 4.4 도메인 적용성 표의 판정과 본문이 불일치한다. 표에서는 `MLA D4 품질·정보 보존`이 `적합`으로 되어 있으나, 해당 본문 및 ‘판정 연결’에서는 MLA 단독 효과를 분리할 수 없다는 이유로 `조건부`라고 판정한다. 하나로 정정하고 근거를 연결해야 한다.; 4.4 도메인 적용성 표의 각 근거 칸이 `-`로 비어 있다. 핵심 D1–D7 판정에는 Evidence ID가 연결되어야 하므로, 표에 각 판정의 실제 인용을 넣거나 표가 본문 인용을 참조함을 명시적으로 연결해야 한다.; 1장의 `표 1. KV cache 규모 예시`는 ‘설계 산출물 A-2 산식’이라고만 되어 있고, 제공된 Evidence에 해당 산식·Llama-3.1-70B의 토큰당 320KiB·요청별 GiB 계산 조건을 뒷받침하는 인용이 없다. 외부 산출물의 검증 가능한 출처와 산식·정밀도·레이어/헤드 등 조건을 인용하거나 표를 삭제해야 한다.; 3장 ITME의 `NVMe-oF 기반 분리형 스토리지 기준선 대비 1.80배 처리량` 및 4.4/5장/7장의 동일 수치는 제공된 검증 스니펫 `[2"
+  }
+]

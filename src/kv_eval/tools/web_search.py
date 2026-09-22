@@ -101,9 +101,12 @@ class WebSearch:
         # 근거로 쓸 수 없는 빈 본문은 버린다(인용해도 검증이 불가능하므로).
         return [item for item in results if item["excerpt"].strip()]
 
-    def search_market(self, query: str) -> list[dict]:
-        """C-2 시장 규모·성장성, 상용화·채택, 생태계 지지 근거 수집."""
-        return self._search(query, topic="news", exclude_domains=DEFAULT_EXCLUDED_DOMAINS)
+    def search_market(self, query: str, topic: str = "news") -> list[dict]:
+        """C-2 시장 규모·성장성, 상용화·채택, 생태계 지지 근거 수집.
+
+        생태계 지지(공식 문서·릴리스 노트)는 뉴스가 아니므로 topic="general"로 찾는다.
+        """
+        return self._search(query, topic=topic, exclude_domains=DEFAULT_EXCLUDED_DOMAINS)
 
     def search_stakeholder(self, query: str) -> list[dict]:
         """C-3 경쟁사·개발자/도입기업·투자업계의 '발언' 근거 수집."""

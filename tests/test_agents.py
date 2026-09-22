@@ -6,8 +6,9 @@ class WebStub:
     def __init__(self):
         self.market_calls = 0
         self.stakeholder_calls = 0
-    def search_market(self, query):
+    def search_market(self, query, topic="news"):
         self.market_calls += 1
+        self.queries = getattr(self, "queries", []) + [query]
         return [{"title": "Industry comment", "url": f"https://example.org/market/{self.market_calls}", "publisher": "Org", "published_at": "", "excerpt": "Verifiable statement"}]
     def search_stakeholder(self, query):
         self.stakeholder_calls += 1
@@ -29,7 +30,7 @@ class LLMStub:
 def test_market_uses_web_only():
     web = WebStub()
     result = market.market_node(initial_state("query"), web, LLMStub())
-    assert web.market_calls == 6
+    assert web.market_calls == 10  # 기술별 M1~M3 검색어 5개
     assert "market_result" in result
     assert result["market_result"]["sufficient"]
     assert all(x["source_type"] == "web" for x in result["evidence"])
@@ -38,6 +39,23 @@ def test_market_uses_web_only():
 def test_stakeholder_uses_web_only():
     web = WebStub()
     result = stakeholder.stakeholder_node(initial_state("query"), web, LLMStub())
-    assert web.stakeholder_calls == 6
+    assert web.stakeholder_calls == 8  # 기술별 S1~S3 검색어 4개
     assert result["stakeholder_result"]["sufficient"]
     assert all(x["source_type"] == "web" for x in result["evidence"])
+
+
+def test_retry_queries_are_short_standalone_searches():
+    from kv_eval.tools import retry_queries
+    feedback = {"rewritten_queries": ["MLA 자체의 제품 출시: 공식 발표 필요 " * 10, "vLLM 직접 지원 문서", "third"]}
+    queries = retry_queries("DeepSeek-V2 MLA", feedback)
+    assert len(queries) == 2
+    assert all("[" not in q and len(q) < 140 for q in queries)
+
+
+def test_market_retry_does_not_embed_python_list_in_query():
+    state = initial_state("query")
+    state["review_feedback"] = {"market": {"rewritten_queries": ["M1 시장조사 자료 필요"]}}
+    web = WebStub()
+    market.market_node(state, web, LLMStub())
+    assert any(q.endswith("M1 시장조사 자료 필요") for q in web.queries)
+    assert not any("['" in q for q in web.queries)

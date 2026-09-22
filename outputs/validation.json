@@ -1,0 +1,31 @@
+{
+  "passed": false,
+  "issues": [
+    "필수 목차 중복/누락: REFERENCE (2회)",
+    "결정적 인용 검증 실패: 필수 목차 `REFERENCE`가 2회 존재한다. 첫 번째 REFERENCE 뒤에 `표 7` 및 두 번째 REFERENCE가 다시 배치되어 있어, 요구된 단일 REFERENCE 목차를 충족하지 못한다.",
+    "4.4 도메인 적용성 표의 판정과 본문이 불일치한다. 표에서는 `MLA D4 품질·정보 보존`이 `적합`으로 되어 있으나, 해당 본문 및 ‘판정 연결’에서는 MLA 단독 효과를 분리할 수 없다는 이유로 `조건부`라고 판정한다. 하나로 정정하고 근거를 연결해야 한다.",
+    "4.4 도메인 적용성 표의 각 근거 칸이 `-`로 비어 있다. 핵심 D1–D7 판정에는 Evidence ID가 연결되어야 하므로, 표에 각 판정의 실제 인용을 넣거나 표가 본문 인용을 참조함을 명시적으로 연결해야 한다.",
+    "1장의 `표 1. KV cache 규모 예시`는 ‘설계 산출물 A-2 산식’이라고만 되어 있고, 제공된 Evidence에 해당 산식·Llama-3.1-70B의 토큰당 320KiB·요청별 GiB 계산 조건을 뒷받침하는 인용이 없다. 외부 산출물의 검증 가능한 출처와 산식·정밀도·레이어/헤드 등 조건을 인용하거나 표를 삭제해야 한다.",
+    "3장 ITME의 `NVMe-oF 기반 분리형 스토리지 기준선 대비 1.80배 처리량` 및 4.4/5장/7장의 동일 수치는 제공된 검증 스니펫 `[2, p.2]`로 확인되지 않는다. `[2, p.2]` 스니펫은 KV 계층 특성만 언급한다. 해당 수치를 직접 포함한 페이지 인용으로 교체하거나 수치를 제거해야 한다. W8의 1.81배는 제3자 소개문이므로 논문 저자 보고값으로 `[2, p.2]`에 귀속할 수 없다.",
+    "4.1 TRL 표의 ITME 설명에는 `생산급 SK hynix CM…`이라는 잘린 문구와 생산급 관련 주장이 포함되어 있으나, 제공된 Evidence는 FPGA 기반 프로토타입 및 상용 CXL 하드웨어 가용성 제한을 언급한다. 생산급/상용화 신호를 뒷받침하는 직접 Evidence를 제시하거나 해당 표현을 삭제해야 한다.",
+    "2장 비선정 후보 표의 KIVI 및 TurboQuant에 대한 ‘공개 채택 근거가 연구·라이브러리 수준’, ‘공식 상용화 근거가 제한적’이라는 주장은 제공된 Evidence에 인용이 없다. 설계 판단만 남기거나 각각의 직접 근거를 인용해야 한다.",
+    "REFERENCE의 첫 번째 목록은 본문 인용 체계와 양방향 연결되지 않는다. 본문은 `[1]`, `[2]`, `[W1]` 등만 사용하지만 첫 목록은 번호·Evidence ID 없이 중복된 서지로 제시된다. 첫 목록을 제거하고 두 번째 목록을 단일 REFERENCE로 유지하거나, 단일 목록에서 모든 본문 인용 ID와 서지를 일대일로 연결해야 한다.",
+    "REFERENCE의 `[W13]` 서지 제목은 ‘OpenAI, Intel … CXL as HBM Replacement’인데, 본문 4.2는 이를 ‘SK hynix의 AI 메모리 아키텍처 진전’ 및 ITME 관련 보도로 서술한다. 제공 스니펫도 ITME 제품 출하·고객 적용을 직접 확인하지 않는다. 인용의 실제 범위를 넘지 않도록 CXL 일반의 간접 시장 신호로 한정해야 한다.",
+    "중립적 비교 형식 자체와 승자·순위 미제시는 대체로 충족한다. 그러나 위의 중복 REFERENCE, 판정 불일치, 근거 없는 수치·표, 인용 연결 오류는 결정적 보고서 게이트 실패이므로 통과 처리할 수 없다."
+  ],
+  "used_references": [
+    "[1] DeepSeek-AI (2024). DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model. arXiv preprint arXiv:2405.04434, p.1, p.4, p.6, p.7, p.13, p.16.",
+    "[2] Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix) (2026). ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories. arXiv preprint arXiv:2606.12556, p.1, p.2, p.3, p.4, p.6, p.7, p.8, p.9, p.11.",
+    "[3] Lee, W., Lee, J., Seo, J., & Sim, J. (Seoul National University) (2024). InfiniGen: Efficient Generative Inference of Large Language Models with Dynamic KV Cache Management. arXiv preprint arXiv:2406.19707, p.4.",
+    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.4.",
+    "[W11] mordorintelligence.com (Tue, 28 Jul 2026 00:00:00 GMT). CXL Memory Controller IC Market Size, Share & 2031 Growth .... mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/cxl-memory-controller-ic-market",
+    "[W13] trendforce.com (Fri, 18 Sep 2026 04:00:00 GMT). [News] OpenAI, Intel Reportedly Downplay CXL as HBM Replacement, Citing Use-Case and Data-Transfer Limits. trendforce.com, https://www.trendforce.com/news/2026/09/18/news-openai-intel-reportedly-downplay-cxl-as-hbm-replacement-citing-use-case-and-data-transfer-limits",
+    "[W7] techcrunch.com (Tue, 14 Jul 2026 16:45:23 GMT). DeepSeek reportedly in talks to raise $1.5B, then IPO - TechCrunch. techcrunch.com, https://techcrunch.com/2026/07/14/deepseek-reportedly-in-talks-to-raise-1-5b-then-ipo/",
+    "[W6] techcrunch.com (Wed, 06 May 2026 17:20:34 GMT). DeepSeek could hit $45B valuation from its first investment round - TechCrunch. techcrunch.com, https://techcrunch.com/2026/05/06/deepseek-could-hit-45b-valuation-from-its-first-investment-round/",
+    "[W2] discuss.pytorch.kr (게시일 미확인). DeepSeek-V2: 강력하고 경제적이며 효율적인 전문가 혼합 .... discuss.pytorch.kr, https://discuss.pytorch.kr/t/deepseek-v2-moe/4366",
+    "[W5] news.samsungsemiconductor.com (게시일 미확인). [Behind the CHIP] AI 반도체 시장의 미래를 엿보다. CXL에 .... news.samsungsemiconductor.com, https://news.samsungsemiconductor.com/kr/behind-the-chip-ai-%EB%B0%98%EB%8F%84%EC%B2%B4-%EC%8B%9C%EC%9E%A5%EC%9D%98-%EB%AF%B8%EB%9E%98%EB%A5%BC-%EC%97%BF%EB%B3%B4%EB%8B%A4-cxl%EC%97%90-%EB%8C%80%ED%95%B4",
+    "[W4] hyper-accel.github.io (게시일 미확인). AI 시대의 필수 소비재, 메모리 이해하기 4편: CXL 이해하기. hyper-accel.github.io, https://hyper-accel.github.io/posts/what-is-cxl",
+    "[W1] weekly.chosun.com (게시일 미확인). 미국 압력과 중국 추격… K반도체, CXL로 대응한다 - 주간조선. weekly.chosun.com, http://weekly.chosun.com/news/articleView.html?idxno=40084",
+    "[W8] alphaxiv.org (게시일 미확인). ITME: Inference Tiered Memory Expansion with .... alphaxiv.org, https://www.alphaxiv.org/abs/2606.12556"
+  ]
+}

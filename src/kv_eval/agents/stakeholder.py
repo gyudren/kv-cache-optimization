@@ -5,7 +5,23 @@ from ..prompts import prompt_template
 from hashlib import sha256
 from ..schemas import StakeholderAssessment
 
-DIMENSIONS = ("competitor reactions", "developer enterprise adopter experience", "investor industry analyst perspective")
+from ..tools import retry_queries
+
+# 설계 C-3의 평가 대상별 검색어(경쟁 진영 / 도입 기업·개발자 / 투자 업계)
+STAKEHOLDER_QUERIES = {
+    "mla": [
+        "DeepSeek multi-head latent attention competitors response OpenAI Meta Google",
+        "MLA vs GQA latent attention KV cache engineers analysis",
+        "vLLM SGLang developers DeepSeek MLA kernel performance experience",
+        "DeepSeek efficiency analysts investors reaction Nvidia inference cost",
+    ],
+    "itme": [
+        "Samsung Micron CXL memory expansion AI inference competition SK hynix",
+        "CXL memory expansion hyperscaler cloud adoption LLM inference latency concerns",
+        "SK hynix CXL memory analyst outlook AI demand",
+        "CXL vs HBM AI memory industry view",
+    ],
+}
 
 
 def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
@@ -14,8 +30,8 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
     results, evidence, missing = {}, [], []
     for tech, name in (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME CXL hybrid memory")):
         found = []
-        for dimension in DIMENSIONS:
-            found.extend(web.search_stakeholder(f"{name} {dimension} {feedback.get('rewritten_queries', [])}"))
+        for query in STAKEHOLDER_QUERIES[tech] + retry_queries(name, feedback):
+            found.extend(web.search_stakeholder(query))
         raw = [{**r, "source_id": f"web:stakeholder:{tech}:{sha256(r['url'].encode()).hexdigest()[:14]}"}
                for r in {x["url"]: x for x in found}.values()]
         if not raw:
@@ -30,7 +46,9 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
             "A competitor developing an alternative is not itself proof of a negative judgment. "
             "Record who said what; never attribute anonymous text to an imagined speaker. "
             "Set separate verdicts for competitors, developers/adopters and investors only with explicit support (otherwise null). "
-            "Use only provided source IDs in cited_ids; absence of information means missing.\n"
+            "Use only provided source IDs in cited_ids; absence of information means missing. "
+            "Statements about the technology family (MLA: DeepSeek's MLA-based models and MLA serving kernels; ITME: SK hynix/CXL memory expansion) "
+            "may support a verdict when the speaker is identified and the text labels them '계열·간접 반응', distinct from reactions to the exact technology.\n"
             + "\n".join(f"{r['source_id']}: [{r.get('speaker', '기타')}] {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw),
             StakeholderAssessment,
         )

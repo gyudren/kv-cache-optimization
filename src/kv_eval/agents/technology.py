@@ -25,9 +25,11 @@ BASELINE_QUESTION = "How do InfiniGen and CXL-PNM differ from ITME in memory exp
 
 # TRL 7~9(제품 출시·상용 서비스 적용) 판정에 필요한 공개 발표를 찾기 위한 질의
 TRL_WEB_QUERIES = {
-    "mla": ["DeepSeek-V2 MLA multi-head latent attention production deployment inference service",
-            "DeepSeek MLA vLLM SGLang official support release"],
-    "itme": ["SK hynix CXL hybrid memory ITME product release commercial availability",
+    "mla": ["DeepSeek API production service DeepSeek-V2 V3 multi-head latent attention",
+            "vLLM MLA attention backend DeepSeek support release",
+            "FlashMLA DeepSeek open source MLA decoding kernel"],
+    "itme": ["SK hynix ITME CXL hybrid memory inference tiered memory expansion",
+             "SK hynix CMM-DDR5 CXL memory module mass production customers",
              "CXL memory module tiered memory LLM inference commercial deployment announcement"],
 }
 TECH_LABEL = {"mla": "DeepSeek-V2 MLA", "itme": "ITME"}
