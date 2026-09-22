@@ -1,0 +1,6 @@
+Required research PDFs (not shipped or fabricated):
+  deepseek_v2.pdf  (DeepSeek-V2, design declared 52 pages)
+  itme.pdf         (ITME, design declared 13 pages)
+  infinigen.pdf    (InfiniGen, design declared 18 pages)
+  cxl_pnm.pdf      (CXL-PNM, design declared 13 pages)
+Check source, actual pages and bibliography exclusion ranges before production run.
