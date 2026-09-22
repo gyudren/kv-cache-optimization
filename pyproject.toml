@@ -1,24 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "kv-eval"
+name = "kv-cache-evaluation"
 version = "0.1.0"
-description = "KV cache 최적화 기술 SW/HW 다관점 평가 Agentic RAG"
-requires-python = ">=3.10"
+description = "SKALA MLA vs ITME evidence-grounded multi-agent evaluation"
+requires-python = ">=3.11"
 dependencies = [
-    "langgraph",
-    "langchain-openai",
-    "requests",
-    "pypdf",
-    "faiss-cpu",
-    "rank-bm25",
-    "sentence-transformers",
+  "langgraph>=0.2", "openai>=1.50", "pydantic>=2",
+  "pypdf>=4", "sentence-transformers>=3", "faiss-cpu>=1.8",
+  "rank-bm25>=0.2", "tavily-python>=0.5", "python-dotenv>=1", "reportlab>=4"
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
-
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
