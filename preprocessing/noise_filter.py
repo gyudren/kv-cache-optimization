@@ -52,12 +52,19 @@ def _text_before_reference_heading(text: str) -> str | None:
 
 
 def drop_reference_pages(
-    pages: list[Page], reference_start_page: int | None
+    pages: list[Page],
+    reference_start_page: int | None,
+    reference_end_page: int | None = None,
 ) -> tuple[list[Page], list[Page]]:
     """색인 대상 본문 페이지와 제외된 참고문헌 페이지를 분리한다.
 
     제목이 있는 경계 페이지는 제목 이전 본문만 남겨 body_pages에 포함시키고,
     excluded_pages에는 원본(제목 포함) 페이지를 감사용으로 기록한다.
+
+    reference_end_page가 지정되면 그 페이지까지만 참고문헌 구간으로 보고 이후 페이지는
+    다시 본문으로 색인한다. 참고문헌 뒤에 부록이 오는 논문(예: DeepSeek-V2는 References
+    뒤 Appendix A~G에 MLA 전체 수식·어텐션 ablation이 있음)에서 부록이 통째로 버려지는
+    것을 막기 위한 값으로, manifest.json에 직접 지정한다.
     """
     if reference_start_page is None:
         return list(pages), []
@@ -66,7 +73,10 @@ def drop_reference_pages(
     excluded_pages: list[Page] = []
 
     for page in pages:
-        if page.page_number < reference_start_page:
+        after_references = (
+            reference_end_page is not None and page.page_number > reference_end_page
+        )
+        if page.page_number < reference_start_page or after_references:
             body_pages.append(page)
         elif page.page_number == reference_start_page:
             excluded_pages.append(page)

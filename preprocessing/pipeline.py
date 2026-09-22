@@ -119,9 +119,13 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
     reference_start_page = find_reference_start_page(
         text_pages, manual_start_page=doc.get("reference_start_page")
     )
-    body_pages, excluded_pages = drop_reference_pages(text_pages, reference_start_page)
+    reference_end_page = doc.get("reference_end_page")
+    body_pages, excluded_pages = drop_reference_pages(
+        text_pages, reference_start_page, reference_end_page
+    )
     if reference_start_page is not None:
-        all_tables = [t for t in all_tables if t.page_number < reference_start_page]
+        indexed_page_numbers = {page.page_number for page in body_pages}
+        all_tables = [t for t in all_tables if t.page_number in indexed_page_numbers]
 
     text_chunks, review_flags = chunk_document(doc["doc_id"], body_pages, chunk_size=CHUNK_SIZE, overlap=OVERLAP)
 
@@ -174,6 +178,7 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
         "role": doc["role"],
         "total_pages": total_pages,
         "reference_start_page": reference_start_page,
+        "reference_end_page": reference_end_page,
         "excluded_reference_pages": len(excluded_pages),
         "indexed_pages": len(body_pages),
         "text_chunk_count": len(text_chunks),

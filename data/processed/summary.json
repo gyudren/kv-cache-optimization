@@ -3,7 +3,7 @@
   "page_budget": 200,
   "chunk_size": 1200,
   "overlap": 200,
-  "total_chunks": 316,
+  "total_chunks": 359,
   "needs_manual_review": true,
   "documents": [
     {
@@ -13,9 +13,10 @@
       "role": "primary",
       "total_pages": 52,
       "reference_start_page": 21,
-      "excluded_reference_pages": 32,
-      "indexed_pages": 21,
-      "text_chunk_count": 72,
+      "reference_end_page": 26,
+      "excluded_reference_pages": 6,
+      "indexed_pages": 47,
+      "text_chunk_count": 115,
       "table_count": 0,
       "removed_boilerplate_line_count": 149,
       "pages_with_charts": [],
@@ -165,6 +166,36 @@
           "tail_preview": "-ended benchmarks. Exploring how to align a model with human preferences without",
           "head_preview": "compromising its general performance presents a valuable direction for future re",
           "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            27,
+            28
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "Yiyuan Liu\nQiushi Du",
+          "head_preview": "Xiaosha Chen\nYongji Wang",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            29,
+            30
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "t batch size of 4608 sequences. During pre-training, we set the maximum sequence",
+          "head_preview": "length to 4K, and train DeepSeek-V2-Lite on 5.7T tokens. We leverage pipeline pa",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            32,
+            33
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "further share more results in Figure 5 on HumanEval and LiveCodeBench, where the",
+          "head_preview": "Agreement",
+          "doc_id": "deepseek_v2_mla"
         }
       ]
     },
@@ -175,6 +206,7 @@
       "role": "primary",
       "total_pages": 13,
       "reference_start_page": 12,
+      "reference_end_page": null,
       "excluded_reference_pages": 2,
       "indexed_pages": 11,
       "text_chunk_count": 78,
@@ -282,6 +314,7 @@
       "role": "baseline",
       "total_pages": 18,
       "reference_start_page": 15,
+      "reference_end_page": null,
       "excluded_reference_pages": 4,
       "indexed_pages": 14,
       "text_chunk_count": 85,
@@ -402,6 +435,7 @@
       "role": "baseline",
       "total_pages": 13,
       "reference_start_page": 12,
+      "reference_end_page": null,
       "excluded_reference_pages": 2,
       "indexed_pages": 12,
       "text_chunk_count": 70,

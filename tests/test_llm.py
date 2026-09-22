@@ -21,7 +21,8 @@ def test_fixed_model_and_structured_output():
     llm = StructuredLLM("", client=SimpleNamespace(responses=stub))
     out = llm.generate_structured("prompt", Output)
     assert out.message == "test"
-    assert stub.params[0]["model"] == MODEL_ID == "gpt-5.6-sol"
+    # 대체 모델 없이 설정된 단일 모델만 호출해야 한다.
+    assert stub.params[0]["model"] == MODEL_ID
 
 
 def test_model_override_rejected(monkeypatch):

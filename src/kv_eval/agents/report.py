@@ -16,11 +16,17 @@ def render_report(state: dict, llm: Any) -> str:
         "Provide separate fields for SUMMARY, background, selection, technology overview, perspectives (TRL, market, stakeholder, D1-D7 for each), "
         "synthesis (agreements/conflicts/relations), implications, limitations. "
         "SUMMARY concise for <= half A4 page. No ranking/endorsement. No invented deployment or quantitative results. "
+        "The limitations section MUST state explicitly that every TRL judgement is an estimate based on public information only "
+        "(papers, patents, commercial announcements) and that there is a lag between publication and actual adoption, "
+        "and MUST list the confirmation-bias countermeasures actually taken (HW baseline papers used to cross-check ITME, "
+        "identical reporting format for both technologies, synthesis agent restricted to already-verified evidence). "
         "Use the EXACT citation strings from the provided source catalog in the text for every supported fact. "
         "Never cite non-catalog ID. If missing, mark 근거 부족 and show evidence gaps. "
         "Avoid changing design category labels.\n"
         + repr({k: state.get(k, {}) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result", "synthesis_result")})
-        + "\nVerified source catalog:\n" + repr(citation_context), ReportParts,
+        + "\nVerified source catalog:\n" + repr(citation_context)
+        + "\nRevision feedback (address every issue):\n" + repr(state.get("review_feedback", {}).get("report", {}))
+        + "\nPrevious draft to revise:\n" + state.get("report_draft", ""), ReportParts,
     )
     parts = sections.model_dump()
     report = "\n\n".join([
