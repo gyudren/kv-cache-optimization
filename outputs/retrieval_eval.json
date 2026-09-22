@@ -9,28 +9,28 @@
   "checks": {
     "hit@6 ≥ 0.8": true,
     "MRR ≥ 0.6": true,
-    "노이즈율 ≤ 0.2": false,
+    "노이즈율 ≤ 0.2": true,
     "필수 용어 커버리지 ≥ 0.8": true
   },
-  "passed": false,
+  "passed": true,
   "metrics": {
     "n_cases": 92,
-    "hit@1": 0.5760869565217391,
-    "hit@3": 0.9021739130434783,
+    "hit@1": 0.8369565217391305,
+    "hit@3": 0.9891304347826086,
     "hit@6": 1.0,
-    "mrr": 0.7471014492753625,
+    "mrr": 0.9157608695652174,
     "page_hit_rate": 0.9166666666666666,
     "required_term_coverage": 0.9166666666666666,
-    "concept_table_noise_rate": 0.25,
+    "concept_table_noise_rate": 0.0,
     "per_category": {
       "concept": {
         "n": 4,
-        "hit@1": 0.5,
+        "hit@1": 1.0,
         "hit@6": 1.0
       },
       "coverage": {
         "n": 80,
-        "hit@1": 0.55,
+        "hit@1": 0.8125,
         "hit@6": 1.0
       },
       "formula": {
@@ -40,7 +40,7 @@
       },
       "table": {
         "n": 5,
-        "hit@1": 0.8,
+        "hit@1": 1.0,
         "hit@6": 1.0
       }
     }
@@ -60,7 +60,7 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen"
+        "deepseek_v2_mla"
       ],
       "page_hit": true,
       "required_term_coverage": 1.0,
@@ -127,9 +127,9 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "itme",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "itme",
+        "itme",
+        "itme",
         "itme",
         "itme"
       ],
@@ -195,18 +195,18 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen",
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": true,
       "required_term_coverage": 1.0,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -266,18 +266,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm"
       ],
       "page_hit": true,
       "required_term_coverage": 1.0,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -343,8 +343,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
-        "itme"
+        "deepseek_v2_mla",
+        "deepseek_v2_mla"
       ],
       "page_hit": false,
       "required_term_coverage": 1.0,
@@ -411,11 +411,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "infinigen",
-        "itme",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen"
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla"
       ],
       "page_hit": true,
       "required_term_coverage": 1.0,
@@ -482,7 +482,7 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "itme",
-        "deepseek_v2_mla",
+        "itme",
         "itme",
         "itme",
         "itme",
@@ -554,10 +554,10 @@
       "unfiltered_top_docs": [
         "itme",
         "itme",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "itme",
-        "deepseek_v2_mla"
+        "itme",
+        "itme",
+        "itme"
       ],
       "page_hit": true,
       "required_term_coverage": 1.0,
@@ -621,18 +621,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "cxl_pnm"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
+        "infinigen"
       ],
       "page_hit": true,
       "required_term_coverage": 1.0,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -697,7 +697,7 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
+        "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla"
       ],
@@ -767,10 +767,10 @@
       "unfiltered_top_docs": [
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": true,
       "required_term_coverage": 1.0,
@@ -838,9 +838,9 @@
       "unfiltered_top_docs": [
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm"
       ],
       "page_hit": true,
@@ -909,10 +909,10 @@
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "cxl_pnm",
         "deepseek_v2_mla",
-        "cxl_pnm",
-        "infinigen"
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -979,11 +979,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "infinigen",
-        "itme",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen"
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1052,8 +1052,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
-        "itme",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
         "deepseek_v2_mla"
       ],
       "page_hit": null,
@@ -1118,18 +1118,18 @@
       "expected_doc_ids": [
         "deepseek_v2_mla"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "cxl_pnm",
         "deepseek_v2_mla",
-        "cxl_pnm",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -1194,8 +1194,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
-        "infinigen",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
         "deepseek_v2_mla"
       ],
       "page_hit": null,
@@ -1266,8 +1266,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "cxl_pnm"
+        "cxl_pnm",
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1334,10 +1334,10 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "itme",
         "deepseek_v2_mla",
         "infinigen",
-        "itme",
+        "cxl_pnm",
         "deepseek_v2_mla"
       ],
       "page_hit": null,
@@ -1406,8 +1406,8 @@
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "cxl_pnm",
-        "itme",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla"
       ],
@@ -1480,7 +1480,7 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen"
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1548,10 +1548,10 @@
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "cxl_pnm",
-        "itme",
         "deepseek_v2_mla",
-        "cxl_pnm"
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1621,8 +1621,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
-        "itme"
+        "deepseek_v2_mla",
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1693,7 +1693,7 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "cxl_pnm"
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1763,8 +1763,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
-        "itme"
+        "deepseek_v2_mla",
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1831,11 +1831,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "infinigen",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "deepseek_v2_mla",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -1904,8 +1904,8 @@
         "deepseek_v2_mla",
         "infinigen",
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "infinigen",
+        "deepseek_v2_mla",
         "infinigen"
       ],
       "page_hit": null,
@@ -1977,7 +1977,7 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "cxl_pnm"
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -2046,8 +2046,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
-        "itme",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
         "deepseek_v2_mla"
       ],
       "page_hit": null,
@@ -2119,7 +2119,7 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen"
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -2188,7 +2188,7 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "cxl_pnm",
+        "deepseek_v2_mla",
         "infinigen",
         "deepseek_v2_mla"
       ],
@@ -2259,8 +2259,8 @@
         "deepseek_v2_mla",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "infinigen",
-        "itme",
+        "deepseek_v2_mla",
+        "deepseek_v2_mla",
         "deepseek_v2_mla"
       ],
       "page_hit": null,
@@ -2329,8 +2329,8 @@
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
         "itme",
-        "itme",
         "deepseek_v2_mla",
+        "itme",
         "deepseek_v2_mla",
         "itme"
       ],
@@ -2396,18 +2396,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "itme",
         "itme",
         "itme",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "itme",
+        "itme",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -2467,18 +2467,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 4,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "itme",
         "itme",
-        "deepseek_v2_mla"
+        "itme",
+        "itme",
+        "itme",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -2538,18 +2538,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
+        "itme",
         "deepseek_v2_mla",
         "itme",
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "itme",
-        "itme"
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -2614,9 +2614,9 @@
         "itme",
         "itme",
         "itme",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "itme",
+        "itme",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -2680,18 +2680,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 4,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "itme",
         "itme",
-        "deepseek_v2_mla"
+        "infinigen",
+        "itme",
+        "cxl_pnm",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -2751,14 +2751,14 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 4,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "itme",
         "deepseek_v2_mla",
         "itme",
-        "itme",
-        "deepseek_v2_mla"
+        "deepseek_v2_mla",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -2822,18 +2822,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "itme",
         "itme",
         "itme",
         "itme",
-        "deepseek_v2_mla"
+        "itme",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -2893,14 +2893,14 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "itme",
         "itme",
         "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "itme",
+        "deepseek_v2_mla",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -2964,18 +2964,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "itme",
         "itme",
-        "deepseek_v2_mla",
+        "itme",
+        "itme",
         "itme",
         "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -3038,8 +3038,8 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "itme",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "itme",
+        "itme",
         "itme",
         "itme",
         "deepseek_v2_mla"
@@ -3110,8 +3110,8 @@
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
         "itme",
-        "itme",
         "deepseek_v2_mla",
+        "itme",
         "deepseek_v2_mla",
         "itme"
       ],
@@ -3180,11 +3180,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "itme",
-        "deepseek_v2_mla",
         "itme",
         "itme",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "itme",
+        "itme",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -3248,18 +3248,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "itme",
         "itme",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "itme",
+        "itme",
+        "itme",
         "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -3319,14 +3319,14 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 6,
+      "rank_of_correct_doc": 4,
       "unfiltered_top_docs": [
         "cxl_pnm",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "itme"
+        "itme",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -3390,18 +3390,18 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "itme",
-        "deepseek_v2_mla",
         "itme",
-        "deepseek_v2_mla",
+        "itme",
+        "itme",
+        "itme",
         "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -3461,14 +3461,14 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "itme",
-        "itme",
+        "cxl_pnm",
         "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "deepseek_v2_mla",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -3537,7 +3537,7 @@
         "itme",
         "itme",
         "itme",
-        "deepseek_v2_mla",
+        "itme",
         "itme",
         "itme"
       ],
@@ -3603,14 +3603,14 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "itme",
         "itme",
         "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "itme",
+        "deepseek_v2_mla",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -3674,14 +3674,14 @@
       "expected_doc_ids": [
         "itme"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "itme",
         "itme",
         "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "itme",
+        "deepseek_v2_mla",
+        "itme"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -3745,18 +3745,18 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "infinigen",
-        "itme"
+        "itme",
+        "infinigen",
+        "cxl_pnm",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -3816,18 +3816,18 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 1,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
-        "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "cxl_pnm",
         "infinigen",
-        "deepseek_v2_mla"
+        "deepseek_v2_mla",
+        "infinigen",
+        "deepseek_v2_mla",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": false,
+      "top1_is_noise": true,
       "hits": [
         {
           "rank": 1,
@@ -3892,9 +3892,9 @@
         "infinigen",
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -3962,10 +3962,10 @@
       "unfiltered_top_docs": [
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4029,18 +4029,18 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "itme",
+        "infinigen",
+        "cxl_pnm",
+        "infinigen",
         "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -4107,7 +4107,7 @@
         "infinigen",
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla"
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4178,7 +4178,7 @@
         "infinigen",
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla"
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4242,14 +4242,14 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 4,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "infinigen",
         "deepseek_v2_mla",
         "infinigen",
-        "itme",
-        "deepseek_v2_mla"
+        "deepseek_v2_mla",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4316,11 +4316,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen",
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4390,7 +4390,7 @@
         "infinigen",
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla",
+        "infinigen",
         "deepseek_v2_mla"
       ],
       "page_hit": null,
@@ -4455,18 +4455,18 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen",
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -4526,14 +4526,14 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
+        "infinigen",
         "deepseek_v2_mla",
         "infinigen",
-        "itme",
         "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4597,14 +4597,14 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 5,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "infinigen",
         "deepseek_v2_mla",
         "infinigen",
-        "itme"
+        "deepseek_v2_mla",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4674,8 +4674,8 @@
         "infinigen",
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4742,11 +4742,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "infinigen"
+        "infinigen",
+        "infinigen",
+        "infinigen",
+        "infinigen",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4810,18 +4810,18 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "infinigen",
+        "infinigen",
+        "itme",
+        "cxl_pnm",
         "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -4887,8 +4887,8 @@
         "infinigen",
         "infinigen",
         "infinigen",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -4952,14 +4952,14 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 4,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "infinigen",
         "deepseek_v2_mla",
         "infinigen",
-        "itme",
-        "deepseek_v2_mla"
+        "deepseek_v2_mla",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -5023,14 +5023,14 @@
       "expected_doc_ids": [
         "infinigen"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 2,
       "unfiltered_top_docs": [
         "deepseek_v2_mla",
+        "infinigen",
         "deepseek_v2_mla",
         "infinigen",
-        "itme",
         "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -5097,11 +5097,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "infinigen",
+        "infinigen",
         "deepseek_v2_mla",
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "infinigen"
+        "infinigen",
+        "deepseek_v2_mla"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -5165,18 +5165,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 4,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -5240,9 +5240,9 @@
       "unfiltered_top_docs": [
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm"
       ],
       "page_hit": null,
@@ -5312,9 +5312,9 @@
         "cxl_pnm",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "itme",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -5378,18 +5378,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 5,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "itme"
+        "itme",
+        "infinigen",
+        "infinigen",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -5454,8 +5454,8 @@
         "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm"
       ],
       "page_hit": null,
@@ -5524,10 +5524,10 @@
       "unfiltered_top_docs": [
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -5591,18 +5591,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
+        "cxl_pnm",
         "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
         "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -5665,11 +5665,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "cxl_pnm",
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -5733,18 +5733,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "cxl_pnm",
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -5808,8 +5808,8 @@
       "unfiltered_top_docs": [
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm",
         "cxl_pnm"
       ],
@@ -5875,18 +5875,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -5946,18 +5946,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 3,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -6017,9 +6017,9 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
+        "cxl_pnm",
         "cxl_pnm",
         "cxl_pnm",
         "cxl_pnm",
@@ -6028,7 +6028,7 @@
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -6088,18 +6088,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -6159,18 +6159,18 @@
       "expected_doc_ids": [
         "cxl_pnm"
       ],
-      "rank_of_correct_doc": 2,
+      "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
-        "deepseek_v2_mla",
-        "cxl_pnm",
-        "deepseek_v2_mla",
         "cxl_pnm",
         "cxl_pnm",
-        "cxl_pnm"
+        "cxl_pnm",
+        "cxl_pnm",
+        "infinigen",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
-      "top1_is_noise": true,
+      "top1_is_noise": false,
       "hits": [
         {
           "rank": 1,
@@ -6233,11 +6233,11 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "infinigen",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "infinigen",
+        "cxl_pnm",
+        "infinigen"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -6305,10 +6305,10 @@
       "unfiltered_top_docs": [
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "deepseek_v2_mla"
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm"
       ],
       "page_hit": null,
       "required_term_coverage": null,
@@ -6376,8 +6376,8 @@
       "unfiltered_top_docs": [
         "cxl_pnm",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm",
         "cxl_pnm"
       ],
@@ -6446,10 +6446,10 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "cxl_pnm",
-        "deepseek_v2_mla",
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm"
       ],
       "page_hit": null,
@@ -6517,10 +6517,10 @@
       "rank_of_correct_doc": 1,
       "unfiltered_top_docs": [
         "cxl_pnm",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
-        "deepseek_v2_mla",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
+        "cxl_pnm",
         "cxl_pnm"
       ],
       "page_hit": null,

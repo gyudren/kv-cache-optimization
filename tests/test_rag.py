@@ -32,8 +32,10 @@ def test_filter_isolation():
     assert permitted_technologies("mla") == {"mla"}
     assert permitted_technologies("itme") == {"itme"}
     assert permitted_technologies("itme_baseline") == {"itme", "baseline"}
+    # "all"은 검색 순위 품질 측정(eval) 전용이며 운영 Agent는 사용하지 않는다.
+    assert permitted_technologies("all") == {"mla", "itme", "baseline"}
     with pytest.raises(ValueError):
-        permitted_technologies("all")
+        permitted_technologies("everything")
 
 
 def test_manifest_assigns_technology_and_citation_number(tmp_path: Path):

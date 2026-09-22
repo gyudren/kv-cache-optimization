@@ -26,7 +26,7 @@
 - Framework : LangGraph
 - LLM/Generator : gpt-5.6-terra (OpenAI Responses API, 구조화 출력)
 - LLM/Judge : gpt-5.6-terra (보고서 검수 게이트에서 동일 모델 사용, 대체 모델 없음)
-- Retrieval : FAISS(Dense) + BM25(Sparse), RRF 순위 융합 — 측정값은 `outputs/retrieval_eval.json` 참고
+- Retrieval : FAISS(Dense) + BM25(Sparse), RRF 순위 융합 — 92케이스 측정 Hit@1 0.84 / Hit@3 0.99 / MRR 0.92 (`outputs/retrieval_eval.json`)
 - Web Search : Tavily API (시장·이해관계자 평가 및 TRL 상용화 근거)
 - Embedding : Qwen3-Embedding-0.6B (다국어·교차언어 검색, 최대 32K 토큰, Apache 2.0 라이선스)
 
@@ -132,7 +132,14 @@ RAG 적재 문서 4편(DeepSeek-V2/MLA, ITME, InfiniGen, CXL-PNM)을 다음 순�
 - **문단 경계(들여쓰기) 인식** : 이 논문들은 문단 사이에 빈 줄이 없고 첫 줄만 들여쓰기로 구분된다. 컬럼의 일반적인 좌측 여백보다 들여써진 줄을 새 문단의 시작으로 보고 명시적으로 문단을 나눈다(이게 없으면 페이지 전체가 하나의 문단이 되어 청킹이 사실상 무의미해짐).
 - **참고문헌 "구간"만 제외 (부록은 색인 유지)** : References 제목이 페이지 맨 앞이 아니라 중간/끝에 나와도 탐지하고, 그 줄 이전 본문은 계속 색인 대상으로 남긴다. DeepSeek-V2(MLA)는 References(p.21~26) 뒤에 Appendix A~G(p.27~52)가 이어지는데, 여기에 **MLA 전체 수식(Appendix C)과 MHA/GQA/MQA ablation(Appendix D)** 처럼 기술 조사에 직접 쓰이는 내용이 들어 있다. 이를 통째로 버리면 52p 중 32p가 색인에서 사라지므로, `data/manifest.json`에 `reference_start_page`/`reference_end_page`를 지정해 **참고문헌 구간만** 제외한다(해당 값이 없으면 References 이후 전체를 제외하는 기존 동작을 유지).
 - **수식 줄은 전처리 산출물에 원문 그대로 유지** : LaTeX로 조판된 논문은 수식의 이탤릭 변수(𝑄, 𝑊, 𝐷 등)가 유니코드 Mathematical Alphanumeric Symbols 문자로 추출되어 기호가 깨져 보인다. 한때 이런 줄을 통째로 제거해봤으나, 수식과 같은 줄에 있던 "where 𝑐 denotes ..." 같은 설명 문장까지 함께 잘려 문장이 조각나고, borderless 표(예: DeepSeek-V2 Table 1의 KV cache 비교 수치)의 수치까지 같이 삭제되는 부작용이 확인되어 되돌렸다. 따라서 `chunks.jsonl`에는 원문을 그대로 남긴다.
-- **색인 단계의 선택적 정제** : 위 부작용을 피하기 위해, 색인 직전 정제는 "비율"이 아니라 **3자 이상 영단어가 하나도 없는 줄만** 제거하는 보수적 기준을 쓴다(`src/kv_eval/rag/ingest.py:clean_formula_noise`). 설명 문장과 `GiB`·`Token` 같은 단어가 섞인 표 행은 살아남고, `𝐡𝐡𝑡𝑡`·`4 …` 같은 글리프 잔해만 걸러진다. 적용 여부는 `CLEAN_FORMULA_NOISE=0/1` 환경변수로 바꿀 수 있으며, 어느 쪽이 나은지는 `python -m eval.evaluate_retrieval`로 두 설정을 각각 측정해 판단한다.
+- **색인 단계 정제는 측정 결과 기본 OFF** : 색인 직전에 "3자 이상 영단어가 하나도 없는 줄"만 걷어내는 보수적 정제를 구현해(`src/kv_eval/rag/ingest.py:clean_formula_noise`) 동일 평가 세트 92케이스로 A/B 측정했다.
+
+  | 설정 | Hit@1 | MRR | 필수 용어 커버리지 | 합격 판정 |
+  |---|---|---|---|---|
+  | `CLEAN_FORMULA_NOISE=1` (정제 ON) | 0.86 | 0.93 | 0.75 | FAIL |
+  | `CLEAN_FORMULA_NOISE=0` (정제 OFF, **기본값**) | 0.84 | 0.92 | **0.92** | **PASS** |
+
+  순위 지표는 사실상 같은데(0.02 차이) 정제를 켜면 표·수식 줄에 있던 근거 용어까지 함께 지워져 필수 용어 커버리지가 0.75로 떨어진다. 위 전처리 단계의 판단과 같은 결론이므로 기본값을 OFF로 두고, 코드는 재현 가능하도록 환경변수로 남겨 둔다.
 - **표/다이어그램 오탐지 필터링** : pdfplumber의 표 탐지가 선(line)만 보고 판단하다 보니 아키텍처 다이어그램·차트도 표로 오인하는 경우가 많아, 실제 데이터 표처럼 보이는지(행/열 개수, 빈 셀 비율, 셀당 줄바꿈 수) 최소 조건으로 걸러낸다. 표로도 기각된 다이어그램 영역은 표로 만들지는 않되, 라벨 텍스트가 본문 문장 사이에 끼어들어 뒤섞이지 않도록 본문 재구성에서도 제외한다.
 
 자동으로 판단하기 위험한 항목은 넘겨짚지 않고 `summary.json`에 표시만 하므로, 색인 전에 아래 항목을 사람이 한 번 확인해야 한다.

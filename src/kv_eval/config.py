@@ -15,9 +15,11 @@ CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
 MIN_INDEXED_CHARS = 20  # 정제 후 이보다 짧게 남는 청크는 색인하지 않는다
 # 색인 직전에 "3자 이상 영단어가 없는 줄"(깨진 수식 글리프)을 제거할지 여부.
-# 전처리 단계에서는 표 수치 손실 때문에 적용하지 않기로 했고(README 참고),
-# 색인 단계 적용 여부는 eval/evaluate_retrieval.py 결과로 판단한다.
-CLEAN_FORMULA_NOISE = os.getenv("CLEAN_FORMULA_NOISE", "1") == "1"
+# 동일 평가 세트(92케이스) A/B 측정 결과 끄는 쪽이 합격 기준을 통과해 기본값을 0으로 둔다.
+#   ON  : Hit@1 0.86 / MRR 0.93 / 필수 용어 커버리지 0.75 → FAIL
+#   OFF : Hit@1 0.84 / MRR 0.92 / 필수 용어 커버리지 0.92 → PASS
+# 순위는 거의 같은데 표·수식 줄의 근거 용어가 함께 지워지는 손해가 더 크다.
+CLEAN_FORMULA_NOISE = os.getenv("CLEAN_FORMULA_NOISE", "0") == "1"
 RETRIEVAL_K = 6  # Implementation detail; same setting across technologies.
 RRF_CONSTANT = 60
 MIN_RELEVANT = 2
