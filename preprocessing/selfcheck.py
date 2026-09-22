@@ -78,6 +78,11 @@ def check_chunking_preserves_paragraphs() -> None:
     chunks, review_flags = chunk_document("doc", pages, chunk_size=1200, overlap=200)
     assert len(chunks) >= 2, "청크가 최소 2개는 나와야 함"
     assert any(long_paragraph.strip() in chunk.text for chunk in chunks), "긴 문단이 잘렸음"
+    assert any(
+        flag["reason"] == "paragraph_exceeds_chunk_size"
+        and flag["char_count"] == len(long_paragraph.strip())
+        for flag in review_flags
+    ), "목표 크기를 넘는 문단이 검토 대상으로 기록되지 않음"
 
     for chunk in chunks:
         assert chunk.start_page <= chunk.end_page
