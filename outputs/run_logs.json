@@ -234,5 +234,29 @@
     "result": "unverified_exhausted",
     "attempt": 2,
     "reason": "결정적 인용 검증 실패: 4.1의 MLA TRL 표 및 본문은 `[1, p.15]`를 인용하지만, 제공된 검증 Evidence에 `[1, p.15]` 항목이 없고 REFERENCE의 [1] 페이지 목록에도 p.15가 없다. 해당 문장을 검증된 `[1, p.31]` 또는 `[1, p.32]` 근거로 교체하거나, p.15의 검증 가능한 원문 근거를 추가해야 한다.; 본문-REFERENCE 양방향 연결 누락: `[W9]`는 REFERENCE에 있으나 보고서 본문, 표, 각주에서 인용되지 않는다. 실제로 사용하지 않은 출처라면 REFERENCE에서 제거하고, 사용했다면 해당 주장 위치에 `[W9]` 인용을 추가해야 한다."
+  },
+  {
+    "node": "report",
+    "attempt": 0,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": false,
+    "result": "revise",
+    "attempt": 1,
+    "reason": "REFERENCE 양방향 인용 검증 실패: 본문에 인용된 [W10]은 REFERENCE에 있으나, [W9]는 REFERENCE에만 있고 본문 인용이 없다. 보고서 게이트의 본문 인용-REFERENCE 양방향 연결 요건을 충족하지 못한다. [W9]를 실제 근거 문장에 인용하거나 REFERENCE에서 제거해야 한다.; 4.1 신호표와 4.4/서술 간 모순: 4.1의 MLA 행은 ‘계열 TRL: 근거 부족’이라고 하나, 4.2와 5장은 vLLM·SGLang의 MLA 기능 자체 런타임 지원을 직접 생태계 신호로 제시한다[W6][W12]. 이는 계열의 ‘제품 배포 또는 상용 운용 성숙도’ 판정과 구분될 수 있으나, 표의 ‘계열 TRL: 근거 부족’ 표현은 그 구분을 명시하지 않아 서술과 충돌한다. ‘계열의 상용 운용 TRL은 근거 부족, 런타임 구현 생태계 신호는 존재’로 정정해야 한다.; 4.4 MLA D2 판정과 내러티브의 근거 표기가 불일치한다. 표는 [1, p.16]만 D2 근거로 제시하지만, 해당 단락은 8×H800에서 50K tokens/s 초과라는 정량 서비스 처리량을 기술한다[1, p.16]. ‘TTFT·절대/꼬리 지연시간 및 메모리 압박 하 지연시간은 근거 부족’은 타당하지만, D2 전체를 ‘근거 부족’으로 두면 제시된 generation throughput 근거를 무시하는 것으로 읽힌다. 판정 기준상 ‘조건부’로 조정하거나,"
+  },
+  {
+    "node": "report",
+    "attempt": 1,
+    "result": "complete"
+  },
+  {
+    "node": "master_report_gate",
+    "gate": true,
+    "result": "verified",
+    "attempt": 1,
+    "reason": ""
   }
 ]
