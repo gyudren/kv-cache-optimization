@@ -51,6 +51,47 @@ def _looks_like_table_row(text: str) -> bool:
     return bool(_TABLE_LIKE_RE.search(text))
 
 
+def split_long_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> list[str]:
+    """chunk_size보다 긴 텍스트 덩어리를 chunk_size 단위(겹침 overlap)로 강제 분할한다.
+
+    빈 줄로 나뉘지 않는 긴 문단(수식이 섞인 본문, 표처럼 보이는 텍스트 등)이나
+    큰 표 마크다운처럼, 자연스러운 문단 경계가 없어서 그대로 두면 한 청크가
+    수천~수만 자까지 커지는 경우에 사용한다. 가능하면 단어/줄 경계(공백, 개행)에서
+    자르고, 근처에 마땅한 경계가 없으면 어쩔 수 없이 글자 단위로 자른다.
+    """
+    text = text.strip()
+    if len(text) <= chunk_size:
+        return [text] if text else []
+
+    pieces: list[str] = []
+    start = 0
+    n = len(text)
+    # 자연스러운 경계(공백/개행)를 찾을 때 목표 지점에서 뒤로 얼마나 물러나 볼지
+    boundary_search_window = min(80, chunk_size // 4)
+
+    while start < n:
+        end = min(start + chunk_size, n)
+        if end < n:
+            search_from = max(start, end - boundary_search_window)
+            space_at = text.rfind(" ", search_from, end)
+            newline_at = text.rfind("\n", search_from, end)
+            boundary = max(space_at, newline_at)
+            if boundary > start:
+                end = boundary
+
+        piece = text[start:end].strip()
+        if piece:
+            pieces.append(piece)
+
+        if end >= n:
+            break
+        # 다음 조각은 overlap 만큼 뒤에서부터 시작 (겹침 유지)
+        next_start = end - overlap
+        start = next_start if next_start > start else end
+
+    return pieces
+
+
 def stitch_cross_page_paragraphs(
     paragraphs: list[tuple[str, int]],
 ) -> tuple[list[tuple[str, int, int]], list[dict]]:
@@ -109,6 +150,16 @@ def chunk_document(
     for flag in review_flags:
         flag["doc_id"] = doc_id
 
+    # chunk_size보다 긴 문단(수식·표처럼 빈 줄로 안 나뉘는 덩어리, 페이지 경계 이어붙이기로
+    # 커진 문단 등)은 이 시점에 미리 chunk_size 단위로 쪼개 둔다. 이렇게 해두면 아래
+    # 누적 루프에 들어오는 문단은 항상 chunk_size 이하이므로, "문단 하나가 통째로
+    # chunk_size를 훨씬 넘는 청크가 되는" 문제 없이 설계서대로 1,200자/겹침 200자를 지킬 수 있다.
+    split_paragraphs: list[tuple[str, int, int]] = []
+    for paragraph, start_page, end_page in stitched_paragraphs:
+        for piece in split_long_text(paragraph, chunk_size=chunk_size, overlap=overlap):
+            split_paragraphs.append((piece, start_page, end_page))
+    stitched_paragraphs = split_paragraphs
+
     chunks: list[Chunk] = []
     current_text = ""
     current_start_page: int | None = None
@@ -141,7 +192,8 @@ def chunk_document(
 
         candidate = f"{current_text}\n\n{paragraph}" if current_text else paragraph
 
-        # 현재 청크가 비어 있으면 긴 단일 문단도 통째로 담아 문단 경계를 보존한다.
+        # 문단 경계 보존: 위에서 이미 모든 문단을 chunk_size 이하로 쪼개뒀으므로,
+        # current_text가 비어 있을 때(=새 청크 시작) 들어오는 문단은 항상 그대로 담아도 안전하다.
         if len(candidate) <= chunk_size or not current_text:
             current_text = candidate
             current_start_page = (

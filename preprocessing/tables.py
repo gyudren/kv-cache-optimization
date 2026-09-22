@@ -8,6 +8,7 @@
 import re
 from dataclasses import dataclass
 
+from preprocessing.chunker import CHUNK_SIZE, OVERLAP, split_long_text
 from preprocessing.columns import group_into_lines, line_text, line_top
 from preprocessing.loader import TableBlock, Word
 
@@ -121,3 +122,60 @@ def table_chunk_text(table: NormalizedTable) -> str:
     if table.footnote:
         parts.append(table.footnote)
     return "\n\n".join(parts)
+
+
+def split_table_into_chunks(
+    table: NormalizedTable, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP
+) -> list[str]:
+    """큰 표를 chunk_size 근처 크기로 나눈다 (설계서 1,200자/겹침 200자 기준).
+
+    표 전체가 chunk_size 이하면 지금처럼 한 청크로 반환한다. 표가 더 크면(행이 많은 표)
+    행 단위로 나누되, 매 조각마다 헤더 행(컬럼명 + 구분선)을 반복해서 붙여
+    조각 하나만 봐도 어떤 열인지 알 수 있게 한다. 행 하나가 이미 chunk_size보다 큰
+    비정상적인 경우에는 헤더/줄 구조를 신뢰할 수 없으므로 글자 단위로 나눈다(split_long_text).
+    """
+    full_text = table_chunk_text(table)
+    if len(full_text) <= chunk_size:
+        return [full_text]
+
+    lines = table.markdown.split("\n")
+    if len(lines) < 3:  # 헤더 + 구분선 + 본문 1행 미만이면 표 구조를 신뢰할 수 없음
+        return split_long_text(full_text, chunk_size=chunk_size, overlap=overlap)
+
+    header_block = "\n".join(lines[:2])  # "| col | ... |" + "| --- | ... |"
+    body_lines = lines[2:]
+
+    prefix_parts = [table.caption] if table.caption else []
+
+    def render(rows: list[str]) -> str:
+        table_text = header_block + ("\n" + "\n".join(rows) if rows else "")
+        return "\n\n".join(prefix_parts + [table_text])
+
+    pieces: list[str] = []
+    current_rows: list[str] = []
+
+    for row in body_lines:
+        candidate_rows = current_rows + [row]
+        if len(render(candidate_rows)) <= chunk_size or not current_rows:
+            current_rows = candidate_rows
+            continue
+
+        pieces.append(render(current_rows))
+
+        # 겹침: 방금 확정한 조각의 마지막 행들을 overlap 글자 수만큼 다음 조각 앞에 이어붙인다.
+        overlap_rows: list[str] = []
+        overlap_len = 0
+        for prev_row in reversed(current_rows):
+            overlap_rows.insert(0, prev_row)
+            overlap_len += len(prev_row) + 1
+            if overlap_len >= overlap:
+                break
+        current_rows = overlap_rows + [row]
+
+    if current_rows:
+        pieces.append(render(current_rows))
+
+    if table.footnote:
+        pieces[-1] = f"{pieces[-1]}\n\n{table.footnote}"
+
+    return pieces

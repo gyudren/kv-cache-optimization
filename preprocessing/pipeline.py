@@ -28,7 +28,7 @@ from preprocessing.headers_footers import collect_band_lines, detect_boilerplate
 from preprocessing.loader import RawPage, load_pdf_raw_pages
 from preprocessing.noise_filter import drop_reference_pages, find_reference_start_page
 from preprocessing.page_text import Page
-from preprocessing.tables import NormalizedTable, extract_tables_for_page, table_chunk_text
+from preprocessing.tables import NormalizedTable, extract_tables_for_page, split_table_into_chunks
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 RAW_DIR = DATA_DIR / "raw"
@@ -154,25 +154,29 @@ def _process_document(
             }
         )
 
-    for table_index, table in enumerate(all_tables):
-        text = table_chunk_text(table)
-        doc_chunks.append(
-            {
-                "chunk_id": f"{doc['doc_id']}_table_{table_index:04d}",
-                "doc_id": doc["doc_id"],
-                "title": doc["title"],
-                "camp": doc["camp"],
-                "role": doc["role"],
-                "content_type": "table",
-                "start_page": table.page_number,
-                "end_page": table.page_number,
-                "citation": format_citation(doc_index, table.page_number, table.page_number),
-                "text": text,
-                "char_count": len(text),
-                "has_caption": table.caption is not None,
-                "has_footnote": table.footnote is not None,
-            }
-        )
+    table_chunk_index = 0
+    for table in all_tables:
+        # 큰 표(행이 많은 표)는 1,200자/겹침 200자 기준으로 여러 조각으로 나뉠 수 있으므로,
+        # 표 하나당 청크 인덱스가 아니라 전체 표 청크에 대해 순번을 매긴다.
+        for text in split_table_into_chunks(table, chunk_size=CHUNK_SIZE, overlap=OVERLAP):
+            doc_chunks.append(
+                {
+                    "chunk_id": f"{doc['doc_id']}_table_{table_chunk_index:04d}",
+                    "doc_id": doc["doc_id"],
+                    "title": doc["title"],
+                    "camp": doc["camp"],
+                    "role": doc["role"],
+                    "content_type": "table",
+                    "start_page": table.page_number,
+                    "end_page": table.page_number,
+                    "citation": format_citation(doc_index, table.page_number, table.page_number),
+                    "text": text,
+                    "char_count": len(text),
+                    "has_caption": table.caption is not None,
+                    "has_footnote": table.footnote is not None,
+                }
+            )
+            table_chunk_index += 1
 
     doc_summary = {
         "doc_id": doc["doc_id"],

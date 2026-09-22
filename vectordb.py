@@ -1,18 +1,12 @@
 """Embed data/processed/chunks.jsonl and load the chunks into a persistent ChromaDB collection.
 
 Usage:
-    python -m vectordb            # chunks.jsonl로 컬렉션을 안전하게 재구축
-
-Environment variables:
-    EMBEDDING_DEVICE=mps          # 기본값: mps
-    EMBEDDING_BATCH_SIZE=4        # 기본값: 4
+    python -m vectordb            # (re)build the collection from chunks.jsonl
 """
 import json
-import logging
-import math
-import os
-from pathlib import Path
+import re
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 import chromadb
@@ -21,7 +15,13 @@ from sentence_transformers import SentenceTransformer
 import torch
 
 
-logger = logging.getLogger(__name__)
+def log(msg: str) -> None:
+    """타임스탬프를 붙여서 즉시 출력하는 로그 함수.
+
+    일반 print()는 터미널이 아닌 곳(백그라운드 실행 등)으로 출력이 리다이렉트되면
+    버퍼링 때문에 한참 있다가 한꺼번에 찍힐 수 있어서, flush=True로 강제로 즉시 내보낸다.
+    """
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 # 이 파일(vectordb.py)이 있는 폴더 경로 (= 프로젝트 루트, kv-cache-optimization/)
 BASE_DIR = Path(__file__).resolve().parent
@@ -34,47 +34,9 @@ PERSIST_DIR = BASE_DIR / "data" / "chroma"
 COLLECTION_NAME = "kv_cache_chunks"
 # 사용할 임베딩 모델. README의 Tech Stack에 적힌 모델(다국어·교차언어 검색 지원, 최대 32K 토큰)
 MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
-# MPS 통합 메모리 사용량을 낮추기 위해 기본 배치를 작게 유지한다.
-BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "4"))
-STAGING_SUFFIX = "__rebuild"
-BACKUP_SUFFIX = "__backup"
-
-
-def format_duration(seconds: float) -> str:
-    """초 단위 시간을 로그용 문자열로 변환한다."""
-    seconds = max(0, round(seconds))
-    hours, remainder = divmod(seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    if hours:
-        return f"{hours}h {minutes}m {seconds}s"
-    if minutes:
-        return f"{minutes}m {seconds}s"
-    return f"{seconds}s"
-
-
-def get_embedding_device() -> str:
-    """요청한 임베딩 장치를 검증한다. 기본값은 Apple GPU인 MPS다."""
-    device = os.getenv("EMBEDDING_DEVICE", "mps").lower()
-
-    if device == "mps" and not torch.backends.mps.is_available():
-        raise RuntimeError(
-            "MPS를 사용할 수 없습니다. PyTorch/macOS 환경을 확인하거나 "
-            "EMBEDDING_DEVICE=cpu로 명시해 실행하세요."
-        )
-    if device == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA를 사용할 수 없습니다.")
-    if device not in {"mps", "cuda", "cpu"}:
-        raise ValueError("EMBEDDING_DEVICE는 mps, cuda, cpu 중 하나여야 합니다.")
-
-    return device
-
-
-def get_collection_names(client: Any) -> set[str]:
-    """설치된 Chroma 버전과 무관하게 컬렉션 이름 집합을 반환한다."""
-    return {
-        item.name if hasattr(item, "name") else str(item)
-        for item in client.list_collections()
-    }
+# 한 번에 모델에 넣어서 임베딩할 청크 개수. 표 청크처럼 아주 긴 것도 섞여 있어서
+# 배치를 너무 크게 잡으면 "진행 로그가 한참 안 찍히는" 것처럼 보이므로 작게(8개) 잡는다.
+BATCH_SIZE = 8
 
 
 class Qwen3EmbeddingFunction(EmbeddingFunction):
@@ -88,25 +50,33 @@ class Qwen3EmbeddingFunction(EmbeddingFunction):
 
     def __init__(self, model_name: str = MODEL_NAME):
         self.model_name = model_name
-        self.device = get_embedding_device()
-        local_files_only = os.getenv("EMBEDDING_LOCAL_FILES_ONLY", "0") == "1"
-        logger.info("임베딩 모델 로딩 시작 | model=%s | device=%s", model_name, self.device)
+        # NVIDIA GPU(cuda) > 맥 GPU(mps) > CPU 순으로 가능한 가속기를 사용.
+        # 예전에는 표 청크가 최대 2만자까지 길어서 mps로 돌리면 긴 시퀀스 어텐션이
+        # 메모리를 과하게 잡아먹다 "MPS backend out of memory"로 터졌는데, 이제 청킹이
+        # 1,200자(겹침 200자) 기준으로 강제 분할돼서 가장 긴 청크도 ~1,400자 수준이라
+        # mps로도 안전하게 돌아간다.
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+        log(f"임베딩 모델 로딩 시작: {model_name} (device={device})")
         # sentence-transformers 라이브러리로 HuggingFace의 Qwen3 임베딩 모델을 불러옴
         # (처음 실행할 때는 모델 파일을 인터넷에서 다운로드하므로 시간이 좀 걸릴 수 있음)
-        self.model = SentenceTransformer(
-            model_name,
-            device=self.device,
-            local_files_only=local_files_only,
-        )
-        logger.info("임베딩 모델 로딩 완료 | device=%s", self.device)
+        self.model = SentenceTransformer(model_name, device=device)
+        log("임베딩 모델 로딩 완료")
 
     def __call__(self, input: Documents) -> Embeddings:
         """문서(청크 원문) 목록을 벡터 목록으로 변환. collection.add/upsert 시 자동 호출됨."""
+        texts = list(input)
+        longest = max(len(t) for t in texts)
+        log(f"  청크 {len(texts)}개 임베딩 중... (가장 긴 청크: {longest:,}자)")
         embeddings = self.model.encode(
-            list(input),
+            texts,
             batch_size=BATCH_SIZE,
             normalize_embeddings=True,  # 벡터 길이를 1로 정규화 → 코사인 유사도 비교가 안정적
-            show_progress_bar=False,
+            show_progress_bar=True,  # 배치 내부 진행 상황을 tqdm 진행바로 표시
         )
         return embeddings.tolist()
 
@@ -142,6 +112,41 @@ class Qwen3EmbeddingFunction(EmbeddingFunction):
         return Qwen3EmbeddingFunction(model_name=config["model_name"])
 
 
+# 영문 알파벳 3자 이상이 붙어있는 "진짜 단어"를 찾는 패턴.
+# 수식이 깨져서 나온 줄에는 이런 진짜 단어가 거의 없다는 점을 노이즈 판별 기준으로 삼는다.
+_REAL_WORD_RE = re.compile(r"[A-Za-z]{3,}")
+
+
+def _is_formula_noise_line(line: str) -> bool:
+    """pdfplumber가 수식을 깨서 뽑아낸 줄인지 판단.
+
+    PDF 안의 수식은 실제로 렌더링되지 않고 글자 글리프만 좌표 순서대로 뽑혀 나오기
+    때문에, "𝐡𝐡𝑡𝑡", "𝐿𝐿", "4 …", "𝑁𝑁𝑟𝑟" 처럼 진짜 단어 없이 수식 기호·아래/위첨자
+    문자·외톨이 숫자만 있는 줄이 생긴다. 이런 줄은 문장이 아니라서 임베딩에 넣으면
+    의미 없는 토큰만 늘어 검색 관련성을 떨어뜨리므로, "3자 이상 영단어가 하나도 없는 줄"을
+    노이즈로 보고 제거한다. 실제 문장에는 거의 항상 이런 단어가 있어서 오탐 위험은 낮다.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+    return not _REAL_WORD_RE.search(stripped)
+
+
+def clean_chunk_text(text: str) -> str:
+    """임베딩 직전에 청크 텍스트에서 깨진 수식 노이즈 줄을 제거한다.
+
+    표(content_type="table") 청크는 대상이 아니다 — 표는 원래 숫자·짧은 라벨 위주라
+    이 기준을 그대로 적용하면 정상적인 표 데이터까지 지워질 수 있기 때문.
+    ChromaDB에는 이렇게 정제한 텍스트만 저장·임베딩하고, data/processed/chunks.jsonl
+    원본 파일 자체는 건드리지 않는다(원문 확인·재처리용으로 그대로 둠).
+    """
+    lines = text.split("\n")
+    kept_lines = [line for line in lines if not _is_formula_noise_line(line)]
+    cleaned = "\n".join(kept_lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)  # 줄을 지우고 남은 빈 줄 뭉치 정리
+    return cleaned.strip()
+
+
 def load_chunks(path: Path = CHUNKS_PATH) -> List[Dict[str, Any]]:
     """chunks.jsonl 파일을 읽어서 파이썬 딕셔너리 리스트로 변환.
 
@@ -162,31 +167,50 @@ def build_index(
     persist_dir: Path = PERSIST_DIR,
     collection_name: str = COLLECTION_NAME,
 ):
-    """새 컬렉션을 완성한 뒤 기존 컬렉션과 교체한다."""
-    if BATCH_SIZE < 1:
-        raise ValueError("EMBEDDING_BATCH_SIZE는 1 이상이어야 합니다.")
-
+    """chunks.jsonl → 임베딩 → ChromaDB 컬렉션 적재까지 한 번에 실행하는 메인 함수."""
     chunks = load_chunks(chunks_path)
     if not chunks:
         raise ValueError(f"No chunks found at {chunks_path}")
+    log(f"chunks.jsonl에서 청크 {len(chunks)}개 로드 완료")
+
+    # 임베딩 전에 텍스트 청크에서 깨진 수식 노이즈 줄을 제거한다.
+    # 제거 후 남는 내용이 거의 없는 청크(예: 수식으로만 가득 찬 청크)는 검색에 도움이
+    # 안 되므로 아예 색인에서 뺀다.
+    MIN_CLEANED_LENGTH = 20
+    cleaned_chunks = []
+    dropped = 0
+    for c in chunks:
+        if c["content_type"] == "text":
+            cleaned_text = clean_chunk_text(c["text"])
+        else:  # table 청크는 정제 대상이 아님
+            cleaned_text = c["text"]
+
+        if len(cleaned_text) < MIN_CLEANED_LENGTH:
+            dropped += 1
+            continue
+
+        c = {**c, "text": cleaned_text, "char_count": len(cleaned_text)}
+        cleaned_chunks.append(c)
+
+    if dropped:
+        log(f"수식 노이즈 제거 후 내용이 거의 안 남은 청크 {dropped}개는 색인에서 제외")
+    chunks = cleaned_chunks
+
+    # 글자 수가 짧은 청크부터 처리하도록 정렬.
+    # 그렇지 않으면 짧은 청크와 긴 청크(표 등, 최대 2만자)가 한 배치에 섞여서
+    # 짧은 것도 긴 것 길이에 맞춰 패딩되어 배치 전체가 느려지고, 진행 로그도 한참 안 보이게 됨.
+    # 결과(색인 내용)에는 영향 없고, 단지 처리 순서만 "짧은 것 → 긴 것"으로 바뀜.
+    chunks = sorted(chunks, key=lambda c: c["char_count"])
 
     # 저장 폴더가 없으면 생성
     persist_dir.mkdir(parents=True, exist_ok=True)
     # 디스크에 영속적으로 저장되는 ChromaDB 클라이언트 생성 (메모리 전용이 아님)
     client = chromadb.PersistentClient(path=str(persist_dir))
-    embedding_function = Qwen3EmbeddingFunction()
-    staging_name = f"{collection_name}{STAGING_SUFFIX}"
-    backup_name = f"{collection_name}{BACKUP_SUFFIX}"
-
-    # 실패했던 이전 재구축의 임시 컬렉션만 제거한다. 운영 컬렉션은 새 인덱스 완성 전까지 유지한다.
-    collection_names = get_collection_names(client)
-    if staging_name in collection_names:
-        logger.warning("미완료 임시 컬렉션 제거 | collection=%s", staging_name)
-        client.delete_collection(name=staging_name)
-
-    collection = client.create_collection(
-        name=staging_name,
-        embedding_function=embedding_function,
+    # 컬렉션이 이미 있으면 가져오고, 없으면 새로 만듦.
+    # embedding_function을 넘겨주면 이후 add/upsert/query 할 때 텍스트를 자동으로 벡터화해줌.
+    collection = client.get_or_create_collection(
+        name=collection_name,
+        embedding_function=Qwen3EmbeddingFunction(),
     )
 
     # ChromaDB에 넣을 세 가지 데이터를 각각 같은 순서의 리스트로 준비
@@ -207,108 +231,29 @@ def build_index(
         for c in chunks
     ]
 
-    total_chunks = len(chunks)
-    total_batches = math.ceil(total_chunks / BATCH_SIZE)
-    build_started_at = time.perf_counter()
-    logger.info(
-        "인덱스 재구축 시작 | chunks=%d | batches=%d | batch_size=%d | staging=%s",
-        total_chunks,
-        total_batches,
-        BATCH_SIZE,
-        staging_name,
-    )
-
-    # 각 배치를 임베딩한 직후 임시 컬렉션에 저장한다.
-    for batch_number, start in enumerate(
-        range(0, total_chunks, BATCH_SIZE),
-        start=1,
-    ):
-        end = min(start + BATCH_SIZE, total_chunks)
-        batch_started_at = time.perf_counter()
-        batch_characters = sum(len(text) for text in documents[start:end])
-        logger.info(
-            "[배치 %d/%d] 시작 | chunks=%d-%d/%d | chars=%d",
-            batch_number,
-            total_batches,
-            start + 1,
-            end,
-            total_chunks,
-            batch_characters,
-        )
-
+    # 청크가 많을 수 있으니 BATCH_SIZE개씩 나눠서 upsert
+    # upsert = "id가 이미 있으면 덮어쓰고, 없으면 새로 추가" (같은 스크립트를 다시 돌려도 안전함)
+    num_batches = (len(chunks) + BATCH_SIZE - 1) // BATCH_SIZE
+    for batch_idx, start in enumerate(range(0, len(chunks), BATCH_SIZE), start=1):
+        end = start + BATCH_SIZE
+        batch_start_time = time.time()
+        log(f"배치 {batch_idx}/{num_batches} 시작 (청크 {ids[start:end][0]} ~ {ids[start:end][-1]})")
         collection.upsert(
             ids=ids[start:end],
             documents=documents[start:end],
             metadatas=metadatas[start:end],
         )
-
-        if embedding_function.device == "mps":
-            torch.mps.empty_cache()
-
-        batch_elapsed = time.perf_counter() - batch_started_at
-        total_elapsed = time.perf_counter() - build_started_at
-        estimated_remaining = (
-            total_elapsed / batch_number * (total_batches - batch_number)
-        )
-        logger.info(
-            "[배치 %d/%d] 완료 | indexed=%d/%d (%.1f%%) | batch=%s | "
-            "elapsed=%s | ETA=%s",
-            batch_number,
-            total_batches,
-            end,
-            total_chunks,
-            end / total_chunks * 100,
-            format_duration(batch_elapsed),
-            format_duration(total_elapsed),
-            format_duration(estimated_remaining),
+        elapsed = time.time() - batch_start_time
+        log(
+            f"배치 {batch_idx}/{num_batches} 완료 "
+            f"({min(end, len(chunks))}/{len(chunks)}개 누적, {elapsed:.1f}초 소요)"
         )
 
-    indexed_count = collection.count()
-    if indexed_count != total_chunks:
-        raise RuntimeError(
-            f"임시 컬렉션 검증 실패: expected={total_chunks}, actual={indexed_count}"
-        )
-
-    # 완성된 임시 컬렉션을 운영 이름으로 교체한다. 교체 전까지 기존 인덱스는 보존된다.
-    collection_names = get_collection_names(client)
-    if backup_name in collection_names:
-        client.delete_collection(name=backup_name)
-
-    previous_collection = None
-    if collection_name in collection_names:
-        previous_collection = client.get_collection(
-            name=collection_name,
-            embedding_function=embedding_function,
-        )
-        previous_collection.modify(name=backup_name)
-
-    try:
-        collection.modify(name=collection_name)
-    except Exception:
-        if previous_collection is not None:
-            previous_collection.modify(name=collection_name)
-        raise
-
-    if previous_collection is not None:
-        client.delete_collection(name=backup_name)
-
-    total_elapsed = time.perf_counter() - build_started_at
-    logger.info(
-        "인덱스 재구축 완료 | collection=%s | chunks=%d | elapsed=%s | path=%s",
-        collection_name,
-        indexed_count,
-        format_duration(total_elapsed),
-        persist_dir,
-    )
+    log(f"done: {collection.count()} chunks in collection '{collection_name}' at {persist_dir}")
     return collection
 
 
 # 이 파일을 "python vectordb.py" 또는 "python -m vectordb"로 직접 실행했을 때만 build_index() 호출
 # (다른 파일에서 "import vectordb"로 불러올 때는 자동 실행되지 않음)
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%H:%M:%S",
-    )
     build_index()
