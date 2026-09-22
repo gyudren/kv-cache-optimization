@@ -3,7 +3,7 @@
   "page_budget": 200,
   "chunk_size": 1200,
   "overlap": 200,
-  "total_chunks": 252,
+  "total_chunks": 256,
   "needs_manual_review": true,
   "documents": [
     {
@@ -15,10 +15,9 @@
       "reference_start_page": 21,
       "excluded_reference_pages": 32,
       "indexed_pages": 21,
-      "text_chunk_count": 57,
+      "text_chunk_count": 61,
       "table_count": 0,
       "removed_boilerplate_line_count": 149,
-      "removed_equation_line_count": 392,
       "pages_with_charts": [],
       "pages_with_vector_diagrams": [
         1,
@@ -181,7 +180,6 @@
       "text_chunk_count": 60,
       "table_count": 7,
       "removed_boilerplate_line_count": 0,
-      "removed_equation_line_count": 0,
       "pages_with_charts": [],
       "pages_with_vector_diagrams": [
         2,
@@ -289,7 +287,6 @@
       "text_chunk_count": 66,
       "table_count": 3,
       "removed_boilerplate_line_count": 274,
-      "removed_equation_line_count": 6,
       "pages_with_charts": [],
       "pages_with_vector_diagrams": [
         1,
@@ -410,7 +407,6 @@
       "text_chunk_count": 58,
       "table_count": 1,
       "removed_boilerplate_line_count": 3,
-      "removed_equation_line_count": 37,
       "pages_with_charts": [],
       "pages_with_vector_diagrams": [
         3,
