@@ -17,7 +17,4 @@ pyproject.toml
 uv.lock
 
 # 데이터 전처리 산출물 (원문 PDF 및 생성된 청크)
-data/raw/*
-!data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
+#  나중에 추가 
