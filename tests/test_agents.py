@@ -59,3 +59,12 @@ def test_market_retry_does_not_embed_python_list_in_query():
     market.market_node(state, web, LLMStub())
     assert any(q.endswith("M1 시장조사 자료 필요") for q in web.queries)
     assert not any("['" in q for q in web.queries)
+
+
+def test_domain_items_normalize_llm_dimension_names_and_citations():
+    from kv_eval.agents.domain import normalize_items
+    evidence = [{"source_id": "deepseek_v2_mla_text_0016", "citation_number": 1, "page": 16}]
+    items = normalize_items([{"dimension": "MLA D1 워크로드 수용", "technology": "mla", "verdict": "적합",
+                              "explanation": "", "cited_ids": ["[1, p.16]", "[9, p.9]"]}], evidence)
+    assert items[0]["dimension"] == "D1 워크로드 수용 능력"
+    assert items[0]["cited_ids"] == ["deepseek_v2_mla_text_0016", "[9, p.9]"]  # 없는 인용은 검증에서 걸리도록 유지

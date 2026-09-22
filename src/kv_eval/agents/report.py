@@ -14,7 +14,16 @@ from ..reporting.sections import citation_catalog, citeable_evidence, used_refer
 
 TECHS = (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME"))
 
+import re
+
+# 팀 설계 산출물. 1·2장의 고정 표와 설계 판단은 이 문서를 출처 [D]로 표기한다.
+DESIGN_REF = ("[D] 판교 9반 2조 (2026). RAG-Design 설계 산출물: KV cache 최적화 기술 다관점 평가 "
+              "(A-2 문제 상황, A-4 선정 사유, C 평가 기준). 내부 설계 문서.")
+
 # 설계 산출물 A-2 (Llama-3.1-70B, FP16: 80 layers × 8 KV heads × 128 dim × K·V 2 × 2B = 320 KiB/token)
+KV_SCALE_FORMULA = ("산식: 토큰당 KV = 레이어 80 × KV head 8(GQA) × head dim 128 × (K, V) 2 × FP16 2B = 327,680B = 320KiB. "
+                    "요청 1건 = 문맥 토큰 수 × 320KiB (8K = 8,192 토큰, 128K = 131,072 토큰, 1M = 1,048,576 토큰). "
+                    "HBM 대비 비율은 80GB를 기준으로 한 근사치 [D].")
 KV_SCALE_TABLE = """| 문맥 길이 | 요청 1건 KV cache | 동시 8건 | GPU HBM 80GB 대비(1건) |
 |---|---|---|---|
 | 8K | 2.5 GiB | 20 GiB | 3% |
@@ -49,9 +58,27 @@ VERDICT_FIELDS = {
 }
 
 
-def _cell(text: Any, limit: int = 220) -> str:
-    value = " ".join(str(text or "").split()).replace("|", "/")
-    return value if len(value) <= limit else value[:limit - 1].rstrip() + "…"
+def _cell(text: Any) -> str:
+    return " ".join(str(text or "").split()).replace("|", "/")
+
+
+_OWN_HEADING = re.compile(r"^\s*#{1,6}\s*(REFERENCE|참고\s*문헌|참고자료|References?)\b", re.IGNORECASE)
+
+
+def sanitize_field(text: str) -> str:
+    """LLM이 섹션 안에 자체 REFERENCE 목록이나 '## ' 장 제목을 넣으면 필수 목차가 중복된다.
+
+    REFERENCE는 본문 인용에서 코드가 한 번만 만들므로, 필드 안의 참고문헌 블록은 잘라내고
+    '## '(장 제목) 수준 헤딩은 소제목('#### ')으로 낮춘다.
+    """
+    lines = []
+    for line in text.strip().splitlines():
+        if _OWN_HEADING.match(line):
+            break
+        if re.match(r"^\s*#{1,3}\s", line):
+            line = "#### " + line.lstrip("# ").strip()
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def _paper_citations(ids: list[str], evidence: list[dict]) -> str:
@@ -76,8 +103,8 @@ def trl_table(state: dict) -> str:
     tech = state.get("tech_result", {})
     rows = ["| 기술 | TRL 추정(공개 정보 기반) | 판단 근거 요약 |", "|---|---|---|"]
     for key, label in TECHS:
-        rows.append(f"| {label} | {_cell((tech.get('trl') or {}).get(key) or '근거 부족', 80)} | "
-                    f"{_cell((tech.get('trl_basis') or {}).get(key) or '근거 부족', 260)} |")
+        rows.append(f"| {label} | {_cell((tech.get('trl') or {}).get(key) or '근거 부족')} | "
+                    f"{_cell((tech.get('trl_basis') or {}).get(key) or '근거 부족')} |")
     return "\n".join(rows)
 
 
@@ -132,8 +159,10 @@ def evidence_balance_table(state: dict) -> str:
 
 def render_report(state: dict, llm: Any) -> str:
     sources = citeable_evidence(state["evidence"])
+    tables = {"4.1": trl_table(state), "4.2": verdict_table(state, "market"),
+              "4.3": verdict_table(state, "stakeholder"), "4.4": domain_table(state)}
     citation_context = [{"cite": ev["citation"], "technology": ev.get("technology"), "agent": ev.get("agent"),
-                         "claim": ev.get("claim", ""), "excerpt": ev.get("excerpt", "")[:550],
+                         "claim": ev.get("claim", ""), "excerpt": ev.get("excerpt", "")[:900],
                          "url": ev.get("url", "")}
                         for ev in sources]
     feedback = state.get("review_feedback", {}).get("report", {}).get("issues", [])
@@ -168,26 +197,35 @@ def render_report(state: dict, llm: Any) -> str:
         "an evidence balance table is appended by code. "
         "No ranking/endorsement. No invented deployment or quantitative results. "
         "Use the EXACT citation strings from the verified source catalog ([n, p.X] or [Wn]) after every supported fact. "
-        "Never cite non-catalog IDs. If evidence is missing, write 근거 부족 and show the gap. Keep design category labels unchanged.\n"
+        "Never cite non-catalog IDs. If evidence is missing, write 근거 부족 and show the gap. Keep design category labels unchanged. "
+        "Every number must literally appear in the excerpt of the catalog entry you cite; a figure found only in a web article must be cited "
+        "to that [Wn] as a third-party report, never to a paper citation. Do not describe a web source beyond what its excerpt says. "
+        "Statements taken from the team design document (selection reasons, non-selected candidates, KV cache scale assumptions) "
+        "must end with [D]. Do NOT write any REFERENCE / 참고문헌 list inside any field; the code builds the single REFERENCE chapter. "
+        "The following signal tables are inserted verbatim by the code; your narrative MUST use exactly the same verdicts "
+        "(if you believe a verdict is wrong, explain the nuance but do not state a different verdict):\n"
+        + "\n\n".join(f"[{k}]\n{v}" for k, v in tables.items()) + "\n"
         + repr({k: state.get(k, {}) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result", "synthesis_result")})
         + "\nVerified source catalog:\n" + repr(citation_context), ReportParts,
     )
-    parts = sections.model_dump()
+    parts = {k: sanitize_field(v) for k, v in sections.model_dump().items()}
     report = "\n\n".join([
         f"## SUMMARY\n{parts['summary']}",
-        f"## 1. 분석 배경\n{parts['background']}\n\n#### 표 1. KV cache 규모 예시 (Llama-3.1-70B, FP16, 토큰당 320KiB — 설계 산출물 A-2 산식)\n{KV_SCALE_TABLE}",
-        f"## 2. 기술 선정\n{parts['selection']}\n\n#### 표 2. 비선정 후보와 사유 (설계 산출물 A-4)\n{UNSELECTED_TABLE}",
+        f"## 1. 분석 배경\n{parts['background']}\n\n#### 표 1. KV cache 규모 예시 (Llama-3.1-70B, FP16 — 설계 산출물 A-2) [D]\n{KV_SCALE_TABLE}\n\n{KV_SCALE_FORMULA}",
+        f"## 2. 기술 선정\n{parts['selection']}\n\n#### 표 2. 비선정 후보와 사유 (설계 단계 팀 판단 — 설계 산출물 A-4) [D]\n{UNSELECTED_TABLE}",
         f"## 3. 기술 개요\n{parts['technology_overview']}",
         "## 4. 관점별 평가\n"
-        f"### 4.1 기술 성숙도(TRL)\n{trl_table(state)}\n\n{parts['perspective_trl']}\n\n"
-        f"### 4.2 시장성\n{verdict_table(state, 'market')}\n\n{parts['perspective_market']}\n\n"
-        f"### 4.3 이해관계자\n{verdict_table(state, 'stakeholder')}\n\n{parts['perspective_stakeholder']}\n\n"
-        f"### 4.4 도메인 적용성(D1-D7)\n{domain_table(state)}\n\n{parts['perspective_domain']}",
+        f"### 4.1 기술 성숙도(TRL)\n{tables['4.1']}\n\n{parts['perspective_trl']}\n\n"
+        f"### 4.2 시장성\n{tables['4.2']}\n\n{parts['perspective_market']}\n\n"
+        f"### 4.3 이해관계자\n{tables['4.3']}\n\n{parts['perspective_stakeholder']}\n\n"
+        f"### 4.4 도메인 적용성(D1-D7)\n{tables['4.4']}\n\n{parts['perspective_domain']}",
         f"## 5. 종합 의견\n{parts['synthesis']}",
         f"## 6. 시사점\n{parts['implications']}",
         f"## 7. 한계점\n{parts['limitations']}\n\n#### 표 7. 증거 균형표 (중복 제거 후 수집·검증된 Evidence 수)\n{evidence_balance_table(state)}",
     ])
     refs, _ = used_references(report, state["evidence"])
+    if "[D]" in report:
+        refs.append(DESIGN_REF)
     report += "\n\n## REFERENCE\n" + ("\n".join(f"- {ref}" for ref in refs) if refs else "근거 부족: 실제 사용한 검증 가능 참고자료 없음") + "\n"
     return report
 

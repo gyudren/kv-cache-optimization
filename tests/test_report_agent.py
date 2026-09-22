@@ -66,3 +66,16 @@ def test_markdown_tables_render_as_pdf_tables(tmp_path: Path):
     assert any(isinstance(f, Table) for f in flowables)
     paths = export_report(render_report(state(), ReportLLM()), str(tmp_path), "t")
     assert Path(paths["pdf"]).stat().st_size > 0
+
+
+def test_llm_reference_block_inside_field_is_removed():
+    from kv_eval.agents.report import sanitize_field
+    text = "본문 [1, p.7]\n## 소제목\n#### REFERENCE\n- [1] 중복 목록"
+    cleaned = sanitize_field(text)
+    assert "REFERENCE" not in cleaned and "#### 소제목" in cleaned
+
+
+def test_design_reference_is_listed_once_when_design_tables_are_used():
+    report = render_report(state(), ReportLLM())
+    assert report.count("## REFERENCE\n") == 1
+    assert report.count("[D] 판교 9반 2조") == 1
