@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/evidence.schema.json",
+  "title": "KV Cache Evaluation Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_id",
+    "agent",
+    "attempt",
+    "technology",
+    "perspective",
+    "criterion_id",
+    "claim",
+    "stance",
+    "source_type",
+    "title",
+    "authors_or_org",
+    "publication_date",
+    "url",
+    "document_id",
+    "page",
+    "locator",
+    "quote_or_paraphrase",
+    "directness",
+    "quality",
+    "retrieved_at"
+  ],
+  "properties": {
+    "source_id": { "type": "string", "minLength": 1 },
+    "agent": {
+      "type": "string",
+      "enum": [
+        "technical_research",
+        "market_evaluation",
+        "stakeholder_evaluation",
+        "domain_evaluation"
+      ]
+    },
+    "attempt": { "type": "integer", "minimum": 0 },
+    "technology": {
+      "type": "string",
+      "enum": ["DeepSeek-V2 MLA", "ITME", "InfiniGen", "CXL-PNM", "technology_family"]
+    },
+    "perspective": {
+      "type": "string",
+      "enum": ["technical", "trl", "market", "stakeholder", "domain"]
+    },
+    "criterion_id": {
+      "type": "string",
+      "pattern": "^(Q[1-7]|TRL|FAMILY_TRL|M[1-3]|S[1-3]|D[1-7])$"
+    },
+    "claim": { "type": "string", "minLength": 1 },
+    "stance": { "type": "string", "enum": ["positive", "concern", "neutral"] },
+    "source_type": {
+      "type": "string",
+      "enum": ["paper", "official", "standard", "repository", "market_report", "news", "community"]
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "authors_or_org": { "type": ["string", "null"] },
+    "publication_date": { "type": ["string", "null"] },
+    "url": { "type": ["string", "null"], "format": "uri" },
+    "document_id": { "type": ["string", "null"] },
+    "page": { "type": ["integer", "null"], "minimum": 1 },
+    "locator": { "type": ["string", "null"] },
+    "quote_or_paraphrase": { "type": "string", "minLength": 1 },
+    "directness": { "type": "string", "enum": ["direct", "indirect"] },
+    "quality": { "type": "string", "enum": ["high", "medium", "low"] },
+    "retrieved_at": { "type": ["string", "null"], "format": "date" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "source_type": { "const": "paper" } } },
+      "then": {
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 },
+          "page": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_type": {
+            "enum": ["official", "standard", "repository", "market_report", "news", "community"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "retrieved_at": { "type": "string", "format": "date" }
+        }
+      }
+    }
+  ]
+}
