@@ -24,7 +24,6 @@ from pathlib import Path
 from preprocessing.budget import enforce_page_budget
 from preprocessing.chunker import CHUNK_SIZE, OVERLAP, chunk_document
 from preprocessing.columns import group_into_lines, line_text, line_top, reconstruct_reading_order_text
-from preprocessing.equations import strip_equation_lines
 from preprocessing.headers_footers import collect_band_lines, detect_boilerplate_lines, strip_boilerplate_lines
 from preprocessing.loader import RawPage, load_pdf_raw_pages
 from preprocessing.noise_filter import drop_reference_pages, find_reference_start_page
@@ -100,7 +99,6 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
     text_pages: list[Page] = []
     all_tables: list[NormalizedTable] = []
     removed_boilerplate_lines = 0
-    removed_equation_lines = 0
 
     for raw_page in raw_pages:
         exclude_bboxes = [t.bbox for t in raw_page.tables] + raw_page.rejected_region_bboxes
@@ -109,8 +107,6 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
         )
         clean_text, removed_lines = strip_boilerplate_lines(body_text, boilerplate)
         removed_boilerplate_lines += len(removed_lines)
-        clean_text, removed_eq_lines = strip_equation_lines(clean_text)
-        removed_equation_lines += len(removed_eq_lines)
         text_pages.append(Page(doc_id=doc["doc_id"], page_number=raw_page.page_number, text=clean_text))
 
         all_tables.extend(
@@ -179,7 +175,6 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
         "text_chunk_count": len(text_chunks),
         "table_count": len(all_tables),
         "removed_boilerplate_line_count": removed_boilerplate_lines,
-        "removed_equation_line_count": removed_equation_lines,
         "pages_with_charts": pages_with_charts,
         "pages_with_vector_diagrams": pages_with_vector_diagrams,
         "page_boundary_review_flags": review_flags,
