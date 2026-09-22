@@ -43,19 +43,58 @@ class RawPage:
     images: list[ImageBlock]
 
 
+# pdfplumber 기본값(3pt)은 이 논문들의 실제 단어 간 간격(약 2.2pt, LaTeX 양쪽 정렬 조판)보다
+# 커서 한 줄 전체가 하나의 "단어"로 뭉쳐버린다(공백이 다 사라짐). 실측 간격보다 작게 낮춰서
+# 단어 경계를 올바르게 분리한다.
+WORD_X_TOLERANCE = 1.5
+
+# find_tables()는 선(line)만 있으면 표로 인식하므로, 아키텍처/블록 다이어그램처럼 테두리
+# 상자가 있는 그림도 "표"로 오탐지한다. 실제 데이터 표처럼 보이는지 최소한으로 검증해
+# 다이어그램을 표로 잘못 뽑아 본문에서 통째로 잘라내는 것을 막는다.
+MIN_TABLE_ROWS = 2
+MIN_TABLE_COLS = 2
+MIN_TABLE_NON_EMPTY_CELL_RATIO = 0.5
+MAX_TABLE_NEWLINES_PER_CELL = 4
+
+
+def _looks_like_real_table(rows: list[list[str | None]]) -> bool:
+    if len(rows) < MIN_TABLE_ROWS:
+        return False
+    num_cols = max((len(row) for row in rows), default=0)
+    if num_cols < MIN_TABLE_COLS:
+        return False
+
+    total_cells = 0
+    non_empty_cells = 0
+    for row in rows:
+        for cell in row:
+            total_cells += 1
+            text = (cell or "").strip()
+            if not text:
+                continue
+            non_empty_cells += 1
+            if text.count("\n") > MAX_TABLE_NEWLINES_PER_CELL:
+                # 다이어그램/차트 안의 여러 줄 라벨이 한 셀에 뭉쳐 들어온 경우
+                return False
+
+    if total_cells == 0:
+        return False
+    return (non_empty_cells / total_cells) >= MIN_TABLE_NON_EMPTY_CELL_RATIO
+
+
 def load_pdf_raw_pages(doc_id: str, pdf_path: Path) -> list[RawPage]:
     raw_pages: list[RawPage] = []
     with pdfplumber.open(str(pdf_path)) as pdf:
         for index, page in enumerate(pdf.pages, start=1):
             words = [
                 Word(text=w["text"], x0=w["x0"], x1=w["x1"], top=w["top"], bottom=w["bottom"])
-                for w in page.extract_words()
+                for w in page.extract_words(x_tolerance=WORD_X_TOLERANCE)
             ]
 
             tables = []
             for table in page.find_tables():
                 rows = table.extract()
-                if rows:
+                if rows and _looks_like_real_table(rows):
                     tables.append(TableBlock(bbox=table.bbox, rows=rows))
 
             images = [

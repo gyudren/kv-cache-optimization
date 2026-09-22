@@ -37,6 +37,25 @@ def check_reference_exclusion() -> None:
     print("[OK] 참고문헌 구간 자동 탐지 및 제외")
 
 
+def check_reference_heading_at_bottom_of_page() -> None:
+    # 2단 레이아웃 논문에서는 본문이 끝나자마자 같은 페이지 하단에 "References" 제목만 나오는
+    # 경우가 있다. 이때 그 페이지의 본문(제목 이전)은 계속 색인 대상이어야 한다.
+    pages = [
+        Page(doc_id="doc", page_number=1, text="Section 4.\n\nWe conclude the discussion here.\n\nReferences"),
+        Page(doc_id="doc", page_number=2, text="[1] Someone. Some Paper. 2024."),
+    ]
+
+    start = find_reference_start_page(pages)
+    assert start == 1, f"제목이 페이지 하단에 있어도 그 페이지에서 탐지되어야 함: {start}"
+
+    body, excluded = drop_reference_pages(pages, start)
+    assert [p.page_number for p in body] == [1], "제목 이전 본문이 유지되지 않음"
+    assert "We conclude the discussion here." in body[0].text
+    assert "References" not in body[0].text
+    assert [p.page_number for p in excluded] == [1, 2]
+    print("[OK] 페이지 하단에 있는 References 제목도 탐지하고 그 이전 본문은 보존")
+
+
 def check_manual_reference_override() -> None:
     pages = [Page(doc_id="doc", page_number=i, text=f"body {i}") for i in range(1, 4)]
     manual_reference_start = 2
@@ -238,6 +257,7 @@ def check_synthetic_pdf_pipeline() -> None:
 
 def main() -> None:
     check_reference_exclusion()
+    check_reference_heading_at_bottom_of_page()
     check_manual_reference_override()
     check_chunking_preserves_paragraphs()
     check_overlap_between_consecutive_chunks()
