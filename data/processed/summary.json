@@ -1,0 +1,504 @@
+{
+  "total_pages": 96,
+  "page_budget": 200,
+  "chunk_size": 1200,
+  "overlap": 200,
+  "total_chunks": 203,
+  "needs_manual_review": true,
+  "documents": [
+    {
+      "doc_id": "deepseek_v2_mla",
+      "title": "DeepSeek-V2 (MLA)",
+      "camp": "SW",
+      "role": "primary",
+      "total_pages": 52,
+      "reference_start_page": null,
+      "excluded_reference_pages": 0,
+      "indexed_pages": 52,
+      "text_chunk_count": 39,
+      "table_count": 7,
+      "removed_boilerplate_line_count": 76,
+      "pages_with_charts": [],
+      "page_boundary_review_flags": [
+        {
+          "page_boundary": [
+            2,
+            3
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "Acknowledgments 27\nB DeepSeek-V2-Lite: A16BModelEquippedwithMLAandDeepSeekMoE 29",
+          "head_preview": "B.1 ModelDescription . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            3,
+            4
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "gDataDebiasing 32\nF AdditionalEvaluationsonMathandCode 32\nG EvaluationFormats 33",
+          "head_preview": "1. Introduction\nInthepastfewyears,LargeLanguageModels(LLMs)(Anthropic,2023;Googl",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            4,
+            5
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "he\nmaximumgenerationthroughputto5.76times. WealsoevaluateDeepSeek-V2Chat(SFT)and",
+          "head_preview": "DeepSeekMoE\n… … Routed Expert\nOutput Hidden Shared Expert\nTransformer Block ×\n′\n",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            5,
+            6
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "r efforts in alignment, encompassing Supervised Fine-Tuning (SFT), Reinforcement",
+          "head_preview": "Learning(RL),theevaluationresults,andotherdiscussion(Section4). Finally,wesummar",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            6,
+            7
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "𝑛 ℎ×𝑑\nq𝑡,k𝑡,v𝑡 ℎ ℎ ℎ ,respectively:\n=𝑊𝑄\nq𝑡 h𝑡, (1)\n=𝑊𝐾\nk𝑡 h𝑡, (2)\n=𝑊𝑉\nv𝑡 h𝑡, (3)",
+          "head_preview": "Cached During Inference\nMulti-Head Attention (MHA) Grouped-Query Attention (GQA)",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            7,
+            8
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "eover, in order to reduce the activation memory during training, we also perform",
+          "head_preview": "low-rankcompressionforthequeries,evenifitcannotreducetheKVcache:\n𝑄 =𝑊𝐷𝑄\nc h𝑡, (1",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            10,
+            11
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "\nnismguaranteesthatthesendingcommunicationofeachdeviceisbounded,ifacertaindevice",
+          "head_preview": "receives more tokens than other devices, the practical communication efficiency ",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            12,
+            13
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": " customize faster CUDA kernels for communications, routing algorithms, and fused",
+          "head_preview": "Pressure Testing DeepSeek-V2 Base 128K Context via \"Needle In A HayStack\"\n9 9\n)%",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            13,
+            14
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "nglishandChinese. Ourevaluationisbasedonourinternalevaluationframeworkintegrated",
+          "head_preview": "inourHAI-LLMframework. Includedbenchmarksarecategorizedandlistedasfollows,where\n",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            14,
+            15
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "h benchmarks. As for Chinese benchmarks, Qwen1.5 72B shows better performance on",
+          "head_preview": "DeepSeek\nBenchmark(Metric) #Shots\n67B\nArchitecture - Dense\n#ActivatedParams - 67",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            15,
+            16
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "wertrainingtokensand\nDeepSeek-V2stilldemonstratescomparablecodeandmathcapability",
+          "head_preview": "70BoverwhelminglyonChinesebenchmarks.\nFinally, it is worth mentioning that certa",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            18,
+            19
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "nificantmargin. Itsignificantlyoutperformsthesecond-bestopen-sourcemodel,Qwen1.5",
+          "head_preview": "DeepSeek Qwen1.5 LLaMA3 Mixtral DeepSeek-V2 DeepSeek-V2\nBenchmark #Shots\n67BChat",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            20,
+            21
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "een the performance on standard and\nalign a model with human preferences without",
+          "head_preview": "compromisingitsgeneralperformancepresentsavaluabledirectionforfutureresearch.\nOn",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            25,
+            26
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "iu,\nB.Shi,Y.Cui,J.Li,J.Zeng,R.Wang,W.Xie,Y.Li,Y.Patterson,Z.Tian,Y.Zhang,H.Zhou,",
+          "head_preview": "S.Liu,Z.Zhao,Q.Zhao,C.Yue,X.Zhang,Z.Yang,K.Richardson,andZ.Lan. CLUE:Achi-\nnesel",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            27,
+            28
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "chaoZhang\nYiliangXiong\nYilongZhao\nYingHe\nYishiPiao\nYixinDong\nYixuanTan\nYiyuanLiu",
+          "head_preview": "YongjiWang\nYongqiangGuo\nYuduanWang\nYuhengZou\nYuxiangYou\nYuxuanLiu\nZ.Z.Ren\nZehuiR",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            29,
+            30
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "ulingstrategyforit,anditistrainedwith\nDuringpre-training,wesetthemaximumsequence",
+          "head_preview": "lengthto4K,andtrainDeepSeek-V2-Liteon5.7Ttokens.\nonthesamedevice.\nand do not emp",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            30,
+            31
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "epSeek-V2-LiteChatandcompareitwithour\nDeepSeek-V2-Litealsooutperformsourprevious",
+          "head_preview": "C. Full Formulas of MLA\nInordertodemonstratethecompletecomputationprocessofMLA,w",
+          "doc_id": "deepseek_v2_mla"
+        },
+        {
+          "page_boundary": [
+            32,
+            33
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "cemodels.\nWefurthersharemoreresultsinFigure5onHumanEvalandLiveCodeBench,wherethe",
+          "head_preview": "Agreement Ground-TruthLabel Annotator1 Annotator2 Annotator3\nGround-TruthLabel 1",
+          "doc_id": "deepseek_v2_mla"
+        }
+      ]
+    },
+    {
+      "doc_id": "itme",
+      "title": "ITME",
+      "camp": "HW",
+      "role": "primary",
+      "total_pages": 13,
+      "reference_start_page": 12,
+      "excluded_reference_pages": 2,
+      "indexed_pages": 11,
+      "text_chunk_count": 8,
+      "table_count": 32,
+      "removed_boilerplate_line_count": 0,
+      "pages_with_charts": [],
+      "page_boundary_review_flags": [
+        {
+          "page_boundary": [
+            1,
+            2
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "e,ITMEstrategicallytar-\ngetsLLMdatatypesthatexhibithighpredictabilityanddominate",
+          "head_preview": "Table1:LLMDataCharacteristicsandTargetTiering\ntheoverallmemoryfootprint.Table1su",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            2,
+            3
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "expensive,high-computehard-\nwareandcomplexsoftwarestackstomanagethenetworkingand",
+          "head_preview": "Network (i.e., RDMA)\nRDMA read / write RDMA read KV Cache Weights\nTurn 0 Q0 A0 L",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            3,
+            4
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "ncrementallygrowing theselargerunitstobestreamedeffectivelythroughthepipeline.\n3",
+          "head_preview": "Table2:Metadata(SRAM)requirements\nCXL IP Cache\n.mem Controller Memory DDR4\nContr",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            4,
+            5
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": " 32 GB\nfunctionalunits: requiresonlyoneadditionaltagbit(10-bittag).Thisresults\n4",
+          "head_preview": "Table3:BandwidthofInternalChannelConfigurations\nIMTE Remote Manager ($ 4.3)\n1Pre",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            5,
+            6
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "ulkofthestorage asatensor.Finally,chm_prefetch_size(addr,count)reducessoftware\n5",
+          "head_preview": "overheadforlargedeterministicstreamsbyfetching𝑁 contiguous\npagesfromabaseaddress",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            6,
+            7
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "ityforreadrequests.When-\neveraslotintheloadringbufferbecomesavailable,triggering",
+          "head_preview": "animmediatedatafetch,theschedulersuppressesanypending\nwrites.TheI/Oslotisyielded",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            7,
+            8
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "sabilitytotriggerthe\ndevice’sinternalhardwareprefetchengineviauser-levelprefetch",
+          "head_preview": "APIsforCXL-hybridmemory(seeSection3.2).Thisproactiveman-\nagementissynchronizedwi",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            9,
+            10
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "htheupperperformancebound contentionwithintheCXL-hybridmemory.Thispreventssome\n9",
+          "head_preview": "Local NVMe-oF (CPU staging buffer 30GB) Speedup Local NVMe-oF (CPU staging buffe",
+          "doc_id": "itme"
+        },
+        {
+          "page_boundary": [
+            10,
+            11
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "forreadsand12GB/sforwrites\nduringDRAMcachehits,representinga20–25%performancegap",
+          "head_preview": "Recomp. ITME (FPGA) Recomp. ITME (FPGA) Multi-tierKVCacheandPrefetching.Thesubst",
+          "doc_id": "itme"
+        }
+      ]
+    },
+    {
+      "doc_id": "infinigen",
+      "title": "InfiniGen",
+      "camp": "HW",
+      "role": "baseline",
+      "total_pages": 18,
+      "reference_start_page": null,
+      "excluded_reference_pages": 0,
+      "indexed_pages": 18,
+      "text_chunk_count": 19,
+      "table_count": 64,
+      "removed_boilerplate_line_count": 66,
+      "pages_with_charts": [],
+      "page_boundary_review_flags": [
+        {
+          "page_boundary": [
+            1,
+            2
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "htsof-\n†Equalcontribution flinetomakethespeculationfarmoreefficientandprecise,by",
+          "head_preview": "skewingtheTransformerarchitecturequeryandkeymatrices 2.1 LargeLanguageModels\ntoe",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            4,
+            5
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "nselectionisappropriate.\nIn this context, several recent works propose to reduce",
+          "head_preview": "the KV cache size through key/value evictions at runtime\nwithinaconstrainedKVcac",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            5,
+            6
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "uetokenstoproperlyrepresent\ntheattentionweightofthebaselinemodel.Furthermore,the",
+          "head_preview": "numberofkeytokensrequiredtoreach0.9variesevenforthe InfiniGen System\nadjacentque",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            7,
+            8
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "atrices.X denotestheat-\nK a\ntentioninput.WesettheorthogonalmatrixAwhosedirection",
+          "head_preview": "Offline\nSkewing\nPrefill Decoding\nPartial Layer (𝒊−𝟏) Layer 𝒊\nW e ig h t I d x\nG ",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            8,
+            9
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "he3rdtokenisthemaximumattention\nweightdividedbye5≈148.4.Eventhoughwedonotusethis",
+          "head_preview": "token,itdoesnotnoticeablyhurttheaccuracyofthemodel\nsinceitaccountsforlessthan1%o",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            10,
+            11
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "he perplexity of InfiniGen\nremainsconsistentlycomparabletothefull-cachebaseline,",
+          "head_preview": "Table 2: Perplexityon WikiText-2 andPTB with2048 sequence\nlengthwithorwithoutKVc",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            11,
+            12
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "inference latency across\ndifferentbatchsizes.TheresultsshowthatInfiniGenachieves",
+          "head_preview": "6 6\nINT4 H2O H2O InfiniGen INT4 HH22OO InfiniGen\npudeepS 4 pudeepS 4\n2 2\n0 0\n512",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            12,
+            13
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "eninferencelatencyandaccuracy.\nPartialWeightRatio.Figure17(b)showstheaccuracyand",
+          "head_preview": "Figure18:LatencybreakdownofaTransformerblockforOPT-13B\nwithasequencelengthof2048",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            13,
+            14
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "re20(b)furthershowsthatthe\nattentionweightsofkeytokenscanchangeacrossiterations;",
+          "head_preview": "100 Layer 18, Head 30 ploitquantizationorsparsitytomakeLLMsefficientthrough\n0.8\n",
+          "doc_id": "infinigen"
+        },
+        {
+          "page_boundary": [
+            16,
+            17
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "es. Trainingmillionsofperson-\nalized dialogue agents. In Conference on Empirical",
+          "head_preview": "Methods in Natural Language Processing (EMNLP), Support for Programming Language",
+          "doc_id": "infinigen"
+        }
+      ]
+    },
+    {
+      "doc_id": "cxl_pnm",
+      "title": "CXL-PNM",
+      "camp": "HW",
+      "role": "baseline",
+      "total_pages": 13,
+      "reference_start_page": 12,
+      "excluded_reference_pages": 2,
+      "indexed_pages": 11,
+      "text_chunk_count": 12,
+      "table_count": 22,
+      "removed_boilerplate_line_count": 12,
+      "pages_with_charts": [],
+      "page_boundary_review_flags": [
+        {
+          "page_boundary": [
+            1,
+            2
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "orrespondingauthor. cardingany[9,14,21,31,32,43,47,55,61].Althougheviction-based",
+          "head_preview": "schemesimprovememoryefficiency,theirirreversiblenaturerisks\ndegradingaccuracybyd",
+          "doc_id": "cxl_pnm"
+        },
+        {
+          "page_boundary": [
+            2,
+            3
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "tiesdependoninference-time\nprocessingofextendedcontexts,withmodernLLMssupporting",
+          "head_preview": "Model CW\nLlama3.1-8B 128K\nLlama3.1-70B 128K\nLlama3.1-405B 128K\nTable1:LLMspecifi",
+          "doc_id": "cxl_pnm"
+        },
+        {
+          "page_boundary": [
+            3,
+            4
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": ",interconnectedviaaCXL\n3.0switchthatsupportsPCIe6.0physicallayersanddevicelinks,",
+          "head_preview": "eachconfiguredwithx8lanesperdevice.Thehostconnectsto\ntheswitchwithx16lanes.Thepr",
+          "doc_id": "cxl_pnm"
+        },
+        {
+          "page_boundary": [
+            6,
+            7
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "parallelism(DP)foratten-\ntioncomputationwithinthePNMcluster.AsshowninFigure7(b),",
+          "head_preview": "Figure 8: Effects of Steady Selection on the Llama3.1-8B\nmodel.(a)AsthenumberofP",
+          "doc_id": "cxl_pnm"
+        },
+        {
+          "page_boundary": [
+            7,
+            8
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "mberoftokensisdetermined\ntofitwithinthecapacitythatcanaccommodateallbatchsamples",
+          "head_preview": "enabledbytheproposedPNM-KVconfiguration.Duringthegener-\nationstage,ateachstep,fr",
+          "doc_id": "cxl_pnm"
+        },
+        {
+          "page_boundary": [
+            9,
+            10
+          ],
+          "reason": "sentence_incomplete",
+          "tail_preview": "yabout2.2×sincebothGPUand\nKV).WeevaluateonLlama3.1-405Bwitha1M-tokencontextusing",
+          "head_preview": "EvaluatedonLlama3.1-405Bat1Mcontextlengthwitha2×GPUnode.\n2×GPUnodeswhilescalingP",
+          "doc_id": "cxl_pnm"
+        }
+      ]
+    }
+  ]
+}
