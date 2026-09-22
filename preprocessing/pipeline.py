@@ -37,6 +37,7 @@ PROCESSED_DIR = DATA_DIR / "processed"
 MANIFEST_PATH = DATA_DIR / "manifest.json"
 
 CHART_AREA_RATIO_THRESHOLD = 0.15  # 페이지 면적의 이 비율을 넘는 이미지는 차트로 간주해 검토 대상 표시
+VECTOR_DIAGRAM_SHAPE_THRESHOLD = 20  # 이 개수 이상의 사각형/선/곡선이 있으면 벡터 다이어그램으로 간주
 
 
 def format_citation(doc_index: int, start_page: int, end_page: int) -> str:
@@ -66,6 +67,19 @@ def _pages_with_large_images(raw_pages: list[RawPage]) -> list[int]:
     return flagged
 
 
+def _pages_with_vector_diagrams(raw_pages: list[RawPage]) -> list[int]:
+    """래스터 이미지가 아니라 사각형/선/곡선으로 직접 그린 아키텍처 다이어그램·차트를 감지한다.
+
+    이런 다이어그램은 표로도, 이미지로도 잡히지 않고 라벨 텍스트만 본문 흐름 중간에 끼어들어가
+    주변 문장과 뒤섞일 수 있어(성능 실험 결과) 별도로 표시해 사람이 확인하게 한다.
+    """
+    return [
+        raw_page.page_number
+        for raw_page in raw_pages
+        if raw_page.vector_shape_count >= VECTOR_DIAGRAM_SHAPE_THRESHOLD
+    ]
+
+
 def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]:
     pdf_path = RAW_DIR / doc["filename"]
     if not pdf_path.exists():
@@ -89,8 +103,8 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
     removed_equation_lines = 0
 
     for raw_page in raw_pages:
-        table_bboxes = [t.bbox for t in raw_page.tables]
-        body_text = reconstruct_reading_order_text(raw_page.words, raw_page.width, exclude_bboxes=table_bboxes)
+        exclude_bboxes = [t.bbox for t in raw_page.tables] + raw_page.rejected_region_bboxes
+        body_text = reconstruct_reading_order_text(raw_page.words, raw_page.width, exclude_bboxes=exclude_bboxes)
         clean_text, removed_lines = strip_boilerplate_lines(body_text, boilerplate)
         removed_boilerplate_lines += len(removed_lines)
         clean_text, removed_eq_lines = strip_equation_lines(clean_text)
@@ -102,6 +116,7 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
         )
 
     pages_with_charts = _pages_with_large_images(raw_pages)
+    pages_with_vector_diagrams = _pages_with_vector_diagrams(raw_pages)
 
     reference_start_page = find_reference_start_page(
         text_pages, manual_start_page=doc.get("reference_start_page")
@@ -164,6 +179,7 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
         "removed_boilerplate_line_count": removed_boilerplate_lines,
         "removed_equation_line_count": removed_equation_lines,
         "pages_with_charts": pages_with_charts,
+        "pages_with_vector_diagrams": pages_with_vector_diagrams,
         "page_boundary_review_flags": review_flags,
     }
 
@@ -195,7 +211,8 @@ def run(chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> dict:
             f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
     needs_manual_review = any(
-        doc["pages_with_charts"] or doc["page_boundary_review_flags"] for doc in doc_summaries
+        doc["pages_with_charts"] or doc["pages_with_vector_diagrams"] or doc["page_boundary_review_flags"]
+        for doc in doc_summaries
     )
 
     result = {
@@ -217,8 +234,8 @@ def run(chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> dict:
     print(f"- 청크: {chunks_path}")
     print(f"- 요약: {summary_path}")
     if needs_manual_review:
-        print("주의: 차트/표 경계 의심 항목이 있습니다. summary.json의 pages_with_charts / "
-              "page_boundary_review_flags를 확인하세요.")
+        print("주의: 차트/다이어그램/표 경계 의심 항목이 있습니다. summary.json의 pages_with_charts / "
+              "pages_with_vector_diagrams / page_boundary_review_flags를 확인하세요.")
 
     return result
 

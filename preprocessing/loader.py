@@ -41,6 +41,8 @@ class RawPage:
     words: list[Word]
     tables: list[TableBlock]
     images: list[ImageBlock]
+    vector_shape_count: int  # 사각형/선/곡선 등 벡터 드로잉 요소 수(아키텍처 다이어그램 탐지용)
+    rejected_region_bboxes: list[tuple[float, float, float, float]]  # 표로 보였지만 기각된 영역(대부분 다이어그램)
 
 
 # pdfplumber 기본값(3pt)은 이 논문들의 실제 단어 간 간격(약 2.2pt, LaTeX 양쪽 정렬 조판)보다
@@ -92,15 +94,23 @@ def load_pdf_raw_pages(doc_id: str, pdf_path: Path) -> list[RawPage]:
             ]
 
             tables = []
+            rejected_region_bboxes = []
             for table in page.find_tables():
                 rows = table.extract()
                 if rows and _looks_like_real_table(rows):
                     tables.append(TableBlock(bbox=table.bbox, rows=rows))
+                else:
+                    # 표 후보였지만 기각됨(대부분 아키텍처 다이어그램/차트) - 표로 만들지는
+                    # 않되, 라벨 텍스트가 본문 문장 사이에 끼어들어 뒤섞이지 않도록
+                    # 본문 재구성에서는 제외한다.
+                    rejected_region_bboxes.append(table.bbox)
 
             images = [
                 ImageBlock(bbox=(img["x0"], img["top"], img["x1"], img["bottom"]))
                 for img in page.images
             ]
+
+            vector_shape_count = len(page.rects) + len(page.lines) + len(page.curves)
 
             raw_pages.append(
                 RawPage(
@@ -111,6 +121,8 @@ def load_pdf_raw_pages(doc_id: str, pdf_path: Path) -> list[RawPage]:
                     words=words,
                     tables=tables,
                     images=images,
+                    vector_shape_count=vector_shape_count,
+                    rejected_region_bboxes=rejected_region_bboxes,
                 )
             )
     return raw_pages
