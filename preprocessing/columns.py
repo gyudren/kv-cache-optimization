@@ -6,13 +6,14 @@ y좌표(top) 순으로 단어를 나열하기 때문에 2단 문서에서는 좌
 위→아래로 모두 읽은 뒤 우측 컬럼을 위→아래로 읽는 순서로 재조립한다.
 """
 
+from preprocessing.headers_footers import BOTTOM_BAND_RATIO, TOP_BAND_RATIO
 from preprocessing.loader import Word
 
 LINE_Y_TOLERANCE = 3.0  # pt, 이 거리 이내의 단어는 같은 줄로 묶음
 COLUMN_GAP_THRESHOLD = 15.0  # pt, 이보다 큰 단어 간 간격은 컬럼 사이 거터로 간주
 TWO_COLUMN_ROW_RATIO_THRESHOLD = 0.4  # 거터 간격을 포함한 줄의 비율이 이 값 이상이면 2단으로 판정
 
-MIN_COLUMN_SPLIT_GAP = 80.0  # pt, 줄 시작 x좌표 분포에서 이 값 이상 벌어져야 컬럼 거터로 인정
+MIN_COLUMN_SPLIT_GAP = 15.0  # pt, 실제 컬럼 거터는 보통 20~40pt 수준이라 이를 기준으로 잡음
 MIN_COLUMN_SIDE_LINE_RATIO = 0.15  # 분리선 양쪽에 각각 최소 이 비율 이상의 줄이 있어야 함
 
 # 이 논문들은 문단 사이에 빈 줄을 넣지 않고 "첫 줄 들여쓰기"로만 문단을 구분한다.
@@ -101,30 +102,50 @@ def _gutter_row_ratio(lines: list[list[Word]], page_width: float) -> float:
     return gutter_rows / len(lines)
 
 
-def _detect_column_split_x(lines: list[list[Word]]) -> float | None:
-    """줄 시작 x좌표(x0) 분포에서 가장 큰 간격을 찾아 컬럼 분리선을 구한다.
+MIN_WORDS_FOR_COLUMN_GAP_DETECTION = 3  # 페이지 번호·각주 기호 등 짧은 줄은 거터 탐지에서 제외
 
-    같은 줄(row)에 좌/우 단어가 함께 묶이는 것에 의존하지 않으므로, 좌/우 컬럼의
-    줄 높이가 서로 살짝 어긋나 있어도(실제 논문에서 흔함) 안정적으로 동작한다.
+
+def _detect_column_split_x(lines: list[list[Word]]) -> float | None:
+    """줄이 실제로 차지하는 가로 범위(x0~x1)를 모아 컬럼 분리선(빈 거터)을 찾는다.
+
+    줄이 "시작하는" x좌표만 보면 왼쪽 컬럼의 긴 줄이 분리선 오른쪽까지 넘어와 있는
+    경우를 놓친다(그 줄의 뒷부분 단어가 분리선 너머로 잘못 배정됨). 각 줄이 끝나는
+    x좌표까지 함께 봐서, 어느 줄도 걸치지 않는 실제 빈 구간을 거터로 삼는다.
+
+    페이지 번호·각주 기호처럼 단어 수가 아주 적은 줄은 우연히 두 컬럼 사이 애매한
+    위치에 있어 실제 거터를 가리거나 엉뚱하게 이어붙일 수 있으므로 탐지에서 제외한다
+    (분리선이 정해진 뒤 좌/우 배정에는 모든 단어가 그대로 사용된다).
     """
-    if len(lines) < 4:
+    substantial_lines = [line for line in lines if len(line) >= MIN_WORDS_FOR_COLUMN_GAP_DETECTION]
+    if len(substantial_lines) < 4:
         return None
 
-    x0_values = sorted(_line_x0(line) for line in lines)
+    intervals = sorted((_line_x0(line), max(w.x1 for w in line)) for line in substantial_lines)
+
+    merged: list[list[float]] = []
+    for x0, x1 in intervals:
+        if merged and x0 <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], x1)
+        else:
+            merged.append([x0, x1])
+
+    if len(merged) < 2:
+        return None
+
     best_gap = 0.0
     best_split = None
-    for prev_x0, next_x0 in zip(x0_values, x0_values[1:]):
-        gap = next_x0 - prev_x0
+    for (_, prev_x1), (next_x0, _) in zip(merged, merged[1:]):
+        gap = next_x0 - prev_x1
         if gap > best_gap:
             best_gap = gap
-            best_split = (prev_x0 + next_x0) / 2
+            best_split = (prev_x1 + next_x0) / 2
 
     if best_split is None or best_gap < MIN_COLUMN_SPLIT_GAP:
         return None
 
-    left_count = sum(1 for x0 in x0_values if x0 < best_split)
-    right_count = len(x0_values) - left_count
-    min_side = max(1, int(len(x0_values) * MIN_COLUMN_SIDE_LINE_RATIO))
+    left_count = sum(1 for _, x1 in intervals if x1 <= best_split)
+    right_count = sum(1 for x0, _ in intervals if x0 >= best_split)
+    min_side = max(1, int(len(intervals) * MIN_COLUMN_SIDE_LINE_RATIO))
     if left_count < min_side or right_count < min_side:
         return None
 
