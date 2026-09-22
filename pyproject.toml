@@ -10,7 +10,8 @@ requires-python = ">=3.11"
 dependencies = [
   "langgraph>=0.2", "openai>=1.50", "pydantic>=2",
   "pypdf>=4", "sentence-transformers>=3", "faiss-cpu>=1.8",
-  "rank-bm25>=0.2", "tavily-python>=0.5", "python-dotenv>=1", "reportlab>=4"
+  "rank-bm25>=0.2", "tavily-python>=0.5", "python-dotenv>=1", "reportlab>=4",
+  "requests", "pdfplumber", "ddgs", "chromadb",
 ]
 
 [project.optional-dependencies]

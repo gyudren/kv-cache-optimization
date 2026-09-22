@@ -23,11 +23,13 @@
 
 ## Tech Stack
 
-- Framework : LangGraph
-- LLM/Generator : {GPT version}
-- LLM/Judge : {GPT version}
-- Retrieval : FAISS(Dense) + BM25(Sparse), RRF 순위 융합 - {Hit Rate@K}, {MRR}
+- Framework : LangGraph (Master 1개 + Task Agent 6개, `Send` 기반 부분 재할당)
+- LLM/Generator·Judge : 고정 모델 1종(`config.MODEL_ID`), OpenAI Responses API(`responses.parse`)로 Pydantic 스키마 구조화 출력을 강제. 다른 모델로 바꾸면 `Settings.from_env()`가 즉시 에러를 낸다
+- Retrieval : FAISS(Dense) + BM25(Sparse), RRF(k=60) 순위 융합, 기술별 문서 필터(`permitted_docs`)
 - Embedding : Qwen3-Embedding-0.6B (다국어·교차언어 검색, 최대 32K 토큰, Apache 2.0 라이선스)
+- 웹 검색 : Tavily Web API (`TAVILY_API_KEY` 설정 시) — 없으면 DuckDuckGo(ddgs, 키 불필요)로 자동 대체해 재현성을 보장
+- 보고서 출력 : Markdown + reportlab 기반 한글 PDF(`reporting/export.py`), SUMMARY 1/2페이지 제한을 실제 렌더링 높이로 검증
+- 검색 품질(별도 검증, ChromaDB 기반) : Hit@1 98.75% · Hit@3/5 100% · MRR 0.994 (80개 질의, `eval/evaluate_retrieval.py`)
 
 ## Agents
 
@@ -55,7 +57,7 @@ flowchart TD
 
     subgraph PARALLEL["관점별 병렬 평가"]
         direction LR
-        MARKET["시장 평가 에이전트<br/>RAG"]
+        MARKET["시장 평가 에이전트<br/>외부 검색 도구"]
         STAKEHOLDER["이해관계자 평가 에이전트<br/>외부 검색 도구"]
         DOMAIN["도메인 평가 에이전트<br/>논문 RAG"]
     end
@@ -93,8 +95,8 @@ flowchart TD
     classDef report fill:#fff2cc,stroke:#b8860b,stroke-width:1.5px,color:#3d2f00;
 
     class SUP_INIT,SUP_TECH,QUERY_REWRITE,SUP_FANOUT,SUP_JOIN,RESULT_GATE,RETRY,SUP_SYNTHESIS,SUP_FINAL Master;
-    class TECH,MARKET,DOMAIN rag;
-    class STAKEHOLDER,SYNTHESIS evaluation;
+    class TECH,DOMAIN rag;
+    class MARKET,STAKEHOLDER,SYNTHESIS evaluation;
     class REPORT report;
 ```
 
@@ -136,23 +138,58 @@ RAG 적재 문서 4편(DeepSeek-V2/MLA, ITME, InfiniGen, CXL-PNM)을 다음 순�
 
 ## Directory Structure
 
-├── data/                    # 문서 풀
-│   ├── manifest.json        # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
-│   ├── raw/                 # 원문 PDF (git 미포함, 로컬에 직접 배치)
-│   └── processed/           # 전처리 결과 (chunks.jsonl, summary.json)
-├── preprocessing/           # 데이터 전처리 (파싱·참고문헌 제외·청킹·페이지 예산 검증)
-├── agents/                  # Agent 모듈
-├── prompts/                 # 프롬프트 템플릿
-├── outputs/                 # 평가 결과 저장
-├── app.py                   # 실행 스크립트
+├── data/                      # 문서 풀
+│   ├── manifest.json          # RAG 적재 문서 4편 메타데이터(진영/역할/참고문헌 시작 페이지 등)
+│   ├── raw/                   # 원문 PDF (git 미포함, 로컬에 직접 배치)
+│   ├── processed/             # 전처리 결과 (chunks.jsonl, summary.json)
+│   └── chroma/                # ChromaDB 영속 저장소 (vectordb.py 산출물, 검색 품질 검증용)
+├── preprocessing/             # 데이터 전처리 (파싱·참고문헌 제외·청킹·페이지 예산 검증)
+├── prompts/                   # Agent별 프롬프트 (technology/market/stakeholder/domain/synthesis/report.md)
+│                               #   00_common_contract.md ~ 08_result_validator.md 는 더 상세한 계약 초안(문서화용)
+├── schemas/                   # Evidence 등 공통 JSON Schema
+├── scripts/                   # 정적 검증 스크립트 (validate_prompt_package.py)
+├── eval/                      # 검색 품질 평가 (evaluate_retrieval.py, queries.json, 결과 JSON)
+├── vectordb.py                 # ChromaDB + Qwen3 임베딩 색인 구축 (검색 품질 검증용 별도 경로)
+├── src/kv_eval/                # 실행 패키지
+│   ├── config.py                # 선정 기술·평가 기준·재시도 한도·고정 모델 ID
+│   ├── state.py                 # D-1 State(GraphState) 및 evidence reducer
+│   ├── prompts.py                # prompts/*.md 로더
+│   ├── schemas.py                # Agent 구조화 출력 Pydantic 모델
+│   ├── llm.py                    # StructuredLLM (OpenAI Responses API 구조화 출력)
+│   ├── graph.py                   # Master 1개 + Task Agent 6개 LangGraph 그래프, Send 기반 부분 재할당
+│   ├── main.py                    # 실행 진입점(python -m kv_eval.main)
+│   ├── rag/                       # ingest(전처리 산출물 로드) → index(FAISS+BM25) → retrieve(RRF) → workflow(Agentic RAG)
+│   ├── agents/                    # master(게이트·재시도)/technology/market/stakeholder/domain/synthesis/report
+│   ├── tools/                     # web_search (Tavily, 키 없으면 DuckDuckGo 대체)
+│   └── reporting/                 # 목차·인용 검증(sections.py), Markdown+한글 PDF 출력(export.py)
+├── tests/                      # pytest (전부 오프라인 stub 기반 — 실제 LLM/임베딩/네트워크 호출 없음)
+├── outputs/                    # 평가 결과 저장 (RAG-Output_*.md, *.pdf)
+├── pyproject.toml              # 전체 의존성 (kv_eval 패키지 + preprocessing + vectordb)
 └── README.md
 
 ## Usage
 
 ```bash
-python {app.py}
+pip install -e .                 # kv_eval 패키지 + 의존성 설치
+python -m preprocessing.pipeline # (최초 1회) RAG 적재 문서 4편 전처리 → data/processed/chunks.jsonl
+
+export OPENAI_API_KEY=sk-...     # 필수 (LLM Generator/Judge, .env.example 참고)
+export TAVILY_API_KEY=tvly-...   # 선택 — 없으면 DuckDuckGo(ddgs)로 자동 대체
+
+python -m kv_eval.main           # 그래프 실행 → outputs/{REPORT_STEM}.md, .pdf
+python -m kv_eval.main --query "..."  # 평가 요청 문구를 바꾸고 싶을 때(기본값은 A-3 핵심 질문)
 ```
+
+(선택) 검색 품질만 별도로 확인하려면: `python -m vectordb` 로 ChromaDB 색인 후 `python -m eval.evaluate_retrieval`
+
+테스트: `pytest` — 전부 오프라인 stub(가짜 LLM/RAG/웹 검색)으로 구성되어 있어 `OPENAI_API_KEY` 없이도 그래프 제어 흐름(게이트·재시도·재할당)과 스키마 계약을 검증한다.
 
 ## Contributors
 
 2조 : 김동욱(P280), 김민정(P282), 김태동(P287), 박규리(P289), 이재겸(P298), 임동건(P301)
+
+- 김민정(P282) : 데이터 전처리 (PDF 파싱, 2단 레이아웃·표·수식 처리, 참고문헌 제외, 청킹)
+- 김동욱(P280) : LangGraph 기반 Master/6-Agent 오케스트레이션, RAG 파이프라인, 보고서 생성·PDF export 구현
+- 이재겸(P298) : Agent별 페르소나 및 프롬프트 계약 작성
+- 김태동(P287) : 웹 검색 도구(Tavily) 연동 및 이해관계자 평가 설계
+- 임동건(P301), 박규리(P289) : Vector DB 구성(ChromaDB), 청킹 개선, 검색 품질 평가(Hit@K/MRR)

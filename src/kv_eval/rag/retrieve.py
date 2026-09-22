@@ -17,8 +17,9 @@ class RetrievedChunk:
 
 
 def permitted_docs(technology_filter: str) -> set[str]:
+    # doc_id는 데이터 전처리 산출물(data/processed/chunks.jsonl)의 실제 doc_id를 따른다.
     if technology_filter == "mla":
-        return {"deepseek_v2"}
+        return {"deepseek_v2_mla"}
     if technology_filter == "itme":
         return {"itme"}
     if technology_filter == "itme_baseline":

@@ -7,7 +7,8 @@ from kv_eval.schemas import QueryPlan, Relevance, Rewrite, RAGResponse
 
 
 def test_filter_isolation():
-    assert permitted_docs("mla") == {"deepseek_v2"}
+    # doc_id는 데이터 전처리 산출물(data/processed/chunks.jsonl)의 실제 값을 따른다.
+    assert permitted_docs("mla") == {"deepseek_v2_mla"}
     assert permitted_docs("itme") == {"itme"}
     assert permitted_docs("itme_baseline") == {"itme", "infinigen", "cxl_pnm"}
     with pytest.raises(ValueError):
