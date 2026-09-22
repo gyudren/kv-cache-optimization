@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Any
 from ..config import RETRY_LIMITS
+from ..prompts import prompt_template
 from ..reporting.sections import validate_report, citeable_evidence
 from ..schemas import ReportAssessment
 from ..state import RESULT_KEY
@@ -110,6 +111,7 @@ def master_report_gate_node(state: dict, llm: Any) -> dict:
     deterministic = validate_report(state["report_draft"], state["evidence"])
     # Judge is same fixed GPT-5.6 Sol; no added standalone evaluation Agent.
     judged = llm.generate_structured(
+        prompt_template("master", "validator") + "\n"
         "Check the report against these exact requirements: headings SUMMARY, 1~7 and REFERENCE; "
         "neutral perspective comparison; unsupported claims and missing citations must be flagged. "
         "This is an internal report gate, not a comparative technology score. "

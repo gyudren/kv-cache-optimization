@@ -55,7 +55,7 @@ flowchart TD
 
     subgraph PARALLEL["관점별 병렬 평가"]
         direction LR
-        MARKET["시장 평가 에이전트<br/>RAG"]
+        MARKET["시장 평가 에이전트<br/>외부 검색 도구"]
         STAKEHOLDER["이해관계자 평가 에이전트<br/>외부 검색 도구"]
         DOMAIN["도메인 평가 에이전트<br/>논문 RAG"]
     end
@@ -133,6 +133,23 @@ RAG 적재 문서 4편(DeepSeek-V2/MLA, ITME, InfiniGen, CXL-PNM)을 다음 순�
 - 제목·저자·소속이 3단 이상으로 배치된 논문 1페이지는 좌/우 2분할 가정과 맞지 않아 이름·이메일 같은 저자 정보 일부가 뒤섞일 수 있다(본문 내용에는 영향 없음).
 - 테두리 없는(borderless) 결과표(예: 벤치마크 점수 표)는 표로 탐지되지 못해 숫자 나열 형태로 본문에 섞여 들어갈 수 있다.
 - 다이어그램 자체의 라벨 텍스트는 2차원 그림을 1차원 텍스트로 펼치는 과정이라 그 청크 안에서는 다소 어색하게 읽히지만, 더 이상 주변 본문 문장과 뒤섞이지는 않는다.
+
+## Retrieval Evaluation
+
+LLM 생성 없이 ChromaDB 검색 결과만 평가한다. 평가 세트는 개념·표·수식 질의 12개로 구성되며,
+청크 ID가 재청킹 때 바뀌는 점을 고려해 `doc_id + 원문 페이지`를 정답 기준으로 사용한다.
+
+```bash
+python -m retrieval_eval
+python -m retrieval_eval --show-results
+```
+
+- 평가 입력: `evaluation/retrieval_cases.json`
+- 평가 결과: `outputs/retrieval_eval.json`
+- 지표: Hit@1/3/5, MRR, 문서 오염률, 표 노이즈 비율, 필수 근거 용어 포함률
+- 기본 임베딩 장치: MPS (`--device cpu` 또는 `--device cuda`로 변경 가능)
+
+현재 색인을 기준으로 먼저 평가하고, 표·수식 전처리 개선 후 동일 평가 세트를 다시 실행해 지표를 비교한다.
 
 ## Directory Structure
 
