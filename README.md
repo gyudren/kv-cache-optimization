@@ -42,47 +42,59 @@
 ## Architecture
 ```mermaid
 flowchart TD
-    START([START])
-    A[Master Agent<br/>요청 분석 및 State 초기화]
-    B[기술 조사 에이전트<br/>MLA·ITME 논문 RAG]
-    C{Master<br/>기술·TRL 근거가 충분한가?}
-    D[Master<br/>부족 항목 지정 및 질의 재작성]
-    E[Master<br/>관점별 평가 병렬 할당]
-    F[이해관계자 평가 에이전트<br/>외부 검색 도구]
-    G[시장 평가 에이전트<br/>웹 검색]
-    H[도메인 평가 에이전트<br/>논문 RAG]
-    I[Master<br/>평가 결과 수집]
-    J{Master<br/>모든 관점 결과가 완료되었는가?}
-    K[Master<br/>부족한 Agent만 재할당]
-    L[평가 종합 에이전트<br/>TRL·시장·이해관계자·도메인 종합]
-    M{Master<br/>일치·상충·근거 정리가 완료되었는가?}
-    N[보고서 생성 에이전트<br/>최종 평가 보고서 작성]
-    O{Master<br/>필수 목차·REFERENCE 확인}
-    ENDN([END])
+    START([START]) --> SUP_INIT["Master Agent<br/>요청 분석 및 State 초기화"]
 
-    START --> A --> B --> C
-    C -- 부족 최대 2회 --> D --> B
-    C -- 충분 --> E
-    E --> F
-    E --> G
-    E --> H
-    F --> I
-    G --> I
-    H --> I
-    I --> J
-    J -- 이해관계자 근거 부족 --> K
-    J -- 시장 근거 부족 --> K
-    J -- 도메인 근거 부족 --> K
-    K --> F
-    K --> G
-    K --> H
-    J -- 완료 --> L
-    L --> M
-    M -- 부족 최대 1회 --> L
-    M -- 충분 --> N
-    N --> O
-    O -- 누락 최대 2회 --> N
-    O -- 완료 --> ENDN
+    SUP_INIT --> TECH["기술 조사 에이전트<br/>MLA·ITME 논문 RAG"]
+    TECH --> SUP_TECH{"Master<br/>기술·TRL 근거가 충분한가?"}
+
+    SUP_TECH -- "부족<br/>최대 2회" --> QUERY_REWRITE["Master<br/>부족 항목 지정 및 질의 재작성"]
+    QUERY_REWRITE --> TECH
+
+    SUP_TECH -- "충분" --> SUP_FANOUT["Master<br/>관점별 평가 병렬 할당"]
+
+    subgraph PARALLEL["관점별 병렬 평가"]
+        direction LR
+        MARKET["시장 평가 에이전트<br/>RAG"]
+        STAKEHOLDER["이해관계자 평가 에이전트<br/>외부 검색 도구"]
+        DOMAIN["도메인 평가 에이전트<br/>논문 RAG"]
+    end
+
+    SUP_FANOUT --> MARKET
+    SUP_FANOUT --> STAKEHOLDER
+    SUP_FANOUT --> DOMAIN
+
+    MARKET --> SUP_JOIN["Master<br/>평가 결과 수집"]
+    STAKEHOLDER --> SUP_JOIN
+    DOMAIN --> SUP_JOIN
+
+    SUP_JOIN --> RESULT_GATE{"Master<br/>모든 관점 결과가 완료되었는가?"}
+
+    RESULT_GATE -- "미완료·근거 부족" --> RETRY["Master<br/>부족한 Agent만 재할당"]
+    RETRY -. "시장 근거 부족" .-> MARKET
+    RETRY -. "이해관계자 근거 부족" .-> STAKEHOLDER
+    RETRY -. "도메인 근거 부족" .-> DOMAIN
+
+    RESULT_GATE -- "완료" --> SYNTHESIS["평가 종합 에이전트<br/>TRL·시장·이해관계자·도메인 종합"]
+
+    SYNTHESIS --> SUP_SYNTHESIS{"Master<br/>일치·상충·근거 공백이 정리되었는가?"}
+
+    SUP_SYNTHESIS -- "부족<br/>최대 1회" --> SYNTHESIS
+    SUP_SYNTHESIS -- "충분" --> REPORT["보고서 생성 에이전트<br/>최종 평가 보고서 작성"]
+
+    REPORT --> SUP_FINAL{"Master<br/>필수 목차·인용·REFERENCE 확인"}
+
+    SUP_FINAL -- "누락 있음<br/>최대 2회" --> REPORT
+    SUP_FINAL -- "완료" --> END([END])
+
+    classDef Master fill:#e8ddff,stroke:#6842a6,stroke-width:2px,color:#1f1235;
+    classDef rag fill:#dff3ff,stroke:#20789d,stroke-width:1.5px,color:#102b38;
+    classDef evaluation fill:#e6f4e8,stroke:#388e3c,stroke-width:1.5px,color:#18351a;
+    classDef report fill:#fff2cc,stroke:#b8860b,stroke-width:1.5px,color:#3d2f00;
+
+    class SUP_INIT,SUP_TECH,QUERY_REWRITE,SUP_FANOUT,SUP_JOIN,RESULT_GATE,RETRY,SUP_SYNTHESIS,SUP_FINAL Master;
+    class TECH,MARKET,DOMAIN rag;
+    class STAKEHOLDER,SYNTHESIS evaluation;
+    class REPORT report;
 ```
 ※ 설계 산출물 PDF(D-2. Graph 흐름 설계) 원본 flowchart 이미지를 Mermaid로 옮긴 것으로, 노드 문구는 원본 이미지를 기준으로 최대한 그대로 옮겼으며 세부 배치·색상은 Mermaid 렌더링 방식에 따라 원본과 다를 수 있음
 
