@@ -1,0 +1,28 @@
+[project]
+name = "kv-eval"
+version = "0.1.0"
+description = "KV cache 최적화 기술 SW/HW 다관점 평가 Agentic RAG"
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph",
+    "langchain-openai",
+    "requests",
+    "pypdf",
+    "faiss-cpu",
+    "rank-bm25",
+    "sentence-transformers",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
