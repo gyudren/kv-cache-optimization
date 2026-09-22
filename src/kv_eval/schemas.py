@@ -97,7 +97,10 @@ class ReportParts(BaseModel):
     background: str
     selection: str
     technology_overview: str
-    perspectives: str
+    perspective_trl: str
+    perspective_market: str
+    perspective_stakeholder: str
+    perspective_domain: str
     synthesis: str
     implications: str
     limitations: str

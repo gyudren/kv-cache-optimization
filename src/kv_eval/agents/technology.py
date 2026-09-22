@@ -12,6 +12,7 @@ from typing import Any
 from ..config import MAX_PARALLEL_QUESTIONS
 from ..prompts import prompt_template
 from ..schemas import TechnologyAssessment
+from ..rag.workflow import answer_with_cache
 
 TECH_QUESTIONS = [
     "What problem and scope does the proposed KV cache approach address?",
@@ -25,9 +26,11 @@ BASELINE_QUESTION = "How do InfiniGen and CXL-PNM differ from ITME in memory exp
 
 # TRL 7~9(제품 출시·상용 서비스 적용) 판정에 필요한 공개 발표를 찾기 위한 질의
 TRL_WEB_QUERIES = {
-    "mla": ["DeepSeek-V2 MLA multi-head latent attention production deployment inference service",
-            "DeepSeek MLA vLLM SGLang official support release"],
-    "itme": ["SK hynix CXL hybrid memory ITME product release commercial availability",
+    "mla": ["DeepSeek API production service DeepSeek-V2 V3 multi-head latent attention",
+            "vLLM MLA attention backend DeepSeek support release",
+            "FlashMLA DeepSeek open source MLA decoding kernel"],
+    "itme": ["SK hynix ITME CXL hybrid memory inference tiered memory expansion",
+             "SK hynix CMM-DDR5 CXL memory module mass production customers",
              "CXL memory module tiered memory LLM inference commercial deployment announcement"],
 }
 TECH_LABEL = {"mla": "DeepSeek-V2 MLA", "itme": "ITME"}
@@ -59,10 +62,11 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     feedback = state.get("review_feedback", {}).get("tech", {})
     # 질문끼리 독립이므로 병렬로 검색·답변한다(순서는 아래에서 원래대로 복원).
     tasks = [(tech, question) for tech in ("mla", "itme") for question in TECH_QUESTIONS]
+    cache = state.get("tech_result", {}).get("rag_cache", {})
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
         answers_by_task = list(pool.map(
-            lambda item: rag.rag_answer(f"[{item[0]}] {item[1]}", item[0], feedback), tasks))
-        baseline_future = pool.submit(rag.rag_answer, BASELINE_QUESTION, "itme_baseline", feedback)
+            lambda item: answer_with_cache(rag, cache, f"[{item[0]}] {item[1]}", item[0], feedback), tasks))
+        baseline_future = pool.submit(answer_with_cache, rag, cache, BASELINE_QUESTION, "itme_baseline", feedback)
         web_by_tech = {tech: pool.submit(_trl_web_evidence, web, tech, attempt)
                        for tech in ("mla", "itme")}
         baseline = baseline_future.result()
@@ -110,7 +114,9 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     if not all(getattr(result.trl, tech).strip() and getattr(result.trl_basis, tech).strip()
                for tech in ("mla", "itme")):
         missing.append("MLA/ITME의 독립적 TRL 근거 미기재")
-    return {"tech_result": {**result.model_dump(), "details": findings,
+    rag_cache = {f"[{tech}] {question}": response for (tech, question), response in zip(tasks, answers_by_task)}
+    rag_cache[BASELINE_QUESTION] = baseline
+    return {"tech_result": {**result.model_dump(), "details": findings, "rag_cache": rag_cache,
                             "sufficient": result.sufficient and not bool(missing), "missing": list(dict.fromkeys(missing))},
             "evidence": evidence,
             "logs": [{"node": "technology", "attempt": attempt, "result": "complete", "gate": not bool(missing)}]}

@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "issues": [],
+  "used_references": [
+    "[1] DeepSeek-AI (2024). DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model. arXiv preprint arXiv:2405.04434, p.1, p.6, p.7, p.8, p.13, p.15, p.16, p.31, p.32.",
+    "[2] Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix) (2026). ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories. arXiv preprint arXiv:2606.12556, p.1, p.2, p.3, p.7, p.8, p.9, p.10, p.11.",
+    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.2.",
+    "[W6] docs.vllm.ai (게시일 미확인). mla_attention - vLLM Documentation. docs.vllm.ai, https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/attention/mla_attention",
+    "[W9] github.com (게시일 미확인). vllm/vllm/model_executor/layers/attention/mla_attention.py at main. github.com, https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/attention/mla_attention.py",
+    "[W12] sgl-project-sglang-93.mintlify.app (게시일 미확인). DeepSeek Models - SGLang. sgl-project-sglang-93.mintlify.app, https://sgl-project-sglang-93.mintlify.app/models/deepseek",
+    "[W2] computeexpresslink.org (게시일 미확인). Breaking Boundaries in Memory: Highlights from AI Infra Summit and SDC 2025 - Compute Express Link. computeexpresslink.org, https://computeexpresslink.org/blog/breaking-boundaries-in-memory-highlights-from-ai-infra-summit-and-sdc-2025-4198",
+    "[W14] chosun.com (게시일 미확인). CXL Can't Replace HBM in AI Era. chosun.com, https://www.chosun.com/english/industry-en/2026/09/17/DPBT3YGLRJEXVHCBEOSVQ3GZNI",
+    "[W10] news.sbs.co.kr (게시일 미확인). AI Market: HBM's Dominance Expected to Continue... 'CXL .... news.sbs.co.kr, https://news.sbs.co.kr/english/article.do?news_id=N1008757342",
+    "[W22] precedenceresearch.com (Wed, 09 Sep 2026 00:00:00 GMT). AI Inference-as-a-Service Market Companies, Size & Trends 2026 .... precedenceresearch.com, https://www.precedenceresearch.com/ai-inference-as-a-service-market",
+    "[W5] docs.dynatrace.com (Fri, 28 Aug 2026 00:00:00 GMT). AI Observability integrations — Dynatrace Docs. docs.dynatrace.com, https://docs.dynatrace.com/docs/observe/dynatrace-for-ai-observability/integrations",
+    "[W4] dataintelo.com (게시일 미확인). CXL Memory Pooling Software Market. dataintelo.com, https://dataintelo.com/report/cxl-memory-pooling-software-market",
+    "[W15] forbes.com (Sat, 18 Jul 2026 00:00:00 GMT). AI Storage & Memory From Backblaze, CoreWeave, Panmnesia, Vast And Cloudera - Forbes. forbes.com, https://www.forbes.com/sites/tomcoughlin/2026/07/18/ai-storage--memory-from-backblaze-coreweave-panmnesia-vast-and-cloudera/",
+    "[W1] arxiv.org (게시일 미확인). Disaggregated LLM Serving withCXL Shared Memory KV Cache at .... arxiv.org, https://arxiv.org/html/2512.18194v1",
+    "[W23] redhat.com (게시일 미확인). Enhancing DeepSeek models with MLA and FP8 optimizations in vLLM. redhat.com, https://www.redhat.com/en/blog/enhancing-deepseek-models-mla-and-fp8-optimizations-vllm",
+    "[W11] news.ycombinator.com (게시일 미확인). DeepSeek Open Source FlashMLA – MLA Decoding Kernel for .... news.ycombinator.com, https://news.ycombinator.com/item?id=43155023",
+    "[W17] guinnessgi.com (게시일 미확인). How has DeepSeek affected the AI Market for investors?. guinnessgi.com, https://www.guinnessgi.com/insights/articles/how-has-deepseek-affected-ai-market-investors"
+  ]
+}

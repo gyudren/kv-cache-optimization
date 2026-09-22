@@ -53,3 +53,16 @@ class RAGWorkflow:
         return {"answer": f"{generated.answer}\n근거: {citations}", "evidence": evidence,
                 "sufficient": not bool(generated.missing), "missing": generated.missing,
                 "search_attempts": attempts}
+
+
+def answer_with_cache(rag: Any, cache: dict, question: str, technology_filter: str, feedback: dict | None) -> dict:
+    """재시도 시 이미 근거가 충분했던 질문은 이전 답변을 재사용한다.
+
+    Master 게이트가 일부 항목만 부족하다고 판정해도 모든 질문을 다시 검색·답변하면
+    LLM 호출의 절반 이상이 같은 답을 반복하는 데 쓰인다(설계 D-2: 부족 항목만 재검색).
+    sufficient=False 였던 질문만 부족 항목 피드백과 함께 다시 실행한다.
+    """
+    previous = cache.get(question)
+    if previous and previous.get("sufficient"):
+        return previous
+    return rag.rag_answer(question, technology_filter, feedback)

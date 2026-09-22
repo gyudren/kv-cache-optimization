@@ -9,16 +9,9 @@ description = "SKALA MLA vs ITME evidence-grounded multi-agent evaluation"
 requires-python = ">=3.11"
 dependencies = [
   "langgraph>=0.2", "openai>=1.50", "pydantic>=2",
-  "pypdf>=4", "pdfplumber>=0.11", "sentence-transformers>=3", "faiss-cpu>=1.8",
-  "rank-bm25>=0.2", "requests>=2.31", "ddgs", "python-dotenv>=1", "reportlab>=4"
+  "pdfplumber>=0.11", "sentence-transformers>=3", "faiss-cpu>=1.8",
+  "rank-bm25>=0.2", "requests>=2.31", "python-dotenv>=1", "reportlab>=4"
 ]
-
-[project.optional-dependencies]
-dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["tests"]

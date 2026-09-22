@@ -3,6 +3,9 @@
 __pycache__/
 .venv/
 venv/
+*.egg-info/
+.pytest_cache/
+uv.lock
 
 # Env & secrets
 .env
@@ -14,11 +17,8 @@ venv/
 .vscode/
 .idea/
 
-# 환경 스캐폴딩
-uv.lock
-*.egg-info/
-.pytest_cache/
-
-# 데이터 전처리 산출물 (원문 PDF 및 생성된 청크)
-#  나중에 추가
+# 로컬 전용 산출물
+# 초기 Chroma 벡터DB 실험(운영 경로는 실행 시 FAISS 색인을 생성)
 /data/chroma/
+# 웹 검색 응답 캐시(재실행 시 크레딧 절약)
+/data/cache/

@@ -34,7 +34,7 @@ def build_graph(rag: Any, web: Any, llm: Any):
                                  "master_dispatch": "master_dispatch"})
     graph.add_edge("master_query_rewrite", "technology")
 
-    def dispatch_routes(state: GraphState) -> list[Send]:
+    def dispatch_routes(state: GraphState):
         selected = state["next_agents"]
         if not selected or not set(selected) <= {"market", "stakeholder", "domain"}:
             raise ValueError("Invalid selected perspective fan-out")

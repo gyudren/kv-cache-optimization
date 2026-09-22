@@ -66,7 +66,6 @@
 - `07_report_agent.md`: 최종 보고서 생성
 - `08_result_validator.md`: 결과 충분성·출처·형식 검증
 - `../schemas/evidence.schema.json`: 공통 Evidence 구조
-- `../tests/prompt_acceptance_cases.md`: 프롬프트 수용 테스트
 
 ## 정적 검증
 
