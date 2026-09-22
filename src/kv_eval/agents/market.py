@@ -1,4 +1,4 @@
-"""Market evaluation: Tavily ONLY, no local RAG injection."""
+"""Market evaluation: Web search only, no local RAG injection."""
 from __future__ import annotations
 from typing import Any
 from ..prompts import prompt_template

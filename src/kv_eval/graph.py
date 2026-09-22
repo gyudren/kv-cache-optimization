@@ -2,14 +2,13 @@
 from __future__ import annotations
 from functools import partial
 from typing import Any
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
 from .agents import master, technology, market, stakeholder, domain, synthesis, report
 from .state import GraphState
 
 
 def build_graph(rag: Any, web: Any, llm: Any):
-    from langgraph.graph import StateGraph, START, END
-    from langgraph.types import Send
-
     graph = StateGraph(GraphState)
     graph.add_node("master_init", master.master_init_node)
     graph.add_node("technology", partial(technology.technology_node, rag=rag, llm=llm, web=web))
@@ -35,9 +34,7 @@ def build_graph(rag: Any, web: Any, llm: Any):
                                  "master_dispatch": "master_dispatch"})
     graph.add_edge("master_query_rewrite", "technology")
 
-    # 반환 타입을 주석으로 달면 LangGraph가 모듈 전역에서 Send를 찾다 NameError를 낸다
-    # (Send는 langgraph 의존성 없이도 import되도록 이 함수 안에서만 import한다).
-    def dispatch_routes(state: GraphState):
+    def dispatch_routes(state: GraphState) -> list[Send]:
         selected = state["next_agents"]
         if not selected or not set(selected) <= {"market", "stakeholder", "domain"}:
             raise ValueError("Invalid selected perspective fan-out")

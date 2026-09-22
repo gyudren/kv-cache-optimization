@@ -7,7 +7,7 @@
 
 - Objective : 하나의 기술을 복수 관점에서 비교 평가
 - Method : Multi-Agent(Distributed) + Agentic RAG
-- Tools : LangGraph, FAISS + BM25(RRF 융합), Tavily Web API, pdfplumber (2단 레이아웃·표 좌표 처리를 위해 pypdf 대신 채택)
+- Tools : LangGraph, FAISS + BM25(RRF 융합), Tavily Web API (실패/키 누락 시 DuckDuckGo 대체), pdfplumber (2단 레이아웃·표 좌표 처리를 위해 pypdf 대신 채택)
 
 ## Selected Technologies
 
@@ -202,7 +202,7 @@ python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과까�
 
 ```bash
 pip install -e ".[dev]"        # 의존성의 단일 출처는 pyproject.toml
-cp .env.example .env           # OPENAI_API_KEY, TAVILY_API_KEY 입력 (.env는 git에 올라가지 않음)
+cp .env.example .env           # OPENAI_API_KEY 필수, TAVILY_API_KEY 선택 (.env는 git에 올라가지 않음)
 ```
 
 ### 2. 원문 PDF 배치 및 전처리
@@ -217,7 +217,11 @@ python -m preprocessing.pipeline   # → data/processed/chunks.jsonl, summary.js
 
 ```bash
 python app.py
+# 같은 실행 경로 (editable 설치 후)
+python -m kv_eval.main --query "MLA와 ITME를 네 관점으로 비교 평가하라."
 ```
+
+웹 검색은 Tavily를 우선 사용하고 키 누락·요청 제한·연결 오류 시 DuckDuckGo로 전환한다. 대체 검색의 점수는 만들지 않으며, 실패는 경고와 빈 검색 결과로 남겨 Agent가 근거 부족으로 처리한다. 두 검색기 모두 시장 평가에서 Reddit을 제외하고, 이해관계자 평가에서는 커뮤니티 발언 검색을 허용한다.
 
 `outputs/`에 다음이 생성된다.
 
@@ -257,11 +261,11 @@ python -m eval.evaluate_retrieval  # 검색 품질 지표 및 합격 기준 판�
 
 | 이름 | 수행 역할 |
 |---|---|
-| 김동욱(P280) | *(역할 기입 필요)* |
-| 김민정(P282) | *(역할 기입 필요)* |
-| 김태동(P287) | *(역할 기입 필요)* |
+| 김동욱(P280) | LangGraph 기반 State·Graph 및 실행 설정, 전체 시스템 아키텍처 |
+| 김민정(P282) | 논문 PDF 파싱, 2단 컬럼·표·수식 처리, 참고문헌 제외·청킹 파이프라인 |
+| 김태동(P287) | 시장·이해관계자 평가용 웹 검색 도구 및 API 연동 |
 | 박규리(P289) | 데이터 전처리(파싱·참고문헌 구간 제외·청킹), 임베딩·벡터 색인, 검색 품질 평가 세트 및 하네스 |
-| 이재겸(P298) | *(역할 기입 필요)* |
-| 임동건(P301) | *(역할 기입 필요)* |
+| 이재겸(P298) | Agent별 페르소나·System/Task 프롬프트, 공통 계약·Evidence 스키마 |
+| 임동건(P301) | 박규리와 공동으로 Chroma 기반 벡터 DB 구성 |
 
-> 제출 전 각자의 실제 수행 역할로 채울 것. 가이드상 PM·PL 역할은 기재하지 않는다.
+> 팀원 역할은 병합한 팀 README 기록을 반영했다. 현재 보고서 실행 경로의 검색기는 FAISS + BM25이며, 기존 Chroma 데이터는 보존한다.
