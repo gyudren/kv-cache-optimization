@@ -17,7 +17,9 @@ def synthesis_node(state: dict, llm: Any) -> dict:
         "Describe trade-offs neutrally, no winner/recommendation. If sources must be revisited, return names in needs_source_agents. "
         "Set needs_revision for synthesis-only expression problems.\n"
         + repr({k: state.get(k, {}) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result")})
-        + "\nEvidence source IDs: " + repr(src), SynthesisAssessment,
+        + "\nEvidence source IDs: " + repr(src)
+        + "\nRevision feedback: " + repr(state.get("review_feedback", {}).get("synthesis", {}))
+        + "\nPrevious synthesis: " + repr(state.get("synthesis_result", {})), SynthesisAssessment,
     )
     outcome = assessment.model_dump()
     for tech in ("mla", "itme"):

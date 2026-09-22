@@ -2,14 +2,13 @@
 from __future__ import annotations
 from functools import partial
 from typing import Any
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
 from .agents import master, technology, market, stakeholder, domain, synthesis, report
 from .state import GraphState
 
 
 def build_graph(rag: Any, web: Any, llm: Any):
-    from langgraph.graph import StateGraph, START, END
-    from langgraph.types import Send
-
     graph = StateGraph(GraphState)
     graph.add_node("master_init", master.master_init_node)
     graph.add_node("technology", partial(technology.technology_node, rag=rag, llm=llm, web=web))

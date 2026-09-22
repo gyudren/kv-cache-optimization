@@ -67,5 +67,5 @@ class Settings:
         )
 
     def require_credentials(self) -> None:
-        if not self.openai_key or not self.tavily_key:
-            raise RuntimeError("OPENAI_API_KEY and TAVILY_API_KEY are required; see .env.example")
+        if not self.openai_key:
+            raise RuntimeError("OPENAI_API_KEY is required; see .env.example")
