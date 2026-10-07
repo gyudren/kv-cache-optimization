@@ -30,7 +30,7 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
     results, evidence, missing = {}, [], []
     for tech, name in (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME CXL hybrid memory")):
         found = []
-        for query in STAKEHOLDER_QUERIES[tech] + retry_queries(name, feedback):
+        for query in STAKEHOLDER_QUERIES[tech] + retry_queries(name, feedback, tech=tech):
             found.extend(web.search_stakeholder(query))
         raw = [{**r, "source_id": f"web:stakeholder:{tech}:{sha256(r['url'].encode()).hexdigest()[:14]}"}
                for r in {x["url"]: x for x in found}.values()]

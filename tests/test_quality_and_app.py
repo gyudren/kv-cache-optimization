@@ -162,7 +162,10 @@ def test_perspective_gap_does_not_exempt_section_structure(run_graph):
 def test_whole_perspective_gap_exempts_bias_only_when_excluded(run_graph):
     state = run_graph(FakeLLM())
     skewed = [ev for ev in state["evidence"] if not (ev.get("agent") == "market" and ev.get("technology") == "mla")]
-    base = {**state, "evidence": skewed, "gaps": ["market: 종합 단계에서 추가 근거 요청"]}
+    market = {**state["perspectives"]["market"],
+              "source_units": {**state["perspectives"]["market"]["source_units"], "mla": []}}
+    base = {**state, "evidence": skewed, "perspectives": {**state["perspectives"], "market": market},
+            "gaps": ["market: 종합 단계에서 추가 근거 요청"]}
     assert check_bias(base)["passed"] is False  # 관점이 제외되지 않았으면 관점 단위 공백으로 면제하지 않음
     excluded = {**base, "perspective_status": {**state["perspective_status"], "market": "excluded"}}
     assert check_bias(excluded)["passed"] is True

@@ -11,12 +11,14 @@
 상한(MAX_STEPS·재시도 한도)은 안전장치다. 도달하면 근거 공백을 기록하고 보고서까지 만든 뒤 종료한다.
 """
 from __future__ import annotations
+import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 from ..config import FINALIZE_STEPS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS, recursion_limit_for
 from ..evaluation.quality import REINVESTIGATE_CRITERIA, REWRITE_CRITERIA, evidence_shortfalls
 from ..state import perspective
+from ..tools import TECH_TOKENS, mentioned_techs
 
 END_NODE = "__end__"
 DOWNSTREAM = ("synthesis", "report", "quality_evaluator")
@@ -59,28 +61,70 @@ def classify(state: dict, name: str) -> str:
     return "sufficient"
 
 
-def _feedback(missing: list[str], *, search: bool = True) -> dict:
-    missing = [str(m) for m in missing if str(m).strip()][:6]
-    return {"missing": missing, "rewritten_queries": missing if search else []}
-
-
-# 품질 평가(편향·커버리지) 미달 사유 → 재검색 질의 힌트. 사유 문장을 그대로 검색하면 결과가 나오지 않는다.
+# 사유 → 재검색 힌트. 사유 문장은 사람이 읽는 missing으로만 넘기고 검색어로 쓰지 않는다.
 EVAL_QUERY_HINTS = (
     ("긍정 한쪽뿐", "limitations risks concerns criticism"),
     ("우려 한쪽뿐", "adoption benefits positive outlook support"),
     ("단일 발행처", "independent analysis industry report"),
     ("고유 출처", "additional independent sources analysis"),
 )
-
-
 GENERIC_EVAL_HINT = "independent sources limitations adoption evidence"
+SHORTFALL_HINT = "additional independent sources analysis"
+TECHS = ("mla", "itme")
+
+
+def _item_tech(text: str) -> list[str]:
+    """`관점/기술:` 접두어가 있으면 그 기술, 없으면 본문에 언급된 기술(둘 다/없음이면 두 기술 모두)."""
+    prefix = re.match(r"^\w+/(mla|itme):", str(text))
+    if prefix:
+        return [prefix.group(1)]
+    techs = sorted(mentioned_techs(text))
+    return techs if len(techs) == 1 else list(TECHS)
+
+
+def _agent_missing_query(text: str) -> str:
+    """에이전트가 보고한 부족 항목을 검색어로 다듬는다(접두어·기술명·괄호 주석 제거)."""
+    text = re.sub(r"^\w+(/\w+)?:\s*", "", str(text))
+    text = re.sub(r"\([^)]*\)", " ", text)
+    for tokens in TECH_TOKENS.values():
+        for token in tokens:
+            text = re.sub(token, " ", text, flags=re.IGNORECASE)
+    return " ".join(text.split())[:100]
+
+
+def _rework(items: list[tuple[list[str], str, str]]) -> dict:
+    """재작업 지시를 구조화한다. items = [(대상 기술 목록, 사유, 검색 힌트)].
+
+    - missing: 사람이 읽는 사유(프롬프트에 그대로 들어감)
+    - queries_by_tech: 기술별 검색 힌트. 실제로 부족한 기술에만 붙고 다른 기술 이름은 섞이지 않는다.
+    """
+    missing, by_tech = [], {tech: [] for tech in TECHS}
+    for techs, reason, query in items:
+        if reason and reason not in missing:
+            missing.append(reason)
+        for tech in techs:
+            if query and query not in by_tech[tech]:
+                by_tech[tech].append(query)
+    by_tech = {tech: queries[:3] for tech, queries in by_tech.items() if queries}
+    return {"missing": missing[:8], "queries_by_tech": by_tech,
+            "rewritten_queries": list(dict.fromkeys(q for qs in by_tech.values() for q in qs))}
+
+
+def _sufficiency_feedback(shortfalls: list[dict], missing: list[str]) -> dict:
+    """Supervisor 결정적 검사(구조화)와 에이전트 부족 항목(자유 서술)을 재작업 지시로 만든다."""
+    items = [([x["technology"]], x["reason"], SHORTFALL_HINT) for x in shortfalls]
+    items += [(_item_tech(m), str(m), _agent_missing_query(m)) for m in missing if str(m).strip()]
+    return _rework(items)
 
 
 def _eval_feedback(issues: list[str]) -> dict:
-    """평가 미달 사유는 missing으로 그대로 넘기고, 재검색 질의는 반대 방향·독립 출처 힌트로 바꾼다."""
-    queries = [hint for issue in issues for key, hint in EVAL_QUERY_HINTS if key in issue]
-    # 규칙 사유가 없는(LLM Judge만 미달) 경우에도 사유 문장으로 검색하지 않고 일반 힌트를 쓴다.
-    return {"missing": issues[:6], "rewritten_queries": list(dict.fromkeys(queries or [GENERIC_EVAL_HINT]))[:3]}
+    """평가 미달 사유는 missing으로 넘기고, 검색어는 사유 유형별 힌트로만 만든다(사유 문장으로 검색하지 않음)."""
+    items = []
+    for issue in issues:
+        hints = [hint for key, hint in EVAL_QUERY_HINTS if key in issue] or [GENERIC_EVAL_HINT]
+        items += [(_item_tech(issue) if re.match(r"^\w+/(mla|itme):", issue) else list(TECHS), issue, hint)
+                  for hint in hints]
+    return _rework(items)
 
 
 class _Builder:
@@ -139,15 +183,16 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
             to_run.append(name)
             reasons.append(f"{name}: 미수집")
             continue
-        missing = [*evidence_shortfalls(state, name), *perspective(state, name).get("missing", [])]
+        shortfalls = evidence_shortfalls(state, name)
+        missing = [*(x["reason"] for x in shortfalls), *perspective(state, name).get("missing", [])]
         error = (state.get("last_error") or {}).get(name, "")
         if not finalize and b.can_retry(name):
             if status == "failed":
-                b.bump(name, {**_feedback(state.get("feedback", {}).get(name, {}).get("missing", []), search=True),
-                              "last_error": error})
+                # 실행 실패 재시도: 직전 지시를 그대로 다시 넘긴다(새 검색 사유는 없음).
+                b.bump(name, {**state.get("feedback", {}).get(name, {}), "last_error": error})
                 reasons.append(f"{name}: 실행 실패 재시도 {b.retry[name]}/{policy.limit(name)} ({error[:80]})")
             else:
-                b.bump(name, _feedback(missing))
+                b.bump(name, _sufficiency_feedback(shortfalls, perspective(state, name).get("missing", [])))
                 reasons.append(f"{name}: 근거 부족 재조사 {b.retry[name]}/{policy.limit(name)} "
                                f"({'; '.join(map(str, missing[:2]))[:120]})")
             to_run.append(name)
@@ -198,7 +243,7 @@ def _synthesis_step(b: _Builder, finalize: bool) -> Decision | None:
     if rerun:
         gaps = synthesis.get("evidence_gaps", [])
         for name in rerun:
-            b.bump(name, _feedback([g for g in gaps if name in str(g)] or gaps))
+            b.bump(name, _sufficiency_feedback([], [g for g in gaps if name in str(g)] or gaps))
         b.run(*rerun)
         b.invalidate_downstream()
         return b.done(rerun, "dispatch:" + ",".join(rerun), "종합이 추가 근거를 요청한 관점만 재조사")

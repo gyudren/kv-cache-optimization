@@ -69,3 +69,18 @@ def hydrate(evidence: list[dict]) -> list[dict]:
         full = files[(trace_id, agent)].get(key)
         out.append({**ev, "excerpt": full} if full else ev)
     return out
+
+
+def source_unit(ev: dict) -> str:
+    """고유 출처 단위: 웹은 URL, 논문은 (문서, 페이지)."""
+    if ev.get("source_type") == "web":
+        return ev.get("url", "")
+    return f"{ev.get('doc_id')}:{ev.get('page')}"
+
+
+def source_units(evidence: list[dict]) -> dict[str, list[str]]:
+    """이번 시도에서 기술별로 수집·인용한 고유 출처(Supervisor 충분성 검사 입력)."""
+    out: dict[str, set[str]] = {}
+    for ev in evidence:
+        out.setdefault(ev.get("technology", ""), set()).add(source_unit(ev))
+    return {tech: sorted(units) for tech, units in out.items()}

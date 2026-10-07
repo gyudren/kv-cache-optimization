@@ -17,7 +17,7 @@ from collections import Counter
 from datetime import date
 from typing import Any
 from ..config import MAX_SINGLE_SOURCE_SHARE, MIN_DISTINCT_SOURCES, PERSPECTIVES
-from ..evidence_store import hydrate
+from ..evidence_store import hydrate, source_unit
 from ..observability import log_decision
 from ..prompts import prompt_template
 from ..reporting.sections import (PAPER_CITATION, WEB_CITATION, citeable_evidence, validate_report)
@@ -76,14 +76,26 @@ def _acknowledged(state: dict, name: str, tech: str) -> bool:
     return excluded and any(gap.startswith(f"{name}:") for gap in gaps)
 
 
-def evidence_shortfalls(state: dict, name: str) -> list[str]:
-    """관점·기술별 고유 출처 수 결정적 검사(Supervisor 충분성 검증과 편향 규칙이 함께 쓴다)."""
-    evidence = deduplicate_evidence(state.get("evidence", []))
+def evidence_shortfalls(state: dict, name: str) -> list[dict]:
+    """관점·기술별 고유 출처 수 결정적 검사(Supervisor 충분성 검증과 편향 규칙이 함께 쓴다).
+
+    최신 시도의 출처(`perspectives[name].source_units`, 노드 경계에서 기록)만 센다. 이전 시도의 출처를
+    누적하면 매 시도 1개씩만 찾아도 합쳐서 2개가 되어 통과하므로 누적하지 않는다. source_units가 없는
+    이전 형식 State에서만 누적 evidence로 센다.
+    """
+    result = perspective(state, name)
+    latest = result.get("source_units")
+    evidence = None if latest is not None else deduplicate_evidence(state.get("evidence", []))
     out = []
     for tech in TECHS:
-        distinct = {_source_unit(ev) for ev in evidence if ev.get("agent") == name and ev.get("technology") == tech}
+        if latest is not None:
+            distinct = set(latest.get(tech, []))
+        else:
+            distinct = {source_unit(ev) for ev in evidence if ev.get("agent") == name and ev.get("technology") == tech}
         if len(distinct) < MIN_DISTINCT_SOURCES:
-            out.append(f"{name}/{tech}: 고유 출처 {len(distinct)}개(<{MIN_DISTINCT_SOURCES})")
+            out.append({"perspective": name, "technology": tech, "distinct": len(distinct),
+                        "required": MIN_DISTINCT_SOURCES,
+                        "reason": f"{name}/{tech}: 고유 출처 {len(distinct)}개(<{MIN_DISTINCT_SOURCES}, 최신 시도 기준)"})
     return out
 
 
@@ -112,10 +124,6 @@ def check_neutrality(state: dict) -> dict:
     return {"passed": not issues, "issues": issues, "targets": ["report"] if issues else []}
 
 
-def _source_unit(ev: dict) -> str:
-    if ev.get("source_type") == "web":
-        return ev.get("url", "")
-    return f"{ev.get('doc_id')}:{ev.get('page')}"
 
 
 def _verdicts(state: dict, name: str, tech: str) -> list[str]:
@@ -137,9 +145,9 @@ def check_bias(state: dict) -> dict:
                 continue
             items = [ev for ev in evidence if ev.get("agent") == name and ev.get("technology") == tech]
             problems = []
-            distinct = {_source_unit(ev) for ev in items}
-            if len(distinct) < MIN_DISTINCT_SOURCES:
-                problems.append(f"고유 출처 {len(distinct)}개(<{MIN_DISTINCT_SOURCES})")
+            short = next((x for x in evidence_shortfalls(state, name) if x["technology"] == tech), None)
+            if short:
+                problems.append(f"고유 출처 {short['distinct']}개(<{MIN_DISTINCT_SOURCES})")
             web = [ev for ev in items if ev.get("source_type") == "web"]
             if len(web) >= MIN_DISTINCT_SOURCES:
                 publisher, count = Counter(ev.get("publisher") or ev.get("url", "") for ev in web).most_common(1)[0]

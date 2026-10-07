@@ -35,7 +35,7 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
     missing: list[str] = []
     for tech, name in (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME CXL hybrid memory")):
         found = []
-        queries = MARKET_QUERIES[tech] + [(q, "news") for q in retry_queries(name, feedback)]
+        queries = MARKET_QUERIES[tech] + [(q, "news") for q in retry_queries(name, feedback, tech=tech)]
         for query, topic in queries:
             found.extend(web.search_market(query, topic))
         # Distinct URL, stable citation IDs; web excerpt is the only supporting text.

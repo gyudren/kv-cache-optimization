@@ -85,7 +85,7 @@ class FakeLLM:
     """
 
     def __init__(self, insufficient=None, one_sided=None, raise_on=None, crash_on=None,
-                 banned_report=0, judge_fail=None, needs_source=None):
+                 banned_report=0, judge_fail=None, needs_source=None, cite_limit=None):
         self.insufficient = insufficient or {}
         self.one_sided = one_sided or {}
         self.raise_on = raise_on or {}
@@ -93,6 +93,7 @@ class FakeLLM:
         self.banned_report = banned_report
         self.judge_fail = judge_fail or {}
         self.needs_source = needs_source or []
+        self.cite_limit = cite_limit or {}  # {agent: {tech: n}} 매 시도 인용 출처 수 제한
         self.runs: Counter = Counter()
         self.prompts: dict[str, list[str]] = {}
 
@@ -133,7 +134,8 @@ class FakeLLM:
         return MarketAssessment(
             summary=f"{tech} 시장 근거 요약", market_size_growth="시장 성장 근거", adoption="채택 근거",
             ecosystem="생태계 근거", market_size_growth_verdict=verdicts[0], adoption_verdict=verdicts[1],
-            ecosystem_verdict=verdicts[2], verdict=verdicts[3], cited_ids=self._ids(prompt, f"web:{tech}:"),
+            ecosystem_verdict=verdicts[2], verdict=verdicts[3],
+            cited_ids=self._ids(prompt, f"web:{tech}:")[:self.cite_limit.get("market", {}).get(tech)],
             sufficient=not insufficient, missing=[f"{tech} 시장 규모 정량 근거"] if insufficient else [])
 
     def _stakeholder(self, prompt, run, insufficient):

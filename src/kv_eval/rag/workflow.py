@@ -4,6 +4,7 @@ import json
 import re
 from hashlib import sha256
 from typing import Any
+from ..tools import scoped_feedback
 from .retrieve import HybridRetriever, RetrievedChunk
 from ..schemas import QueryPlan, Relevance, Rewrite, RAGResponse
 from ..config import MIN_RELEVANT, RAG_REWRITES, RETRIEVAL_K
@@ -58,9 +59,6 @@ class RAGWorkflow:
                 "search_attempts": attempts}
 
 
-TECH_TOKENS = {"mla": ("mla", "deepseek"), "itme": ("itme", "cxl")}
-
-
 def feedback_fingerprint(feedback: dict | None) -> str:
     """재작업 지시(missing·재검색 질의)의 지문. 지시가 바뀌면 캐시 키가 바뀐 것으로 본다."""
     items = [*(feedback or {}).get("missing", []), *(feedback or {}).get("rewritten_queries", [])]
@@ -70,16 +68,13 @@ def feedback_fingerprint(feedback: dict | None) -> str:
 
 
 def question_targeted(question: str, technology_filter: str, feedback: dict | None) -> bool:
-    """재작업 지시가 이 질문을 겨냥하는가(기술명·D-코드가 지시에 있으면 그 범위만, 없으면 전체)."""
-    tech = "itme" if technology_filter.startswith("itme") else technology_filter
+    """재작업 지시가 이 질문을 겨냥하는가: 이 기술에 대한 검색 힌트가 있고, 지시에 D-코드가 있으면 그 차원만."""
+    scoped = scoped_feedback(feedback, technology_filter)
+    if not scoped:
+        return False
+    dims = {d for item in scoped.get("missing", []) for d in re.findall(r"\bD([1-7])\b", str(item))}
     dim = re.search(r"\bD([1-7])\b", question)
-    for item in [*(feedback or {}).get("missing", []), *(feedback or {}).get("rewritten_queries", [])]:
-        text = str(item).lower()
-        techs = {name for name, tokens in TECH_TOKENS.items() if any(t in text for t in tokens)}
-        dims = set(re.findall(r"\bd([1-7])\b", text))
-        if (not techs or tech in techs) and (not dims or (dim and dim.group(1) in dims)):
-            return True
-    return False
+    return not dims or bool(dim and dim.group(1) in dims)
 
 
 def answer_with_cache(rag: Any, cache: dict, question: str, technology_filter: str, feedback: dict | None) -> dict:
@@ -89,10 +84,11 @@ def answer_with_cache(rag: Any, cache: dict, question: str, technology_filter: s
     재사용하지 않는다. 그래야 품질 평가가 "반대 방향 근거"를 요구했을 때 같은 답을 돌려주지 않고
     지시가 반영된 질의로 다시 검색한다(같은 지시로 이미 다시 검색한 답은 재사용).
     """
-    fingerprint = feedback_fingerprint(feedback)
+    scoped = scoped_feedback(feedback, technology_filter)  # 이 질문의 기술에 해당하는 지시만
+    fingerprint = feedback_fingerprint(scoped)
     targeted = bool(fingerprint) and question_targeted(question, technology_filter, feedback)
     previous = cache.get(question)
     if previous and previous.get("sufficient") and (not targeted or previous.get("feedback_fp") == fingerprint):
         return previous
-    answer = rag.rag_answer(question, technology_filter, feedback or {})
+    answer = rag.rag_answer(question, technology_filter, scoped)
     return {**answer, "feedback_fp": fingerprint if targeted else ""}
