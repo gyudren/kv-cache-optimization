@@ -6,8 +6,11 @@ Multi-Agent 평가 시스템이다.
 ## Overview
 
 - 목표 : 두 기술을 기술 성숙도·시장성·이해관계자·도메인 적용성 4관점에서 비교 평가한다. 우승 기술을 고르지 않고 관점별 장점·제약·근거 수준·도입 전 확인사항을 근거와 함께 제시한다.
+
 - 패턴 : **Supervisor** — 이 과제에는 "근거가 부족한 관점만 다시 조사한다"와 "품질 평가 미달 원인에 따라 다른 에이전트로 되돌린다"는 두 가지 재작업 흐름이 필요하다. 단계 체인은 순서가 엣지에 묶여 특정 관점만 다시 실행하기 어렵다. Orchestrator-Workers는 오케스트레이터가 매번 작업을 다시 나누고 Synthesizer가 결과를 합치는 구조라, 평가 틀이 4관점·D1~D7로 이미 정해진 이 과제에서는 작업 분해 방식이 실행마다 달라져 재현이 어렵다. 또한 어느 관점이 부족한지 판정하는 흐름을 별도로 만들어야 한다. State 전체를 한 곳에서 보고 다음 노드를 정하는 Supervisor가 이 두 흐름을 가장 직접적으로 구현한다.
+
   - 구현 : `supervisor` 노드 하나가 State를 읽고 `add_conditional_edges` 하나로 다음 실행 노드를 결정한다. 보고서·품질 평가 노드를 포함한 모든 작업 노드는 실행 후 Supervisor로만 돌아온다(작업 노드 간 직접 엣지 0개, `tests/test_graph_structure.py`에서 검사). Supervisor는 LLM이 아니라 결정적 규칙 함수다(`src/kv_eval/supervisor/policy.py`, 명세 `docs/SUPERVISOR_POLICY.md`).
+
 - 동적 처리 : 실행 순서를 고정하지 않는다. Supervisor는 매 진입마다 `perspective_status`·`node_status`·`retry_counts`·`followup_counts`·`eval_result`·`step_count`만 보고 다음 노드를 정한다. 고정 순서와 다른 점은 다음과 같다.
   - 아직 조사하지 않은 관점을 `Send`로 한 번에 할당한다. 기술 조사 결과를 다른 관점이 입력으로 쓰지 않으므로 선행 순서가 없다. 실행은 `AGENT_CONCURRENCY`(기본 1)만큼 동시에 진행한다.
   - 평가를 진행할 수 없게 하는 결함(검색 결과·인용 없음, 기준 판정 불가, TRL 미기재 등)이 있거나 기술별 고유 출처가 2개 미만인 관점만 다시 조사한다. 에이전트가 적은 세부 미확인 항목은 재조사 사유가 아니라 보고서 한계점에 남는다. 재작업 지시(사유와 기술별 검색 힌트)는 RAG 질의 계획·캐시 키·에이전트 프롬프트에 반영된다.
@@ -22,7 +25,9 @@ Multi-Agent 평가 시스템이다.
 같은 KV cache 메모리 병목을 SW는 KV cache 크기를 줄여서, HW는 담을 메모리 용량을 늘려서 푼다. 기술은 조 토의 후 직접 선정했고, 비선정 후보와 사유는 보고서 2장 표 2에 있다.
 
 - SW : **DeepSeek-V2 MLA** (Multi-head Latent Attention, arXiv 2405.04434) — Key·Value를 저차원 잠재 벡터로 압축하도록 어텐션 구조를 재설계해 KV cache 자체를 줄인다(저자 보고 기준 93.3% 감소). 기존 모델에 사후 적용하기 어렵다는 한계가 있지만, DeepSeek-V3·R1이 같은 구조를 쓰고 vLLM·SGLang이 MLA 백엔드를 지원한다. 여러 평가 관점에서 비교적 균형 있게 근거를 확보할 수 있어 선정했다. 사후 양자화 KIVI는 채택 근거가 연구·라이브러리 수준이고, TurboQuant는 공식 상용화 근거가 제한적이라 제외했다.
+
 - HW : **ITME** (CXL-Hybrid 계층 메모리 확장, arXiv 2606.12556, SK hynix) — CXL 기반 DRAM-NVMe Hybrid Memory로 TB급 원격 메모리 계층을 구성하고, 가중치와 prefix KV cache의 예측 가능한 접근 패턴을 이용해 데이터를 미리 옮긴다. HBM·호스트 DRAM 용량 한계를 넘어 장문맥·다중 턴 KV cache를 저장하고 폐기·재계산을 줄이는 메모리 용량 확장 방식을 직접적으로 보여 주기 때문에 선정했다. InfiniGen은 호스트 메모리 오프로딩이라 SW 관리 성격이 강하고, CXL-PNM은 연산까지 메모리 쪽으로 옮기는 접근이라 비교용 베이스라인으로만 쓴다.
+
 - HW 베이스라인 : InfiniGen, CXL-PNM — ITME의 한계를 제3의 시각에서 교차 확인하는 용도로만 RAG 평가 문서에 포함한다.
 
 ## Features
