@@ -1,4 +1,8 @@
-# QA 보고서: 반복 1 (feat/multi-agent-supervisor)
+# QA 보고서 (feat/multi-agent-supervisor)
+
+> **최신 판정: 반복 2, 84/100 (반려, 남은 Blocker는 D-01 실제 실행 1건).** 상세 내용은 문서 끝의 "반복 2"를 본다. 아래는 반복 1의 기록이며 수정하지 않고 보존한다.
+
+# 반복 1
 
 - 검증자: QA Senior · 검증일 2026-10-07 · 대상 커밋 `1896b1c..62479cc` (E1~E14)
 - 기준: Notion「(참고) 평가 항목」 100점 루브릭, `docs/DEV_PLAN.md`, `docs/DECISIONS.md`, `README.md`
@@ -150,3 +154,126 @@ README 트리의 경로(`.env.example`, `supervisor/`, `evaluation/quality.py`, 
 7. Minor(D-07~D-15)는 같은 반복에서 함께 정리한다.
 
 다음 QA 반복에서는 위 항목을 다시 검증하고, 실제 실행 산출물을 결정 로그·LangSmith 트레이스·보고서와 서로 대조한다.
+
+---
+
+# 반복 2
+
+- 검증일 2026-10-07 · 대상 커밋 `7ed9f10..18bca72` (Engineer 커밋 9개)
+- 원칙은 반복 1과 같다. Engineer 요약을 그대로 믿지 않고, 반복 1의 재현 스크립트(엣지 덤프, 고장 주입 7종, 캐시, 재개)를 새 코드로 다시 돌렸다. 회귀를 찾기 위한 스크립트도 새로 만들어 돌렸다: 병적 단계 상한, Send 페이로드, evidence 저장소 연결, app 경로 시뮬레이션. 모두 저장소 밖 scratchpad에서 실행했고 저장소는 `git status` clean 상태를 유지했다.
+- 실제 API 실행과 LangSmith 캡처는 여전히 **미검증**이다(키 없음). 해당 배점은 보류했고, 실행이 끝나면 도달할 수 있는 최대 점수를 따로 적었다.
+
+## R2-1. 총점
+
+**84 / 100. 만점이 아니므로 반려한다.** 코드 결함 중 Major는 모두 해소됐다. 남은 큰 감점은 D-01(실제 실행·캡처 미제출) 하나이고, 나머지는 Minor 5건이다.
+
+| 항목 | 배점 | 반복 1 | 반복 2 | 실행 후 최대 | 판정 요약 | 핵심 증거 |
+|---|---|---|---|---|---|---|
+| 패턴 적용 정합성 | 20 | 15 | **19** | 20 | 작업 노드 7개가 모두 `supervisor`로만 복귀하고, 평가는 Supervisor의 `evaluate` 결정으로만 실행된다. 재작업 지시가 RAG와 프롬프트에 실제로 들어간다. Supervisor가 결정적 충분성 검사를 한다. 남은 문제는 부족 사유 문장이 그대로 웹 질의가 되는 것(D-16)과 누적 근거로 충분성이 통과되는 것(D-17)이다. | `graph.py:43-46`, `policy.py:52-55,225-238`, R2-3.1·3.4 |
+| 동적 동작 실증 | 20 | 11 | **14** | 20 | 결정 로그에 `evaluate`가 남는다. 워커 스레드도 부모 run을 이어받는 것을 실험으로 확인했다. 실제 LangSmith 트레이스는 미검증이다(D-01). | R2-3.2·3.6 |
+| State Schema 설계 | 20 | 17 | **19** | 19 | 발췌 원문을 디스크로 옮겼다(이전 실행 evidence 491KB에서 228KB). Send 페이로드를 줄였지만 에이전트가 읽는 필드는 빠지지 않았다. 재개는 저장소 변경 후에도 정상이다. 남은 문제: 체크포인트마다 State 전체를 저장하는 비용이 남아 있다(D-19). 실행 후에도 Minor가 남으면 1점은 감점이 유지된다. | `evidence_store.py`, `router.py:23-37`, R2-3.5 |
+| 품질 평가 노드 | 15 | 12 | **14** | 14 | 실패하거나 빈 보고서는 평가하지 않는다. 공백 면제 범위를 줄였다. 조판을 검사할 수 없으면 이슈로 남긴다. 평가 기반 재조사가 실제로 재검색한다. 남은 문제: 저장소가 없으면 원문 대신 300자 발췌로 조용히 판정한다(D-18). | `quality.py:66-87,175-196`, R2-3.3 |
+| 코드 구조·모듈 분리 | 5 | 4 | **5** | 5 | master 잔재(01·08 프롬프트, 명칭)를 정리했다. README 트리는 실제 트리와 일치한다(`evidence_store.py`, `SUPERVISOR_POLICY.md`, `legacy_rag/`, scripts 포함). | `grep -rni master src prompts` 0건 |
+| 실행 결과 재현성 | 10 | 6 | **7** | 10 | `pytest` 41/41 통과. 고장 주입 7종과 병적 단계 상한 시나리오가 모두 보고서를 남기고 정상 종료한다. app의 run, `--resume`, `--report-only`, `--export-only`를 Fake로 끝까지 실행했다. 실제 실행은 미검증이다(D-01). | R2-3.2·3.4·3.7 |
+| Output 보고서 | 10 | 6→5 | **6** | 10 | 이전 보고서를 내보내면 9p다(목표 9p, 상한 10p). 새 파이프라인이 만든 `Agent_*` 보고서는 아직 없다(D-01). | R2-3.7 |
+| **합계** | **100** | **70** | **84** | **97** | | |
+
+- **실행 후 최대 97점**: D-01만 해결했을 때 보류한 15점(동적 6, 재현성 3, Output 4, 패턴 1 중 실행 증빙분은 제외)이 회복되는 경우다. Minor D-16~D-19까지 고치고 실행 결과가 아래 R2-5의 확인 기준을 통과하면 100점이 가능하다.
+
+## R2-2. 반복 1 결함 재검증 결과
+
+| ID | 반복 1 심각도 | 판정 | 재검증 근거 |
+|---|---|---|---|
+| D-01 | Blocker | **미해결(부분 진전)** | 이전 실행물은 `outputs/legacy_rag/`로 옮겼고 `scripts/capture_checklist.md`를 추가했다. 그러나 `Agent_*` 보고서, `decisions_*.jsonl`, LangSmith 캡처가 여전히 없다. |
+| D-02 | Major | **해결** | `ContextThreadPoolExecutor`로 바꿨다(`technology.py:70`, `domain.py:66`). 실험 결과 `submit parent: True`, `map parent: True`. 테스트 `test_worker_threads_inherit_graph_run_context` 통과. |
+| D-03 | Major | **해결** | 엣지 덤프에서 `report -> supervisor`이고 `report -> quality_evaluator`는 없다. report 1회 예외 시나리오에서 `report → retry:report → evaluate → pass` 순서로 judge가 1회만 호출된다(반복 1에서는 2회였고 빈 보고서도 평가했다). 테스트 3개(`end_passed_requires_evaluation…`, `failed_report_is_not_evaluated`, `report_always_failing…`) 통과. |
+| D-04 | Major | **해결** | 반복 1과 같은 시나리오(`judge_fail bias_control→domain`)에서 RAG 호출은 41회이고 그중 **14회가 피드백 포함 재검색**이다(반복 1은 0회). market·stakeholder·tech·domain 프롬프트 끝에 `rework_note`가 붙는다. |
+| D-05 | Major | **해결(잔여 Minor는 D-19)** | `measure_state_size.py`: 이전 실제 실행 evidence 491,320B를 축약본으로 바꾸면 227,639B다. Fake 재작업 실행의 체크포인트 21개 누적은 1,856,192B이고 외부 저장소는 231,667B다. 보고서와 Judge는 `hydrate()`로 원문을 받는다(Fake에서 발췌 900자 확인). |
+| D-06 | Major | **해결** | DECISIONS에 43개 항목이 있다. README에 "설계 결정(선정 이유)" 절이 생겼다(LLM 라우터 대비, 평가 노드 위치, Hybrid, 체크포인터, 재시도 상한, MAX_STEPS, FINALIZE_STEPS, 편향 임계값, 충분성 판단 주체). |
+| D-07 | Minor | **해결** | 이전 State로 `--export-only`를 실행해도 `run_logs.json`(12,967B)이 보존된다. |
+| D-08 | Minor | **해결** | 반복 1 재현 그대로(4.2 절을 비우고 market gap 추가, excluded)인데 이제 `check_coverage`가 **False**를 반환한다. |
+| D-09 | Minor | **해결** | 폰트가 없으면 이슈로 남긴다(`sections.py:163-167`). 테스트 환경에서만 `ALLOW_UNCHECKED_PDF=1`로 경고로 낮춘다. |
+| D-10 | Minor | **해결** | Judge만 미달이면 질의가 `independent sources limitations adoption evidence`가 된다. 단, 같은 유형의 문제가 Supervisor 부족 사유에서 새로 나타났다(D-16). |
+| D-11 | Minor | **해결** | `grep -rni master src prompts app.py scripts .env.example` 0건. 프롬프트 레지스트리에서 01·08을 제거했고 Supervisor 명세는 `docs/SUPERVISOR_POLICY.md`로 옮겼다. |
+| D-12 | Minor | **해결** | `.env.example:11`에 "필수, 대체 검색 엔진 없음"이 명시됐다. |
+| D-13 | Minor | **해결** | `--resume`이 색인을 만들기 전에 체크포인트를 확인한다. `--query`를 재개나 내보내기와 함께 쓰면 오류를 낸다. `--report-only`는 트레이싱 설정을 먼저 한다. |
+| D-14 | Minor | **해결** | `classify`가 `evidence_shortfalls`로 다시 검사한다(`policy.py:52-55`). 단, 누적 근거로 통과되는 문제가 남았다(D-17). |
+| D-15 | Minor | **해결** | 이전 State를 내보내면 PDF **9p**다(반복 1은 10p). |
+
+## R2-3. 검증 수행 내역
+
+### 3.1 엣지 덤프
+```
+tech/market/stakeholder/domain/synthesis/report/quality_evaluator -> supervisor (fixed, 7개)
+supervisor -> {7개 작업 노드, __end__} (cond) · branches = {'supervisor': ['route']}
+```
+작업 노드 사이의 엣지는 0개이고, 모든 작업 노드의 후속 노드는 supervisor뿐이다. **충족.**
+
+### 3.2 고장 주입 7종 재실행 (반복 1의 `adv.py`)
+
+| 시나리오 | 반복 2 결과 | 비고 |
+|---|---|---|
+| 모든 노드 항상 예외 | `unverified`, 진입 9 / superstep 18, `end:report_failed` | 보고서가 없으면 평가하지 않음(judge 0회) |
+| report 1회 예외 | `completed`, `… report → retry:report → evaluate → pass` | 빈 보고서 평가가 사라짐 |
+| Judge 항상 예외 | `unverified`, `evaluate → retry:quality_evaluator → end:unverified` | |
+| Judge 4항목 상시 미달 | `unverified`, 진입 17 | |
+| 판정 한쪽 고정 | `completed_with_gaps`, 진입 15 | |
+| 4관점 부족 + 금지 표현 | `unverified`, 진입 11 | |
+| 종합 항상 예외 | `completed_with_gaps`, 진입 6 | |
+
+### 3.3 병적 단계 상한 (Engineer가 "이론적 최악 30회 이상"이라고 인정한 경우)
+`patho3.py`: 평가 Judge가 coverage 미달 대상을 tech → market → stakeholder → domain 순서로 돌려 지목하게 해서 관점 재조사를 1회씩 따로 소진시켰다.
+- `MAX_STEPS=60`(상한이 사실상 없는 경우): 자연 종료까지 **진입 41회 / superstep 82**. 재조사 8회 × (재조사·종합·보고서·평가) + 보고서 재작성 2회 → `end:unverified`. 이론적 최악은 실재하고, 그 크기는 41회로 측정됐다.
+- **기본값 `MAX_STEPS=20`**: 진입 21회, superstep 42에서 `end:step_limit`으로 정상 종료한다. 직전 보고서는 평가까지 마쳤고(`… report → evaluate → fail:coverage → end:step_limit`), `recursion_limit`은 60이다. `MAX_STEPS=8`과 `40`도 정상 종료했다.
+- 다른 고장 조합(`patho.py`: 4관점 1회 부족 + 종합 1회 예외 + 매 종합 4관점 추가 근거 요청 + Judge 3항목 상시 미달)을 `max_steps` 1~15에 대해 모두 돌렸다. **12개 모두** 보고서가 있고, 마지막 보고서를 평가한 뒤 `end:*`로 끝났다.
+- 예외: `build_graph(policy=Policy(max_steps=30))`에 기본 `run_config()`를 함께 쓰면 `GraphRecursionError`가 난다. `recursion_limit`이 Policy가 아니라 config의 `MAX_STEPS`에서 계산되기 때문이다(D-20). app 경로는 둘 다 config를 쓰므로 영향이 없다.
+
+### 3.4 재작업 전달
+- `cache.py`(반복 1 재현): RAG 41회 중 피드백 포함 14회, domain 재검색이 실제로 일어났다. **해결.**
+- `short.py`(신규): market이 기술마다 출처를 1개만 인용하면 Supervisor가 `dispatch:market`을 결정한다(결정적 충분성 검사가 동작함). 그런데 재검색 웹 질의가 `"DeepSeek-V2 MLA market/mla 고유 출처 1개(<2)"`, `"ITME CXL hybrid memory market/mla 고유 출처 1개(<2)"`처럼 **부족 사유 문장 그대로**이고, 다른 기술 이름과도 섞여 있다(D-16). 재조사에서도 출처를 1개만 인용했는데 이전 시도의 출처와 합쳐 2개가 되어 "충분"으로 통과했다(D-17).
+
+### 3.5 재개 (반복 1의 `resume.py`, evidence 저장소 변경 후)
+market(병렬 중) 크래시, quality_evaluator 크래시, report 크래시 모두 해당 노드만 다시 실행하고 `completed`로 끝났다. 결정 로그도 `… report → evaluate → pass → end:passed`로 일관된다. **회귀 없음.**
+
+### 3.6 Send 페이로드 축소의 회귀 여부
+`SEND_KEYS = (user_query, trace_id, retry_counts, feedback, step_count)`. 4개 관점 에이전트와 guard가 State에서 읽는 키를 grep으로 모두 찾았다: `retry_counts`, `feedback`, `trace_id`. 셋 다 포함돼 있다. **빠진 필드 없음.** LangSmith 컨텍스트 실험에서도 `ContextThreadPoolExecutor`의 `submit`과 `map` 모두 부모 run id가 일치했다.
+
+### 3.7 app 경로 (Fake로 끝까지 실행, `appsim.py`)
+
+| 경로 | 결과 |
+|---|---|
+| `app.run()` → report 크래시 → `app.run(resume=trace_id)` | `completed`, verified, 4p. 관점과 종합은 다시 실행하지 않고 report만 2회 |
+| 종료된 trace를 다시 `--resume` | 노드 실행 없이 다시 내보내기만 함 |
+| `--report-only` (새 형식 final_state, 95KB, `excerpt_ref` 75건) | `completed`, report와 judge 각 1회. 보고서 프롬프트 발췌는 900자로 hydrate됨 |
+| `--report-only` 직전에 `data/cache` 삭제 | `completed`. 그러나 발췌가 **300자로 조용히 축소**됨(D-18) |
+| `--report-only` (이전 형식 State) | `completed_with_gaps`, verified. seed를 offload한 뒤 hydrate해서 발췌 1,006자 |
+| `--export-only` (이전 State 복사본) | 9p. `run_logs.json` 보존. exit 2(평가 결과 없음, 의도대로) |
+| `--resume x --query q`, `--query q --export-only` | argparse 오류(의도대로) |
+
+`pytest -q`: **41 passed**. `scripts/validate_prompt_package.py`: OK.
+
+## R2-4. 남은 결함과 새 결함
+
+| ID | 심각도 | 루브릭 항목 | 증거 | 재현 방법 | 기대 동작 |
+|---|---|---|---|---|---|
+| D-01 | **Blocker (미해결)** | 동적 동작 실증, 재현성, Output | `outputs/`에 `Agent_*.md/pdf`, `decisions_*.jsonl`, `outputs/tracing/*.png`가 없다. | `ls outputs/` | `scripts/capture_checklist.md` 순서대로 키가 있는 로컬에서 1회 실행하고 산출물과 캡처를 커밋한다(아래 R2-5의 확인 기준). |
+| D-16 | Minor (신규) | 패턴 정합성(재작업 질의) | `policy.py:58-60`의 `_feedback(missing)`은 `rewritten_queries`를 `missing`으로 그대로 채운다. 여기에 `evidence_shortfalls` 사유가 앞에 붙는다(`policy.py:138`). `tools.retry_queries`는 이것을 기술 이름과 결합하면서 다른 기술 이름과도 섞는다. | `short.py`: 웹 질의 `"DeepSeek-V2 MLA market/mla 고유 출처 1개(<2)"`, `"ITME CXL hybrid memory market/mla …"` | 출처 부족 사유는 질의 힌트로 바꾼다(예: `independent sources`). `관점/기술:` 사유는 해당 기술 질의에만 붙인다. D-10과 같은 원칙이다. |
+| D-17 | Minor (신규) | 패턴 정합성(충분성 판단), State | `quality.py:79-87`의 `evidence_shortfalls`는 State에 쌓인 모든 시도의 evidence를 센다. 현재 결과가 인용하지 않은 이전 시도의 출처도 포함된다. | `short.py`: 매 시도에 출처를 1개만 인용했는데 두 시도를 합쳐 2개가 되어 `dispatch:market` 1회 뒤 통과 | 충분성은 현재 결과가 인용한 출처(`cited_ids`, 또는 최신 `attempt`의 evidence)로 센다. |
+| D-18 | Minor (신규) | 품질 평가 노드(Groundedness) | `evidence_store.hydrate`는 원문이 없으면 축약본(300자)을 아무 표시 없이 그대로 쓴다(`evidence_store.py:69-70`). `data/cache/`는 `.gitignore` 대상이라, 새로 clone한 뒤 `--report-only`를 하면 항상 이 경로를 탄다. | `appsim.py`: cache 삭제 후 report-only 발췌 최대 300자, 평가는 `completed` | 원문이 없는 항목 수를 평가 결과나 `validation.json`에 경고로 남긴다. 또는 `--report-only`에서 저장소가 없으면 실행을 막고 안내한다. |
+| D-19 | Minor (D-05 잔여) | State Schema(지속성 비용) | evidence 축약 후에도 이전 실행 규모로 State에 약 228KB가 남는다. SqliteSaver는 체크포인트마다 State 전체를 저장한다(Fake 재작업 실행 21개 = 1.86MB). | `python scripts/measure_state_size.py` | 실제 실행 뒤 체크포인트 크기를 README에 실측치로 적는다. 더 줄이려면 evidence 메타(claim 등)도 줄이고 State에는 id만 둔다. 루브릭 만점의 필수 조건은 아니고 근거 문장과 실측의 일치가 핵심이다. |
+| D-20 | Minor (신규) | 재현성 | `observability.run_config`의 기본 `recursion_limit`은 config의 `MAX_STEPS`에서 계산되고 `Policy.max_steps`와 연결되지 않는다. | `patho2.py`: `Policy(max_steps=30)`과 기본 `run_config` → `GraphRecursionError: Recursion limit of 60` | Policy에서 recursion_limit을 계산하거나(`(policy.max_steps+FINALIZE_STEPS)*2+10`), `build_graph`와 `run_config`가 같은 값을 쓰게 한다. |
+| P-01 | 참고 (점수 무관) | 프로세스 | Engineer가 PM 소유 문서 `docs/DEV_PLAN.md`의 §3 다이어그램과 규칙 1을 수정했다(커밋 18bca72). 내용은 QA 권고와 일치한다. | `git diff 7ed9f10..HEAD -- docs/DEV_PLAN.md` | PM이 승인하거나 되돌린다. |
+
+## R2-5. 판정과 다음 반복 지시
+
+**판정: 반려(84/100).** 코드는 실제 실행에 들어갈 준비가 됐다. 오프라인으로 검증할 수 있는 항목은 Minor 5건만 남았다. 이 상태에서 실제 실행으로 D-01을 해결하면 97점이고, 아래 1~4까지 끝내면 100점이 가능하다.
+
+1. **D-01(필수)**: `scripts/capture_checklist.md` 순서대로 실제 실행 1회. 다음 반복에서 QA가 확인할 기준은 아래와 같다.
+   - `validation.json`의 `trace_id`, `decisions_{trace_id}.jsonl` 파일명, LangSmith run metadata의 `trace_id`, 콘솔 첫 줄이 모두 같다.
+   - LangSmith 트리에서 RAG LLM 호출이 노드 run 아래 자식으로 붙어 있다(D-02 수정의 실증).
+   - 결정 로그에 `evaluate`가 있고, 최소 1회의 재작업(dispatch 재할당·reinvestigate·rewrite 중 하나)이 사유와 함께 있다. 없으면 재작업이 실제로 일어나지 않은 정상 경로이므로, Fake 시나리오 테스트를 함께 증빙으로 제시한다.
+   - `Agent_*.pdf`가 10p 이하이고 SUMMARY와 REFERENCE가 있으며 `validation.json`이 `passed`다. 또는 `completed_with_gaps`나 `unverified`이면 그 사유가 보고서 7장에 드러나 있다.
+   - `run_logs.json`과 `final_state.json`이 새 실행물이다.
+2. **D-16, D-17**: 재작업 질의 생성과 충분성 계산을 고치고, `short.py`와 같은 시나리오를 테스트로 추가한다.
+3. **D-18**: hydrate에 원문이 없을 때 경고나 차단을 남긴다.
+4. **D-20, D-19**: recursion_limit을 Policy와 연동하고, 실제 실행 뒤 체크포인트 실측치를 README에 반영한다.
