@@ -151,19 +151,82 @@ Payload는 각 agent가 수집·생성한 결과를 담는다.
 
 ![Supervisor 라우팅 순서](docs/architecture.png)
 
-그래프의 실행 흐름은 다음과 같다. 작업 노드는 실행 후 항상 Supervisor로 돌아오며, 재작업 경로(주황·자주)도 모두 Supervisor가 결정한다.
+```mermaid
+flowchart TB
+    START([START]) --> D1
 
-1. `dispatch` : 아직 조사하지 않은 관점을 `Send`로 한 번에 할당하고, 기본 설정에서는 하나씩 실행한다. 결과가 돌아오면 충분성을 판정해 평가를 진행할 수 없게 하는 결함이 있거나 출처가 부족한 관점만 다시 할당한다(관점당 2회).
-2. `synthesis` : 4관점이 모두 결론 상태(충분 또는 근거 공백 기록)가 되면 실행한다. 종합이 추가 근거를 요구하면 그 관점만 후속 재조사(관점당 1회)한 뒤 다시 종합한다.
-3. `report` : 종합이 끝나면 보고서를 쓴다.
-4. `evaluate` : 보고서 본문이 있을 때만 `quality_evaluator`를 실행한다.
-5. 통과하면 `END`로 종료한다. 미달이면 원인이 관점 에이전트일 때 `reinvestigate:<관점>`으로 재조사하고, 보고서 서술의 문제일 때는 `rewrite:report`로 보고서 재작성 단계로 되돌린다. 같은 원인이 반복되거나 한도를 모두 쓰면 `unverified`로 종료한다.
+    subgraph SUP["Supervisor · policy.decide"]
+        D1(["dispatch<br/>미수집·부족·지목 관점"])
+        C1{{"충분?<br/>필수 결함 · 고유 출처 수"}}
+        D2(["synthesis<br/>4관점이 결론 상태"])
+        C2{{"추가 근거?<br/>종합이 지목한 관점"}}
+        D3(["report<br/>종합 완료 · 재작성"])
+        D4(["evaluate<br/>보고서 본문이 있을 때"])
+        C3{{"통과?<br/>4항목 · 미달 원인"}}
+        E(["END"])
+    end
 
-그림은 `docs/architecture.svg`가 원본이다. 컴파일된 LangGraph 그래프는 `python scripts/export_graph.py`로 `outputs/architecture.png`에 생성하며, 조건부 edge는 `supervisor`에만 있고 작업 노드끼리 연결된 엣지는 없다.
+    subgraph AG["작업 노드"]
+        P["관점 에이전트 · 하나씩 실행<br/>tech · market · stakeholder · domain"]
+        SYN["synthesis<br/>일치·상충·근거 공백 정리"]
+        REP["report<br/>SUMMARY ~ REFERENCE"]
+        QE["quality_evaluator<br/>규칙 + LLM Judge"]
+    end
+
+    D1 -->|"1 Send"| P
+    P -.->|"2"| C1
+    C1 -->|"충분 · 공백 기록"| D2
+    D2 -->|"3"| SYN
+    SYN -.->|"4"| C2
+    C2 -->|"없음"| D3
+    D3 -->|"5"| REP
+    REP -.->|"6"| D4
+    D4 -->|"7"| QE
+    QE -.->|"8"| C3
+    C3 -->|"9 통과 · 중단"| E
+
+    C1 -->|"2a 부족 관점 재할당 ≤2회"| D1
+    C2 -->|"4a 지목 관점 후속 재조사 ≤1회"| D1
+    C3 -->|"8a reinvestigate ≤1회"| D1
+    C3 -->|"8b rewrite:report ≤2회"| D3
+
+    classDef decide fill:#ffffff,stroke:#5b3a9b,stroke-width:2px,color:#5b3a9b
+    classDef check fill:#fffaf0,stroke:#5b3a9b,color:#1d232a
+    classDef agent fill:#e8f4fb,stroke:#1f6f94,color:#1d232a
+    classDef gate fill:#fff6dc,stroke:#a1740b,color:#1d232a
+    classDef term fill:#ffffff,stroke:#66707a,color:#1d232a
+    class D1,D2,D3,D4,E decide
+    class C1,C2,C3 check
+    class P,SYN,REP agent
+    class QE gate
+    class START term
+    style SUP fill:#f4effd,stroke:#5b3a9b,color:#5b3a9b
+    style AG fill:#f7fbfd,stroke:#1f6f94,color:#1f6f94
+    linkStyle 12,13,14 stroke:#d4761c,stroke-width:2px,color:#d4761c
+    linkStyle 15 stroke:#b0397f,stroke-width:2px,color:#b0397f
+```
+
+PNG와 Mermaid는 같은 흐름을 그렸고, 번호는 라우팅 순서다. 실선은 Supervisor가 다음 노드를 부르는 경로, 점선은 작업 노드가 실행 후 Supervisor로 돌아오는 경로다. 작업 노드끼리 직접 이어진 엣지는 없고, 되돌림 경로(2a·4a·8a·8b)도 모두 Supervisor가 정한다.
+
+1. Supervisor → 관점 에이전트 (`dispatch`) : 미수집 관점을 `Send`로 한 번에 할당하고 하나씩 실행한다.
+2. 관점 에이전트 → Supervisor : 결과를 받아 충분성을 판정한다.
+   - 2a. 판정을 막는 결함이 있거나 출처가 부족한 관점만 다시 할당한다(관점당 2회, 1로).
+3. Supervisor → `synthesis` : 4관점이 모두 결론 상태(충분 또는 근거 공백 기록)일 때 부른다.
+4. synthesis → Supervisor : 종합이 추가 근거를 요구했는지 확인한다.
+   - 4a. 종합이 지목한 관점만 후속 재조사한 뒤 다시 종합한다(관점당 1회, 1로).
+5. Supervisor → `report` : 종합이 끝나면 보고서를 쓴다.
+6. report → Supervisor : 보고서 본문이 있는지 확인한다.
+7. Supervisor → `quality_evaluator` (`evaluate`) : 본문이 있을 때만 부른다.
+8. quality_evaluator → Supervisor : 4항목 판정과 미달 원인(`target_agents`)을 받는다.
+   - 8a. 원인이 관점 에이전트면 `reinvestigate:<관점>`으로 그 관점만 재조사한다(관점당 1회, 1로).
+   - 8b. 원인이 보고서 서술이면 `rewrite:report`로 보고서만 다시 쓴다(2회, 5로).
+9. Supervisor → `END` : 통과면 `completed`(근거 공백이 있으면 `completed_with_gaps`), 같은 원인이 반복되거나 한도를 다 쓰면 `unverified`로 끝낸다.
+
+PNG의 원본은 `docs/architecture.svg`다. 컴파일된 LangGraph 그래프는 `python scripts/export_graph.py`로 `outputs/architecture.png`에 그려지며, conditional edge가 `supervisor` 하나뿐이고 작업 노드끼리 연결된 엣지가 없다.
 
 ### 실제 실행 경로
 
-`outputs/run_logs.json`, trace `77cb99ef`, 커밋 `9a6b5bf`, 11단계:
+`outputs/run_logs.json`, trace `77cb99ef`, 커밋 `9a6b5bf`, 11단계. 왼쪽 `#`은 Supervisor 진입 순번이며 위 라우팅 번호와는 별개다.
 
 (LangSmith metadata의 `revision_id`가 `9a6b5bf-dirty`인 것은 코드 변경이 아니라, 실행 시작 시 `tee`가 git이 추적하는 `outputs/run_console.log`를 덮어썼기 때문이다.)
 
