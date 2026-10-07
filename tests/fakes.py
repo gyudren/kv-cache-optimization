@@ -26,15 +26,24 @@ class SimulatedCrash(BaseException):
 
 
 class FakeRAG:
-    def __init__(self):
+    """no_evidence: {질문 일부 문자열: N}  그 문자열을 포함한 질문은 처음 N회 관련 청크를 찾지 못한다(근거 없음)."""
+
+    def __init__(self, no_evidence=None):
         self.calls = 0
         self.log: list[dict] = []  # 호출별 질문·재작업 지시·워커 스레드에서 본 실행 설정
+        self.no_evidence = dict(no_evidence or {})
+        self._misses: Counter = Counter()
 
     def rag_answer(self, question: str, technology_filter: str, feedback: dict | None = None) -> dict:
         from langchain_core.runnables.config import var_child_runnable_config
         self.calls += 1
         self.log.append({"question": question, "feedback": dict(feedback or {}),
                          "config": var_child_runnable_config.get()})
+        for key, limit in self.no_evidence.items():
+            if key in question and self._misses[key] < limit:
+                self._misses[key] += 1
+                return {"answer": "근거 부족", "evidence": [], "sufficient": False,
+                        "missing": [f"{question}: 관련 청크 0개(<2)"], "search_attempts": 3}
         doc_id, number, tech = DOCS[technology_filter]
         page = int(sha256(question.encode()).hexdigest(), 16) % 40 + 1
         chunk_id = f"{doc_id}#p{page}#{sha256(question.encode()).hexdigest()[:6]}"
@@ -46,11 +55,24 @@ class FakeRAG:
 
 
 class FakeWeb:
+    """single_source_calls: {"market"|"stakeholder": K}  해당 검색의 처음 K회 호출은 같은 URL 1건만 돌려준다
+    (검색이 출처 1개만 찾은 상황 → 고유 출처 2개 미만)."""
     PUBLISHERS = [f"news{i}.example.com" for i in range(5)]
 
-    def __init__(self):
+    def __init__(self, single_source_calls=None):
         self.queries: list[str] = []
         self._n = 0
+        self.single_source_calls = dict(single_source_calls or {})
+        self._calls: Counter = Counter()
+
+    def _single(self, kind: str, query: str) -> list[dict] | None:
+        self._calls[kind] += 1
+        if self._calls[kind] > self.single_source_calls.get(kind, 0):
+            return None
+        self.queries.append(query)
+        return [{"url": f"https://single.example.com/{kind}", "title": "단일 기사",
+                 "excerpt": (f"{query} 관련 단일 보도. " * 30)[:1000], "publisher": "single.example.com",
+                 "published_at": "2026-09-01", "speaker": "언론", "score": 0.9}]
 
     def _results(self, query: str) -> list[dict]:
         self.queries.append(query)
@@ -64,10 +86,10 @@ class FakeWeb:
         return out
 
     def search_market(self, query: str, topic: str = "news") -> list[dict]:
-        return self._results(query)
+        return self._single("market", query) or self._results(query)
 
     def search_stakeholder(self, query: str) -> list[dict]:
-        return self._results(query)
+        return self._single("stakeholder", query) or self._results(query)
 
 
 def _runs_left(table: dict, agent: str, run: int) -> bool:
@@ -84,10 +106,13 @@ class FakeLLM:
     - crash_on:     {agent: N}  SimulatedCrash (프로세스 중단 흉내, 재개 테스트용)
     - banned_report: N          보고서에 우열 표현 삽입(중립성 규칙 미달 유도)
     - judge_fail:   {criterion: (N, target_agent)}  LLM Judge 미달
+    - needs_source: [agent]     종합이 추가 근거를 요청할 관점(처음 needs_source_runs회 종합 실행에서)
+    - cite_limit:   {agent: {tech: n}}  인용 출처 수 제한(cite_limit_runs={agent: N}이면 처음 N회만, 없으면 매 시도)
     """
 
     def __init__(self, insufficient=None, one_sided=None, raise_on=None, crash_on=None,
-                 banned_report=0, judge_fail=None, needs_source=None, cite_limit=None, optional_only=None):
+                 banned_report=0, judge_fail=None, needs_source=None, cite_limit=None, optional_only=None,
+                 needs_source_runs=1, cite_limit_runs=None):
         self.insufficient = insufficient or {}
         self.optional_only = optional_only or {}
         self.one_sided = one_sided or {}
@@ -96,7 +121,9 @@ class FakeLLM:
         self.banned_report = banned_report
         self.judge_fail = judge_fail or {}
         self.needs_source = needs_source or []
-        self.cite_limit = cite_limit or {}  # {agent: {tech: n}} 매 시도 인용 출처 수 제한
+        self.needs_source_runs = needs_source_runs
+        self.cite_limit = cite_limit or {}  # {agent: {tech: n}} 인용 출처 수 제한
+        self.cite_limit_runs = cite_limit_runs or {}
         self.runs: Counter = Counter()
         self.prompts: dict[str, list[str]] = {}
 
@@ -132,6 +159,11 @@ class FakeLLM:
     def _ids(prompt: str, prefix: str) -> list[str]:
         return list(dict.fromkeys(re.findall(rf"^({re.escape(prefix)}[0-9a-f]{{14}}):", prompt, re.M)))
 
+    def _cite_cap(self, agent: str, tech: str, run: int) -> int | None:
+        if agent in self.cite_limit_runs and run > self.cite_limit_runs[agent]:
+            return None
+        return self.cite_limit.get(agent, {}).get(tech)
+
     def _market(self, prompt, run, insufficient):
         tech = "mla" if "web:mla:" in prompt else "itme"
         verdicts = (("긍정",) * 4 if _runs_left(self.one_sided, "market", run) else ("긍정", "우려", "혼재", "혼재"))
@@ -139,7 +171,7 @@ class FakeLLM:
             summary=f"{tech} 시장 근거 요약", market_size_growth="시장 성장 근거", adoption="채택 근거",
             ecosystem="생태계 근거", market_size_growth_verdict=verdicts[0], adoption_verdict=verdicts[1],
             ecosystem_verdict=verdicts[2], verdict=verdicts[3],
-            cited_ids=[] if insufficient else self._ids(prompt, f"web:{tech}:")[:self.cite_limit.get("market", {}).get(tech)],
+            cited_ids=[] if insufficient else self._ids(prompt, f"web:{tech}:")[:self._cite_cap("market", tech, run)],
             sufficient=not self._optional, missing=[f"{tech} 시장 규모 정량 근거"] if self._optional else [])
 
     def _stakeholder(self, prompt, run, insufficient):
@@ -163,7 +195,7 @@ class FakeLLM:
                                 missing=["D5 운영 안정성 장기 측정 근거"] if self._optional else [])
 
     def _synthesis(self, prompt, run, insufficient):
-        needs = self.needs_source if run == 1 else []
+        needs = self.needs_source if run <= self.needs_source_runs else []
         return SynthesisAssessment(
             summary="관점 간 일치와 상충을 정리했다.", perspective_matrix="| 관점 | MLA | ITME |",
             agreements=["두 기술 모두 KV cache 병목을 다룬다"],

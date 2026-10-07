@@ -10,8 +10,10 @@ def test_tech_rework_re_searches_with_feedback(run_graph):
     run_graph(llm, rag=rag)
     reworked = [c for c in rag.log if c["feedback"].get("missing")]
     assert reworked, "재작업 RAG 호출에 feedback이 실려야 한다"
-    # missing "MLA 상용 채택 직접 근거" → MLA 질문만 재검색(ITME 질문은 캐시 재사용)
+    # 필수 결함 "tech/mla: TRL 판정·근거 미기재"(사유) + 세부 항목 "MLA 상용 채택 직접 근거"(MLA 검색 힌트)
+    # → MLA 질문만 재검색(ITME 질문은 캐시 재사용)
     assert all(c["question"].startswith("[mla]") for c in reworked)
+    assert any("TRL 판정·근거 미기재" in m for m in reworked[0]["feedback"]["missing"])
     assert "SUPERVISOR REWORK REQUEST" in llm.prompts["tech"][1]
     assert "SUPERVISOR REWORK REQUEST" not in llm.prompts["tech"][0]
 
