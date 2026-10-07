@@ -21,7 +21,8 @@ def test_normal_pass(run_graph):
     assert dict(llm.runs) == {"tech": 1, "market": 1, "stakeholder": 1, "domain": 1,
                               "synthesis": 1, "report": 1, "judge": 1}
     # 4관점은 기술 선행 없이 한 번에 fan-out되고, 이후 종합 → 보고서 → 종료
-    assert decisions(state) == ["dispatch:tech,market,stakeholder,domain", "synthesis", "report", "end:passed"]
+    assert decisions(state) == ["dispatch:tech,market,stakeholder,domain", "synthesis", "report", "evaluate",
+                                "end:passed"]
     for criterion in ("groundedness", "neutrality", "bias_control", "coverage"):
         c = state["eval_result"]["criteria"][criterion]
         assert set(c) >= {"passed", "score", "reason", "target_agents"}
@@ -121,3 +122,39 @@ def test_step_limit_ends_gracefully_with_report(run_graph):
     log = read_decisions(state["trace_id"])
     assert any("단계 상한" in d["reason"] for d in log if d["node"] == "supervisor")
     assert log[-1]["decision"].startswith("end:")
+
+
+# 평가 불변식 ----------------------------------------------------------------------------------
+def _assert_passed_only_after_evaluation(state):
+    """end:passed 직전에는 마지막 report 이후의 evaluate가 반드시 있어야 한다."""
+    log = [d["decision"] for d in read_decisions(state["trace_id"]) if d["node"] == "supervisor"]
+    if log[-1] != "end:passed":
+        return
+    last_report = max(i for i, d in enumerate(log) if d in ("report", "rewrite:report", "retry:report"))
+    assert "evaluate" in log[last_report + 1:], log
+
+
+def test_end_passed_requires_evaluation_after_last_report(run_graph):
+    for llm in (FakeLLM(), FakeLLM(banned_report=1), FakeLLM(one_sided={"market": 1}),
+                FakeLLM(raise_on={"report": 1}), FakeLLM(judge_fail={"groundedness": (1, "report")})):
+        state = run_graph(llm)
+        assert decisions(state)[-1] == "end:passed"
+        _assert_passed_only_after_evaluation(state)
+        assert llm.runs["judge"] == decisions(state).count("evaluate")
+
+
+def test_failed_report_is_not_evaluated(run_graph):
+    llm = FakeLLM(raise_on={"report": 1})
+    state = run_graph(llm)
+    log = decisions(state)
+    i = log.index("report")
+    assert log[i + 1] == "retry:report"          # 실패한 보고서는 평가로 가지 않는다
+    assert llm.runs["judge"] == 1                  # 재작성된 보고서에 대해서만 Judge 1회
+    assert state["status"] == "completed"
+
+
+def test_report_always_failing_ends_without_evaluation(run_graph):
+    llm = FakeLLM(raise_on={"report": INF})
+    state = run_graph(llm)
+    assert llm.runs["judge"] == 0 and "evaluate" not in decisions(state)
+    assert decisions(state)[-1] == "end:report_failed" and state["status"] == "unverified"

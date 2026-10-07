@@ -33,10 +33,11 @@ RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesi
                 "quality_evaluator": 1}
 # Supervisor 진입 횟수 상한. 넘으면 조사·재작성을 멈추고 종합→보고서→평가만 마친 뒤 정상 종료한다.
 MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
-# 상한 도달 후 마무리(종합·보고서·평가)에 필요한 Supervisor 진입 수
-FINALIZE_STEPS = 4
-# Supervisor 1회 = supervisor·하위 노드·평가 노드 최대 3 superstep. LangGraph 상한은 마지막 그물이다.
-RECURSION_LIMIT = (MAX_STEPS + FINALIZE_STEPS) * 3 + 10
+# 상한 도달 후 마무리에 필요한 Supervisor 진입 수: 종합 → 보고서 → 평가 → 종료 = 4, 여유 1을 더해 5.
+# (마무리 중 실패한 노드는 재시도하지 않고 공백으로 넘기므로 4회를 넘지 않는다. 여유분은 재개 직후의 재진입용)
+FINALIZE_STEPS = 5
+# Supervisor 1회 = supervisor + 작업 노드 = 2 superstep. LangGraph 상한은 마지막 그물이다.
+RECURSION_LIMIT = (MAX_STEPS + FINALIZE_STEPS) * 2 + 10
 # Evidence 발췌 길이 상한. 원문 전체는 RAG 캐시(디스크)에 있고 State에는 인용 검증에 필요한 만큼만 둔다.
 EXCERPT_MAX_CHARS = 1600
 # 편향 통제 규칙: 기술·관점별 최소 고유 출처 수, 웹 근거의 단일 발행처 비중 상한

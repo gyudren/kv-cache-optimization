@@ -66,10 +66,14 @@ EVAL_QUERY_HINTS = (
 )
 
 
+GENERIC_EVAL_HINT = "independent sources limitations adoption evidence"
+
+
 def _eval_feedback(issues: list[str]) -> dict:
     """평가 미달 사유는 missing으로 그대로 넘기고, 재검색 질의는 반대 방향·독립 출처 힌트로 바꾼다."""
     queries = [hint for issue in issues for key, hint in EVAL_QUERY_HINTS if key in issue]
-    return {"missing": issues[:6], "rewritten_queries": list(dict.fromkeys(queries or issues))[:3]}
+    # 규칙 사유가 없는(LLM Judge만 미달) 경우에도 사유 문장으로 검색하지 않고 일반 힌트를 쓴다.
+    return {"missing": issues[:6], "rewritten_queries": list(dict.fromkeys(queries or [GENERIC_EVAL_HINT]))[:3]}
 
 
 class _Builder:
@@ -205,7 +209,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
     if report_status in ("pending", "running"):
         b.run("report")
         b.updates["node_status"]["quality_evaluator"] = "pending"
-        return b.done(["report"], "report", "종합 완료 → 보고서 작성(이후 품질 평가)")
+        return b.done(["report"], "report", "종합 완료 → 보고서 작성")
     if report_status == "failed":
         if not finalize and b.can_retry("report"):
             b.bump("report")
@@ -215,10 +219,20 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
         b.gap("report: 보고서 에이전트 실행 실패 — 보고서 미생성")
         return b.end("end:report_failed", "보고서 재시도 한도 소진", verified=False)
 
+    if not (state.get("report") or "").strip():
+        # done인데 본문이 비었으면 평가하지 않고 보고서 실패와 같이 처리한다(빈 보고서에 Judge를 부르지 않음).
+        if not finalize and b.can_retry("report"):
+            b.bump("report")
+            b.run("report")
+            return b.done(["report"], "retry:report", "보고서 본문 없음 → 재작성")
+        b.gap("report: 보고서 본문 미생성")
+        return b.end("end:report_failed", "보고서 본문 없음, 재시도 한도 소진", verified=False)
+
     eval_status = node_status.get("quality_evaluator", "pending")
     if eval_status in ("pending", "running"):
         b.run("quality_evaluator")
-        return b.done(["quality_evaluator"], "evaluate", "보고서 평가 미완료 → 품질 평가")
+        return b.done(["quality_evaluator"], "evaluate",
+                      f"보고서 완료(시도 {b.retry.get('report', 0)}) → 품질 평가 4항목 판정")
     if eval_status == "failed":
         if not finalize and b.can_retry("quality_evaluator"):
             b.bump("quality_evaluator")

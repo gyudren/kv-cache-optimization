@@ -10,7 +10,7 @@ from langgraph.types import Send
 
 from fakes import INF, FakeLLM, FakeRAG, FakeWeb, SimulatedCrash
 from kv_eval.config import EXCERPT_MAX_CHARS, LANGSMITH_TAGS, PERSPECTIVES, RETRY_LIMITS
-from kv_eval.graph import AGENT_NODES, build_graph
+from kv_eval.graph import AGENT_NODES, WORKER_NODES, build_graph
 from kv_eval.observability import decision_log_path, new_trace_id, read_decisions, run_config
 from kv_eval.state import GraphState, initial_state, merge_dict, merge_evidence
 from kv_eval.supervisor.policy import Policy, decide
@@ -21,19 +21,18 @@ from kv_eval.supervisor.router import route
 def test_no_agent_to_agent_edges_and_single_router():
     compiled = build_graph(None, None, None)
     edges = [(e.source, e.target, e.conditional) for e in compiled.get_graph().edges]
-    agents = set(AGENT_NODES)
-    assert not [e for e in edges if e[0] in agents and e[1] in agents], "하위 에이전트 간 직접 엣지 금지"
-    for agent in agents - {"report"}:
-        assert {t for s, t, _ in edges if s == agent} == {"supervisor"}
-    # report는 Supervisor 측 품질 게이트(평가 노드)를 거쳐 Supervisor로 돌아간다
-    assert {t for s, t, _ in edges if s == "report"} == {"quality_evaluator"}
-    assert {t for s, t, _ in edges if s == "quality_evaluator"} == {"supervisor"}
+    workers = set(WORKER_NODES)
+    assert set(AGENT_NODES) < workers and "quality_evaluator" in workers
+    assert not [e for e in edges if e[0] in workers and e[1] in workers], "작업 노드 간 직접 엣지 금지"
+    # 모든 작업 노드(보고서·품질 평가 포함)의 유일한 후속 노드는 supervisor다
+    for worker in workers:
+        assert {t for s, t, _ in edges if s == worker} == {"supervisor"}, worker
     assert {t for s, t, _ in edges if s == START} == {"supervisor"}
     # 분기는 supervisor의 conditional edge 하나뿐이다
     conditional_sources = {s for s, _, c in edges if c}
     assert conditional_sources == {"supervisor"}
     assert len(compiled.builder.branches["supervisor"]) == 1
-    assert {t for s, t, c in edges if s == "supervisor" and c} == agents | {"quality_evaluator", END}
+    assert {t for s, t, c in edges if s == "supervisor" and c} == workers | {END}
 
 
 def test_routing_is_decided_by_state_only():
