@@ -10,7 +10,6 @@ from kv_eval.agents.report import verdict_limit_note
 from kv_eval.config import RETRY_LIMITS
 from kv_eval.evaluation.quality import CRITERIA
 from kv_eval.observability import read_decisions
-from kv_eval.state import followup_key
 from kv_eval.supervisor.policy import decide
 from test_followup_and_scope import evaluated_state
 
@@ -27,7 +26,7 @@ def narrative_after_table(report: str, section: str) -> str:
 
 # ---- decide 직접 호출 ------------------------------------------------------------------------------
 def test_exhausted_perspective_issue_is_carried_into_rewrite_with_original_text():
-    state = evaluated_state({"groundedness": ["tech"]}, retry={followup_key("tech"): 1})
+    state = evaluated_state({"groundedness": ["tech"]}, followup={"tech": 1})
     decision = decide(state)
     assert decision.decision == "rewrite:report"
     feedback = decision.updates["feedback"]["report"]
@@ -35,13 +34,14 @@ def test_exhausted_perspective_issue_is_carried_into_rewrite_with_original_text(
     assert feedback["verdict_limits"] == [{"perspective": "tech", "section": "4.1", "criterion": "groundedness",
                                            "issue": "groundedness: groundedness 미달 사유"}]
     assert feedback["carried_keys"] == ["groundedness|tech|judge"]
-    assert any(g.startswith("tech: 품질 평가 미달, 후속 조사 한도 소진 — groundedness:") for g in decision.updates["gaps"])
+    assert any(g["perspective"] == "tech" and g["kind"] == "evaluation" and g["criterion"] == "groundedness"
+               for g in decision.updates["gaps"])
 
 
 def test_same_item_same_reason_after_carried_rewrite_ends_unverified():
-    first = decide(evaluated_state({"groundedness": ["tech"]}, retry={followup_key("tech"): 1}))
+    first = decide(evaluated_state({"groundedness": ["tech"]}, followup={"tech": 1}))
     # 재작성 1회 후 같은 항목·같은 원인으로 다시 미달(Judge 사유 문장은 달라도 같은 사유로 본다)
-    again = evaluated_state({"groundedness": ["tech"]}, retry={followup_key("tech"): 1, "report": 1},
+    again = evaluated_state({"groundedness": ["tech"]}, retry={"report": 1}, followup={"tech": 1},
                             feedback={"report": first.updates["feedback"]["report"]},
                             gaps=first.updates["gaps"])
     again["eval_result"]["criteria"]["groundedness"]["reason"] = "다른 문장으로 쓴 같은 지적"
@@ -53,9 +53,9 @@ def test_same_item_same_reason_after_carried_rewrite_ends_unverified():
 
 
 def test_new_carried_item_after_rewrite_still_gets_one_rewrite():
-    first = decide(evaluated_state({"groundedness": ["tech"]}, retry={followup_key("tech"): 1}))
+    first = decide(evaluated_state({"groundedness": ["tech"]}, followup={"tech": 1}))
     other = evaluated_state({"groundedness": ["tech"], "bias_control": ["market"]},
-                            retry={followup_key("tech"): 1, followup_key("market"): 1, "report": 1},
+                            retry={"report": 1}, followup={"tech": 1, "market": 1},
                             feedback={"report": first.updates["feedback"]["report"]})
     decision = decide(other)
     assert decision.decision == "rewrite:report"
@@ -86,7 +86,7 @@ def test_judge_blaming_tech_forever_rewrites_once_with_limit_then_stops(run_grap
     assert any(i.startswith("[4.1 판정 한계 명시] groundedness: groundedness 판정") for i in feedback["issues"])
     assert "VERDICT LIMITATIONS" in llm.prompts["report"][-1] and "- 4.1 (perspective_trl):" in llm.prompts["report"][-1]
     assert narrative_after_table(state["report"], "4.1").startswith("한계:")
-    assert sum(g.startswith("tech: 품질 평가 미달") for g in state["gaps"]) == 1
+    assert sum(g["perspective"] == "tech" and g["kind"] == "evaluation" for g in state["gaps"]) == 1
     assert state["status"] == "unverified"
 
 

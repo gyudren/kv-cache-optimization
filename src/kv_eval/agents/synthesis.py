@@ -1,6 +1,7 @@
 """Synthesis consumes existing perspectives and deduplicated evidence: NO search."""
 from __future__ import annotations
 from typing import Any
+from ..evaluation.quality import gap_lines
 from ..prompts import prompt_template
 from ..config import PERSPECTIVES
 from ..state import deduplicate_evidence, perspective, prompt_view
@@ -19,7 +20,7 @@ def synthesis_node(state: dict, llm: Any) -> dict:
         "Set needs_revision for synthesis-only expression problems.\n"
         + repr({k: prompt_view(perspective(state, k)) for k in PERSPECTIVES})
         + "\nEvidence source IDs: " + repr(src)
-        + "\nKnown evidence gaps recorded by the supervisor (keep them as gaps): " + repr(state.get("gaps", []))
+        + "\nKnown evidence gaps recorded by the supervisor (keep them as gaps): " + repr(gap_lines(state.get("gaps", [])))
         + "\nRevision feedback: " + repr(state.get("feedback", {}).get("synthesis", {}))
         + "\nPrevious synthesis: " + repr(state.get("synthesis", {})), SynthesisAssessment,
     )

@@ -23,7 +23,7 @@ def supervisor_node(state: dict, policy: Policy | None = None) -> dict:
 
 # 관점 에이전트가 읽는 필드만 Send로 넘긴다. State 전체를 넘기면 체크포인트의 대기 작업(Send)마다
 # evidence·보고서까지 복제되어 체크포인트가 fan-out 수만큼 커진다.
-SEND_KEYS = ("user_query", "trace_id", "retry_counts", "feedback", "step_count")
+SEND_KEYS = ("user_query", "trace_id", "retry_counts", "followup_counts", "feedback", "step_count")
 
 
 def route(state: dict):

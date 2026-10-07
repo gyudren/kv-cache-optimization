@@ -96,11 +96,11 @@ def _acknowledged(state: dict, name: str, tech: str) -> bool:
     `관점/기술:` 공백은 그 기술만 인정한다. `관점:` 공백은 Supervisor가 그 관점을 실제로 제외(excluded)한
     경우에만 두 기술 모두에 인정한다. 공백은 "결과·근거 없음"만 면제하고 보고서 절 구조는 면제하지 않는다.
     """
-    gaps = state.get("gaps", [])
-    if any(gap.startswith(f"{name}/{tech}:") for gap in gaps):
+    gaps = [gap for gap in state.get("gaps", []) if gap["perspective"] == name]
+    if any(gap["technology"] == tech for gap in gaps):
         return True
     excluded = (state.get("perspective_status") or {}).get(name) == "excluded"
-    return excluded and any(gap.startswith(f"{name}:") for gap in gaps)
+    return excluded and any(gap["technology"] is None for gap in gaps)
 
 
 # 고유 출처 수 규칙을 적용하는 관점. 도메인 평가는 설계상 각 기술의 원문 1편만 근거로 쓰므로(문서 단위로 세면
@@ -134,6 +134,26 @@ def evidence_shortfalls(state: dict, name: str) -> list[dict]:
 
 
 # ---- 규칙 검사 -----------------------------------------------------------------------------
+# 규칙 결과의 items는 {agent, technology, text}. agent가 None이면 보고서 서술 문제다.
+# issues는 같은 내용을 사람이 읽는 문자열로 펼친 것(validation.json·재작성 지시용).
+def _item(agent: str | None, technology: str | None, text: str) -> dict:
+    return {"agent": agent, "technology": technology, "text": text}
+
+
+def _report_items(issues: list[str]) -> list[dict]:
+    return [_item(None, None, issue) for issue in issues]
+
+
+def _label(item: dict) -> str:
+    scope = "/".join(x for x in (item["agent"], item["technology"]) if x)
+    return f"{scope}: {item['text']}" if scope else item["text"]
+
+
+def _result(items: list[dict]) -> dict:
+    targets = list(dict.fromkeys(item["agent"] or "report" for item in items))
+    return {"passed": not items, "issues": [_label(i) for i in items], "items": items, "targets": targets}
+
+
 def check_groundedness(state: dict) -> dict:
     from ..agents.report import KV_SCALE_FORMULA, KV_SCALE_TABLE  # 코드가 넣는 설계 표·산식(출처 [D])
     report = state.get("report", "")
@@ -155,8 +175,7 @@ def check_groundedness(state: dict) -> dict:
             cited = EVIDENCE_CITATION.search(sentence) or (design_ok and "[D]" in sentence)
             if not cited:
                 issues.append(f"수치 문장에 인용 없음{'([D]는 SUMMARY·1·2장 설계 전제에만 허용)' if '[D]' in sentence else ''}: {sentence[:120]}")
-    return {"passed": not issues, "issues": issues, "targets": ["report"] if issues else [],
-            "pdf_pages": validation.get("pdf_pages")}
+    return {**_result(_report_items(issues)), "pdf_pages": validation.get("pdf_pages")}
 
 
 def neutrality_issues(text: str) -> list[str]:
@@ -172,8 +191,7 @@ def neutrality_issues(text: str) -> list[str]:
 
 
 def check_neutrality(state: dict) -> dict:
-    issues = neutrality_issues(_body(state.get("report", "")))
-    return {"passed": not issues, "issues": issues, "targets": ["report"] if issues else []}
+    return _result(_report_items(neutrality_issues(_body(state.get("report", "")))))
 
 
 def _verdicts(state: dict, name: str, tech: str) -> list[str]:
@@ -188,7 +206,7 @@ def _verdicts(state: dict, name: str, tech: str) -> list[str]:
 
 def check_bias(state: dict) -> dict:
     evidence = deduplicate_evidence(state.get("evidence", []))
-    issues, targets = [], []
+    found = []
     for name in PERSPECTIVES:
         for tech in TECHS:
             if _acknowledged(state, name, tech):
@@ -211,9 +229,8 @@ def check_bias(state: dict) -> dict:
                     side = "긍정" if has_positive else "우려"
                     problems.append(f"판정이 {side} 한쪽뿐(반대 방향 근거 미탐색)")
             if problems:
-                issues.append(f"{name}/{tech}: " + ", ".join(problems))
-                targets.append(name)
-    return {"passed": not issues, "issues": issues, "targets": list(dict.fromkeys(targets))}
+                found.append(_item(name, tech, ", ".join(problems)))
+    return _result(found)
 
 
 def _section(report: str, number: str) -> str:
@@ -233,7 +250,7 @@ def _has_result(state: dict, name: str, tech: str) -> bool:
 
 def check_coverage(state: dict) -> dict:
     report = state.get("report", "")
-    issues, targets = [], []
+    found = []
     for number, name in SECTION_PERSPECTIVE.items():
         text = _section(report, number)
         narrative = "\n".join(line for line in text.splitlines() if line.strip() and not line.lstrip().startswith("|"))
@@ -249,13 +266,16 @@ def check_coverage(state: dict) -> dict:
             if not _has_result(state, name, tech) and not _acknowledged(state, name, tech):
                 problems.append(f"{label} 관점 결과 없음")
         if problems:
-            issues.append(f"{name}: {number} 절 " + ", ".join(problems))
-            targets.append(name)
-    return {"passed": not issues, "issues": issues, "targets": targets}
+            found.append(_item(name, None, f"{number} 절 " + ", ".join(problems)))
+    return _result(found)
 
 
 RULES = {"groundedness": check_groundedness, "neutrality": check_neutrality,
          "bias_control": check_bias, "coverage": check_coverage}
+
+
+def gap_lines(gaps: list[dict]) -> list[str]:
+    return [_label({"agent": g["perspective"], "technology": g["technology"], "text": g["detail"]}) for g in gaps]
 
 
 def rule_checks(state: dict) -> dict[str, dict]:
@@ -298,7 +318,7 @@ def judge(state: dict, rules: dict[str, dict], llm: Any, snippets: list[dict] | 
         f"Deterministic rule results (cannot be overruled): {rule_summary}\n"
         f"Report parts copied verbatim by code from agent outputs (blame that agent, not report, when the defect is there "
         f"or in prose that only restates that agent's verdict): {AGENT_SOURCED_SECTIONS}\n"
-        f"Evidence gaps recorded by the supervisor: {state.get('gaps', [])}\n"
+        f"Evidence gaps recorded by the supervisor: {gap_lines(state.get('gaps', []))}\n"
         f"Verified evidence snippets for every citation used in the report: {repr(snippets)}\n"
         f"Report:\n{state.get('report', '')}",
         EvalVerdict,
@@ -327,7 +347,7 @@ def combine(rules: dict[str, dict], verdict: EvalVerdict) -> dict:
             "score": score if rule["passed"] else min(score, 2),
             "reason": "; ".join(rule["issues"][:5]) if not rule["passed"] else llm_part.reason,
             "target_agents": [] if passed else targets,
-            "rule": {"passed": rule["passed"], "issues": rule["issues"]},
+            "rule": {"passed": rule["passed"], "issues": rule["issues"], "items": rule.get("items", [])},
             "judge": llm_part.model_dump(),
         }
     return {"passed": all(c["passed"] for c in criteria.values()), "criteria": criteria}

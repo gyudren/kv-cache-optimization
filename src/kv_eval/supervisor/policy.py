@@ -21,14 +21,13 @@ from types import MappingProxyType
 from typing import Any, Mapping
 from ..config import FINALIZE_STEPS, FOLLOWUP_LIMITS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS, recursion_limit_for
 from ..evaluation.quality import CRITERIA, SECTION_PERSPECTIVE, evidence_shortfalls
-from ..state import followup_key, perspective
+from ..state import Gap, make_gap, perspective, split_scope
 from ..tools import TECH_TOKENS, mentioned_techs
 
 END_NODE = "__end__"
 DOWNSTREAM = ("synthesis", "report", "quality_evaluator")
 LABEL = {"tech": "기술 성숙도(TRL)", "market": "시장성", "stakeholder": "이해관계자", "domain": "도메인 적용성"}
-SECTION_OF = {name: number for number, name in SECTION_PERSPECTIVE.items()}  # 관점 → 판정표가 있는 보고서 절(4.1~4.4)
-EVAL_GAP = "품질 평가 미달, 후속 조사 한도 소진"
+SECTION_OF = {name: number for number, name in SECTION_PERSPECTIVE.items()}  # 관점 → 판정표 절(4.1~4.4)
 
 
 @dataclass(frozen=True)
@@ -38,6 +37,7 @@ class _AgentIssue:
     criterion: str
     text: str
     reason_key: str
+    technology: str | None = None
 
     @property
     def key(self) -> str:
@@ -166,7 +166,8 @@ class _Builder:
     def __init__(self, state: dict, policy: Policy):
         self.state, self.policy = state, policy
         self.retry = dict(state.get("retry_counts") or {})
-        self.updates: dict[str, Any] = {"retry_counts": {}, "feedback": {}, "node_status": {},
+        self.followups = dict(state.get("followup_counts") or {})
+        self.updates: dict[str, Any] = {"retry_counts": {}, "followup_counts": {}, "feedback": {}, "node_status": {},
                                         "perspective_status": {}, "gaps": []}
 
     def can_retry(self, name: str) -> bool:
@@ -179,14 +180,13 @@ class _Builder:
             self.updates["feedback"][name] = feedback
 
     def can_followup(self, name: str) -> bool:
-        return self.retry.get(followup_key(name), 0) < self.policy.followup_limit(name)
+        return self.followups.get(name, 0) < self.policy.followup_limit(name)
 
     def followup(self, names: list[str], feedback_by_name: dict[str, dict]) -> None:
         """종합·평가가 지목한 관점을 후속 재조사 한도로 다시 보낸다(제외됐던 관점도 다시 조사 대상이 된다)."""
         for name in names:
-            key = followup_key(name)
-            self.retry[key] = self.retry.get(key, 0) + 1
-            self.updates["retry_counts"][key] = self.retry[key]
+            self.followups[name] = self.followups.get(name, 0) + 1
+            self.updates["followup_counts"][name] = self.followups[name]
             self.updates["feedback"][name] = feedback_by_name[name]
             self.updates["perspective_status"][name] = "pending"
         self.run(*names)
@@ -202,12 +202,12 @@ class _Builder:
             if (self.state.get("node_status") or {}).get(name, "pending") != "pending":
                 self.updates["node_status"].setdefault(name, "pending")
 
-    def gap(self, text: str) -> None:
-        if text not in (self.state.get("gaps") or []) and text not in self.updates["gaps"]:
-            self.updates["gaps"].append(text)
+    def all_gaps(self) -> list[Gap]:
+        return [*(self.state.get("gaps") or []), *self.updates["gaps"]]
 
-    def has_gap(self, prefix: str) -> bool:
-        return any(g.startswith(prefix) for g in [*(self.state.get("gaps") or []), *self.updates["gaps"]])
+    def gap(self, gap: Gap) -> None:
+        if gap not in self.all_gaps():
+            self.updates["gaps"].append(gap)
 
     def done(self, targets: list[str], decision: str, reason: str, **extra) -> Decision:
         updates = {k: v for k, v in self.updates.items() if v}
@@ -251,12 +251,13 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
         # 상한 소진 또는 단계 상한: 제외하고 근거 공백으로 명시한다.
         b.updates["perspective_status"][name] = "excluded"
         if finalize:
-            b.gap(f"{name}: 단계 상한(MAX_STEPS) 도달로 {LABEL[name]} 추가 조사 중단 — 근거 부족")
+            b.gap(make_gap(name, "step_limit", "조사 단계 상한에 도달해 추가 조사를 멈춤"))
         elif status == "failed":
-            b.gap(f"{name}: {LABEL[name]} 에이전트 실행 실패로 제외({error[:120]}) — 근거 부족")
+            b.gap(make_gap(name, "agent_failed", f"에이전트 실행 실패로 결과 없음 ({error[:120]})"))
         else:
-            b.gap(f"{name}: {LABEL[name]} 재조사 {policy.limit(name)}회 후에도 근거 부족 — "
-                  + "; ".join(map(str, missing[:3]))[:240])
+            for item in missing[:3]:
+                technology, detail = split_scope(item)
+                b.gap(make_gap(name, "insufficient", detail, technology))
         reasons.append(f"{name}: 제외(근거 공백 기록)")
     if not to_run:
         return None
@@ -279,7 +280,7 @@ def _synthesis_step(b: _Builder, finalize: bool) -> Decision | None:
             b.run("synthesis")
             return b.done(["synthesis"], "retry:synthesis",
                           f"종합 실행 실패 재시도 ({(state.get('last_error') or {}).get('synthesis', '')[:100]})")
-        b.gap("synthesis: 종합 에이전트 실행 실패 — 관점 간 일치·상충 정리 근거 부족")
+        b.gap(make_gap("synthesis", "node_failed", "종합 에이전트 실행 실패로 관점 간 일치·상충 정리가 없음"))
         b.updates["node_status"]["synthesis"] = "skipped"
         return None
     if status != "done" or finalize:
@@ -292,8 +293,8 @@ def _synthesis_step(b: _Builder, finalize: bool) -> Decision | None:
     for name in requested:
         if name not in rerun:
             reason = next((str(g) for g in gaps if name in str(g)), "")
-            b.gap(f"{name}: 종합 단계에서 추가 근거가 필요하다고 판단했으나 후속 조사 한도 소진"
-                  + (f" — {reason[:160]}" if reason else ""))
+            b.gap(make_gap(name, "followup_exhausted", "종합 단계에서 추가 근거가 필요하다고 판단함"
+                           + (f": {split_scope(reason)[1][:160]}" if reason else "")))
     if rerun:
         b.followup(rerun, {name: _sufficiency_feedback([], [g for g in gaps if name in str(g)] or gaps)
                            for name in rerun})
@@ -319,7 +320,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
             b.run("report")
             return b.done(["report"], "retry:report",
                           f"보고서 실행 실패 재시도 ({(state.get('last_error') or {}).get('report', '')[:100]})")
-        b.gap("report: 보고서 에이전트 실행 실패 — 보고서 미생성")
+        b.gap(make_gap("report", "node_failed", "보고서 에이전트 실행 실패로 보고서 없음"))
         return b.end("end:report_failed", "보고서 재시도 한도 소진", verified=False)
 
     if not (state.get("report") or "").strip():
@@ -328,7 +329,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
             b.bump("report")
             b.run("report")
             return b.done(["report"], "retry:report", "보고서 본문 없음 → 재작성")
-        b.gap("report: 보고서 본문 미생성")
+        b.gap(make_gap("report", "node_failed", "보고서 본문이 생성되지 않음"))
         return b.end("end:report_failed", "보고서 본문 없음, 재시도 한도 소진", verified=False)
 
     eval_status = node_status.get("quality_evaluator", "pending")
@@ -341,7 +342,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
             b.bump("quality_evaluator")
             b.run("quality_evaluator")
             return b.done(["quality_evaluator"], "retry:quality_evaluator", "품질 평가 실행 실패 재시도")
-        b.gap("quality_evaluator: 품질 평가 실행 실패 — 보고서 미검증")
+        b.gap(make_gap("quality_evaluator", "node_failed", "품질 평가 실행 실패로 보고서 미검증"))
         return b.end("end:unverified", "품질 평가 재시도 한도 소진", verified=False)
 
     result = state.get("eval_result") or {}
@@ -360,7 +361,9 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
             continue
         for agent in c.get("target_agents", []):
             if agent in PERSPECTIVES:
-                own = [_AgentIssue(agent, name, i, i) for i in c.get("rule", {}).get("issues", []) if i.startswith(agent)]
+                own = [_AgentIssue(agent, name, f"{agent}/{i['technology']}: {i['text']}" if i["technology"]
+                                   else f"{agent}: {i['text']}", i["text"], i["technology"])
+                       for i in c.get("rule", {}).get("items", []) if i["agent"] == agent]
                 # Judge 사유는 실행마다 문장이 달라지므로 "같은 사유"는 (항목, 원인 관점)으로 본다.
                 judged = _AgentIssue(agent, name, f"{name}: {c.get('reason', '')[:300]}", "judge")
                 issues_by_agent.setdefault(agent, []).extend(own or [judged])
@@ -371,10 +374,12 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
             continue
         for issue in issues:  # 재조사 불가: 근거 공백으로 명시하고 보고서에 드러낸다
             carried.append(issue)
-            if issue.text.startswith((f"{agent}/", f"{agent}:")):
-                b.gap(issue.text)
-            elif not b.has_gap(f"{agent}: {EVAL_GAP} — {issue.criterion}:"):  # 같은 항목은 사유 문장이 달라도 한 번만
-                b.gap(f"{agent}: {EVAL_GAP} — {issue.text[:200]}")
+            # 같은 관점·항목의 평가 공백은 한 번만 남긴다(Judge 사유 문장은 실행마다 달라진다).
+            if not any(g["perspective"] == agent and g["kind"] == "evaluation" and g["criterion"] == issue.criterion
+                       and g["technology"] == issue.technology
+                       and (issue.reason_key == "judge" or g["detail"] == issue.reason_key) for g in b.all_gaps()):
+                detail = issue.reason_key if issue.reason_key != "judge" else issue.text.split(": ", 1)[-1]
+                b.gap(make_gap(agent, "evaluation", detail[:200], issue.technology, issue.criterion))
     if rerun:
         b.followup(rerun, {agent: _eval_feedback([i.text for i in issues_by_agent[agent]]) for agent in rerun})
         return b.done(rerun, "reinvestigate:" + ",".join(rerun),

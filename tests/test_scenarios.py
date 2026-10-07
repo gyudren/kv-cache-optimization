@@ -106,7 +106,7 @@ def test_always_insufficient_terminates_with_gaps(run_graph):
     for name in PERSPECTIVES:
         assert llm.runs[name] == 1 + RETRY_LIMITS[name]
         assert state["perspective_status"][name] == "excluded"
-        assert any(gap.startswith(f"{name}:") for gap in state["gaps"])
+        assert any(gap["perspective"] == name for gap in state["gaps"])
     assert state["status"] == "completed_with_gaps"
     assert state["report"] and "근거 공백 (Supervisor 기록)" in state["report"]
     assert decisions(state)[-1].startswith("end:")
@@ -117,7 +117,7 @@ def test_step_limit_ends_gracefully_with_report(run_graph):
     llm = FakeLLM(insufficient={name: INF for name in PERSPECTIVES})
     state = run_graph(llm, policy=Policy(max_steps=1))
     assert all(llm.runs[name] == 1 for name in PERSPECTIVES)  # 상한 도달 후에는 재조사하지 않는다
-    assert any("단계 상한" in gap for gap in state["gaps"])
+    assert any(gap["kind"] == "step_limit" and "단계 상한" in gap["detail"] for gap in state["gaps"])
     assert state["report"] and state["status"] in ("completed_with_gaps", "unverified")
     log = read_decisions(state["trace_id"])
     assert any("단계 상한" in d["reason"] for d in log if d["node"] == "supervisor")

@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from kv_eval.config import AGENT_CONCURRENCY, PERSPECTIVES, REPORT_STEM, RETRY_LIMITS, Settings
 from kv_eval.graph import build_graph
 from kv_eval.observability import (langsmith_enabled, new_trace_id, read_decisions, run_config)
-from kv_eval.state import initial_state
+from kv_eval.state import initial_state, legacy_gaps
 from kv_eval.supervisor.policy import Policy
 
 DEFAULT_QUERY = ("데이터센터·클라우드 장문맥 LLM 서빙에서 DeepSeek-V2 MLA와 ITME를 "
@@ -168,6 +168,7 @@ def finalize(state: dict, output_dir: Path) -> dict:
                          for name, c in criteria.items()},
         "gaps": state.get("gaps", []), "trace_id": trace_id, "status": state.get("status"),
         "supervisor_steps": state.get("step_count"), "retry_counts": state.get("retry_counts", {}),
+        "followup_counts": state.get("followup_counts", {}),
     })
     from kv_eval.evidence_store import missing_full_text
     store_missing = missing_full_text(state.get("evidence", []))
@@ -219,8 +220,9 @@ def report_only() -> dict:
             "(data/cache/<trace_id>/evidence_*.json은 git에 포함되지 않음). 원래 실행한 머신에서 다시 하거나 "
             "python app.py로 전체 실행하세요.")
     trace_id = new_trace_id()
-    seed = {key: previous.get(key) for key in ("perspectives", "synthesis", "evidence", "gaps", "cache_keys")
+    seed = {key: previous.get(key) for key in ("perspectives", "synthesis", "evidence", "cache_keys")
             if previous.get(key) is not None}
+    seed["gaps"] = legacy_gaps(previous.get("gaps", []))
     # 이전 형식 State의 원문 발췌도 저장소로 옮겨 State에는 축약본만 넣는다(보고서는 hydrate로 원문 사용).
     seed["evidence"] = evidence_store.offload(trace_id, "seed", hydrated)
     seed["perspective_status"] = {name: "sufficient" if (previous["perspectives"].get(name) or {}).get("sufficient")

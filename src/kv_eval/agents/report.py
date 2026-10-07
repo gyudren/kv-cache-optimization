@@ -179,29 +179,16 @@ def evidence_balance_table(state: dict) -> str:
 GAP_LABEL = {"tech": "기술 성숙도(TRL)", "market": "시장성", "stakeholder": "이해관계자", "domain": "도메인 적용성",
              "synthesis": "종합", "report": "보고서", "quality_evaluator": "품질 평가"}
 TECH_NAME = {"mla": "MLA", "itme": "ITME"}
-# Supervisor 기록에서 내부 처리 이력(재시도 횟수·한도)은 빼고 "무엇을 확인하지 못했는가"만 남긴다.
-_PROCESS_WORDING = (
-    (r"^[^—]*?재조사 \d+회 후에도 근거 부족 — ", ""),
-    (r"단계 상한\(MAX_STEPS\) 도달로 .+? 추가 조사 중단 — 근거 부족", "조사 단계 상한에 도달해 추가 조사를 멈춤"),
-    (r"종합 단계에서 추가 근거가 필요하다고 판단했으나 후속 조사 한도 소진", "종합 단계에서 추가 근거가 필요하다고 판단됨"),
-    (r"품질 평가 미달, 후속 조사 한도 소진 — ", "품질 평가 지적: "),
-    (r"에이전트 실행 실패로 제외\(.*?\) — 근거 부족", "에이전트 실행 실패로 결과 없음"),
-)
-MAX_GAP_ITEMS = 4  # 관점당 표시 항목 수(나머지는 validation.json의 gaps에 남는다)
+MAX_GAP_ITEMS = 4  # 관점당 7장에 적는 항목 수(전체는 validation.json)
 
 
-def readable_gaps(gaps: list[str]) -> dict[str, list[str]]:
-    """Supervisor gaps를 관점별 사람이 읽는 항목으로 묶는다(중복 제거, 내부 처리 문구 제거)."""
+def readable_gaps(gaps: list[dict]) -> dict[str, list[str]]:
+    """근거 공백을 관점별 문장 목록으로 묶는다."""
     grouped: dict[str, list[str]] = {}
     for gap in gaps:
-        match = re.match(r"^(\w+)(?:/(mla|itme))?:\s*(.*)$", str(gap), re.S)
-        name, tech, text = match.groups() if match else ("기타", None, str(gap))
-        for pattern, repl in _PROCESS_WORDING:
-            text = re.sub(pattern, repl, text)
-        for item in (s.strip() for s in text.split(";")):
-            item = re.sub(r"^(\w+)/(mla|itme):\s*", lambda m: f"{TECH_NAME[m.group(2)]}: ", item)
-            if item and item != "근거 부족":
-                grouped.setdefault(name, []).append(f"{TECH_NAME[tech]}: {item}" if tech else item)
+        detail = gap["detail"].split(" (")[0] if gap["kind"] == "agent_failed" else gap["detail"]  # 예외 원문은 validation.json에만
+        text = f"{TECH_NAME[gap['technology']]}: {detail}" if gap.get("technology") else detail
+        grouped.setdefault(gap["perspective"], []).append(text)
     return {name: list(dict.fromkeys(items)) for name, items in grouped.items()}
 
 

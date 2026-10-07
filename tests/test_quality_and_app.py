@@ -10,6 +10,7 @@ import pytest
 from fakes import FakeLLM
 from kv_eval.config import MAX_REPORT_PAGES, REPORT_STEM
 from kv_eval.evaluation.quality import check_bias, check_coverage, check_groundedness, check_neutrality
+from kv_eval.state import make_gap
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,7 +39,7 @@ def test_bias_rule_flags_single_source_and_one_sided_verdicts(run_graph):
     assert result["passed"] is False and result["targets"] == ["market"]
     assert any("단일 발행처" in i for i in result["issues"])
     # Supervisor가 공백으로 기록한 관점·기술은 '근거 부족 명시'로 인정한다
-    assert check_bias({**state, "evidence": skewed, "gaps": ["market/mla: 재조사 한도 소진"]})["passed"] is True
+    assert check_bias({**state, "evidence": skewed, "gaps": [make_gap("market", "insufficient", "재조사 한도 소진", "mla")]})["passed"] is True
 
 
 def test_coverage_rule_targets_missing_perspective(run_graph):
@@ -152,7 +153,7 @@ def test_resume_checks_checkpoint_before_building_runtime(isolated_outputs, monk
 def test_perspective_gap_does_not_exempt_section_structure(run_graph):
     state = run_graph(FakeLLM())
     report = re.sub(r"### 4\.2 시장성\n.*?(?=### 4\.3)", "### 4.2 시장성\n\n", state["report"], flags=re.S)
-    gapped = {**state, "report": report, "gaps": ["market: 시장성 재조사 2회 후에도 근거 부족"],
+    gapped = {**state, "report": report, "gaps": [make_gap("market", "insufficient", "시장 규모 근거 부족")],
               "perspective_status": {**state["perspective_status"], "market": "excluded"}}
     result = check_coverage(gapped)
     assert result["passed"] is False and result["targets"] == ["market"]
@@ -165,7 +166,7 @@ def test_whole_perspective_gap_exempts_bias_only_when_excluded(run_graph):
     market = {**state["perspectives"]["market"],
               "source_units": {**state["perspectives"]["market"]["source_units"], "mla": []}}
     base = {**state, "evidence": skewed, "perspectives": {**state["perspectives"], "market": market},
-            "gaps": ["market: 종합 단계에서 추가 근거 요청"]}
+            "gaps": [make_gap("market", "followup_exhausted", "종합 단계에서 추가 근거 요청")]}
     assert check_bias(base)["passed"] is False  # 관점이 제외되지 않았으면 관점 단위 공백으로 면제하지 않음
     excluded = {**base, "perspective_status": {**state["perspective_status"], "market": "excluded"}}
     assert check_bias(excluded)["passed"] is True

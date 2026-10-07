@@ -8,7 +8,7 @@ from kv_eval.config import PERSPECTIVES, RETRY_LIMITS
 from kv_eval.evaluation.quality import check_groundedness, neutrality_issues
 from kv_eval.evidence_store import source_units
 from kv_eval.observability import read_decisions
-from kv_eval.state import followup_key, merge_evidence
+from kv_eval.state import make_gap, merge_evidence
 from kv_eval.tools.web_search import COMMUNITY_SPEAKER, speaker_hint
 
 
@@ -46,8 +46,8 @@ def test_groundedness_defect_in_agent_table_reinvestigates_agent(run_graph):
     log = decisions(state)
     assert "reinvestigate:tech" in log
     assert "rewrite:report" not in log[:log.index("reinvestigate:tech")]
-    assert llm.runs["tech"] == 2 and state["retry_counts"][followup_key("tech")] == 1
-    assert state["retry_counts"]["tech"] == 0  # 충분성 재조사 한도는 쓰지 않는다
+    assert llm.runs["tech"] == 2 and state["followup_counts"]["tech"] == 1
+    assert state["retry_counts"]["tech"] == 0  # 충분성 재조사 한도는 그대로
     assert state["status"] == "completed"
 
 
@@ -64,15 +64,15 @@ def test_synthesis_request_runs_even_after_sufficiency_retries_exhausted(run_gra
     log = decisions(state)
     assert llm.runs["stakeholder"] == limit + 2
     assert log.index("dispatch:stakeholder", log.index("synthesis")) > log.index("synthesis")
-    assert state["retry_counts"]["stakeholder"] == limit and state["retry_counts"][followup_key("stakeholder")] == 1
+    assert state["retry_counts"]["stakeholder"] == limit and state["followup_counts"]["stakeholder"] == 1
     assert state["perspective_status"]["stakeholder"] == "sufficient"  # 제외됐던 관점이 후속 조사로 회복
 
 
 def test_followup_limit_exhausted_is_recorded_as_readable_gap(run_graph):
     llm = FakeLLM(needs_source=["market"], judge_fail={"bias_control": (2, "market")})
     state = run_graph(llm)
-    assert state["retry_counts"][followup_key("market")] == 1
-    assert any(g.startswith("market:") and "후속 조사 한도" in g for g in state["gaps"])
+    assert state["followup_counts"]["market"] == 1
+    assert any(g["perspective"] == "market" and g["kind"] == "evaluation" for g in state["gaps"])
     section = state["report"].split("#### 근거 공백 (Supervisor 기록)", 1)[1].split("####", 1)[0]
     assert "한도" not in section and "**시장성**" in section
 
@@ -145,15 +145,15 @@ def test_design_document_citation_only_allowed_for_design_conditions(run_graph):
     assert result["passed"] is False and any("[D]" in i for i in result["issues"])
 
 
-def test_readable_gaps_drop_internal_wording():
+def test_readable_gaps_group_by_perspective():
     grouped = readable_gaps([
-        "tech: 기술 성숙도(TRL) 재조사 2회 후에도 근거 부족 — tech/mla: TRL 판정·근거 미기재; "
-        "tech/itme: 필수 질문(정량 성능 결과)의 원문 근거 없음",
-        "tech: 종합 단계에서 추가 근거가 필요하다고 판단했으나 후속 조사 한도 소진",
-        "tech: 종합 단계에서 추가 근거가 필요하다고 판단했으나 후속 조사 한도 소진",
+        make_gap("tech", "insufficient", "TRL 판정·근거 미기재", "mla"),
+        make_gap("tech", "insufficient", "필수 질문(정량 성능 결과)의 원문 근거 없음", "itme"),
+        make_gap("tech", "followup_exhausted", "종합 단계에서 추가 근거가 필요하다고 판단함"),
+        make_gap("tech", "followup_exhausted", "종합 단계에서 추가 근거가 필요하다고 판단함"),
     ])
     assert grouped == {"tech": ["MLA: TRL 판정·근거 미기재", "ITME: 필수 질문(정량 성능 결과)의 원문 근거 없음",
-                                "종합 단계에서 추가 근거가 필요하다고 판단됨"]}
+                                "종합 단계에서 추가 근거가 필요하다고 판단함"]}
 
 
 # ---- 에이전트 내부 식별자 인용 → 보고서 인용 형식 ---------------------------------------------------

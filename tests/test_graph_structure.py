@@ -99,7 +99,7 @@ def test_agent_always_failing_is_excluded_and_reported_as_gap(run_graph):
     state = run_graph(llm)  # 예외가 그래프 밖으로 나오지 않는다
     assert llm.runs["stakeholder"] == 1 + RETRY_LIMITS["stakeholder"]
     assert state["perspective_status"]["stakeholder"] == "excluded"
-    gap = next(g for g in state["gaps"] if g.startswith("stakeholder:"))
+    gap = next(g["detail"] for g in state["gaps"] if g["perspective"] == "stakeholder")
     assert "실행 실패" in gap and "RuntimeError" in gap
     section = state["report"].split("#### 근거 공백 (Supervisor 기록)", 1)[1].split("####", 1)[0]
     # 7장 한계점에 readable_gaps 형식(관점 라벨 + "근거 부족:")으로 기록되고 내부 로그 문구는 빠진다
@@ -179,4 +179,4 @@ def test_recursion_limit_follows_policy_instance():
     trace_id = new_trace_id()
     state = asyncio.run(graph.ainvoke(initial_state("q", trace_id), config=run_config(trace_id)))
     assert state["step_count"] > 30 and state["status"] in ("completed_with_gaps", "unverified")
-    assert any("단계 상한" in gap for gap in state["gaps"])
+    assert any(gap["kind"] == "step_limit" for gap in state["gaps"])

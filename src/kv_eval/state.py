@@ -9,6 +9,7 @@ reducer로 병합 규칙을 정한다(reducer가 없으면 InvalidUpdateError �
 결정 로그 본문과 RAG 캐시는 State 밖(외부 JSONL·디스크)에 두고 State에는 직전 결정과 캐시 키만 둔다.
 """
 from __future__ import annotations
+import re
 from typing import Annotated, Any, Literal, TypedDict
 from .config import FOLLOWUP_LIMITS, PERSPECTIVES, RETRY_LIMITS, STATE_EXCERPT_CHARS
 
@@ -50,31 +51,79 @@ def merge_evidence(left: list[dict] | None, right: list[dict] | None) -> list[di
 
 
 def merge_unique(left: list | None, right: list | None) -> list:
-    """순서를 유지하는 중복 제거 append(근거 공백 목록)."""
     return list(dict.fromkeys([*(left or []), *(right or [])]))
+
+
+GapKind = Literal["insufficient", "agent_failed", "step_limit", "followup_exhausted", "evaluation", "node_failed"]
+
+
+class Gap(TypedDict):
+    """Supervisor가 더 조사하지 않기로 하고 남긴 근거 공백. 보고서 7장과 편향·커버리지 규칙이 읽는다."""
+    perspective: str          # tech/market/stakeholder/domain, 또는 synthesis/report/quality_evaluator
+    technology: str | None    # mla/itme. 관점 전체에 해당하면 None
+    kind: GapKind
+    criterion: str | None     # kind == "evaluation"일 때 미달 항목
+    detail: str               # 확인하지 못한 내용(보고서에 그대로 쓴다)
+
+
+def make_gap(perspective: str, kind: GapKind, detail: str, technology: str | None = None,
+             criterion: str | None = None) -> Gap:
+    return {"perspective": perspective, "technology": technology, "kind": kind, "criterion": criterion,
+            "detail": " ".join(str(detail).split())}
+
+
+def split_scope(text: str) -> tuple[str | None, str]:
+    """에이전트 결함 문장의 '관점/기술: 내용' 접두어에서 기술을 떼어 낸다."""
+    match = re.match(r"^\w+/(mla|itme):\s*(.*)$", str(text), re.S)
+    return (match.group(1), match.group(2)) if match else (None, re.sub(r"^\w+:\s*", "", str(text)))
+
+
+def merge_gaps(left: list[Gap] | None, right: list[Gap] | None) -> list[Gap]:
+    out = list(left or [])
+    for gap in right or []:
+        if gap not in out:
+            out.append(gap)
+    return out
+
+
+class PerspectiveResult(TypedDict, total=False):
+    """관점 에이전트 결과. Supervisor는 앞의 제어 필드만 읽고, 나머지는 보고서가 쓴다."""
+    sufficient: bool                     # 필수 결함이 없는가(Supervisor 판단 입력)
+    missing: list[str]                   # 필수 결함 → 재조사 사유
+    missing_optional: list[str]          # 확인 못 한 세부 항목 → 한계점
+    llm_sufficient: bool                 # LLM 자기 판단(기록용)
+    attempt: int
+    source_units: dict[str, list[str]]   # 이번 시도의 기술별 고유 출처(guard가 기록)
+    summary: str
+    trl: dict[str, str]                  # tech
+    trl_basis: dict[str, str]            # tech
+    details: dict[str, Any]              # tech
+    technologies: dict[str, dict]        # market / stakeholder
+    items: list[dict]                    # domain
 
 
 class GraphState(TypedDict, total=False):
     user_query: str
-    # ---- 제어(control): Supervisor만 읽고, 대부분 Supervisor만 쓴다 ----
-    trace_id: str                       # uuid4 = LangGraph thread_id = LangSmith metadata = 결정 로그 파일명
-    step_count: int                     # Supervisor 진입마다 +1. MAX_STEPS 안전장치 입력
-    next_agents: list[str]              # 직전 Supervisor 결정(다음 실행 노드). 라우터는 이것만 본다
+    # 제어: Supervisor가 라우팅에 쓰는 값
+    trace_id: str                       # = LangGraph thread_id = LangSmith metadata = 결정 로그 파일명
+    step_count: int                     # Supervisor 진입 횟수
+    next_agents: list[str]              # 직전 결정. 라우터는 이것만 읽는다
     perspective_status: Annotated[dict[str, str], merge_dict]
-    retry_counts: Annotated[dict[str, int], merge_dict]
-    node_status: Annotated[dict[str, str], merge_dict]     # NodeStatus. Supervisor가 running/pending, 래퍼가 done/failed
-    last_error: Annotated[dict[str, str], merge_dict]      # 노드별 마지막 예외 요약("" = 정상)
-    feedback: Annotated[dict[str, dict], merge_dict]       # Supervisor → 에이전트 재작업 지시(부족 항목)
-    eval_result: dict[str, Any]                            # 품질 평가 4항목 판정(EvalVerdict + 규칙 결과)
-    last_decision: dict[str, Any]                          # 결정 로그 중 마지막 1건(본문은 외부 JSONL)
-    gaps: Annotated[list[str], merge_unique]               # 근거 부족으로 남긴 공백 → 보고서 7장
+    retry_counts: Annotated[dict[str, int], merge_dict]      # 충분성 재조사·실행 실패 재시도
+    followup_counts: Annotated[dict[str, int], merge_dict]   # 종합·평가가 요청한 후속 재조사
+    node_status: Annotated[dict[str, str], merge_dict]
+    last_error: Annotated[dict[str, str], merge_dict]
+    feedback: Annotated[dict[str, dict], merge_dict]         # Supervisor → 에이전트 재작업 지시
+    eval_result: dict[str, Any]
+    last_decision: dict[str, Any]                            # 결정 로그 본문은 외부 JSONL
+    gaps: Annotated[list[Gap], merge_gaps]
     status: Literal["running", "completed", "completed_with_gaps", "unverified"]
-    # ---- 페이로드(payload): 하위 에이전트 결과 ----
-    perspectives: Annotated[dict[str, dict], merge_dict]   # tech / market / stakeholder / domain
+    # 페이로드: 하위 에이전트 결과
+    perspectives: Annotated[dict[str, PerspectiveResult], merge_dict]
     synthesis: dict[str, Any]
     report: str
-    evidence: Annotated[list[dict], merge_evidence]        # 축약 발췌(≤160자) + excerpt_ref(원문은 디스크)
-    cache_keys: Annotated[dict[str, str], merge_dict]      # RAG 캐시 위치(원문은 디스크)
+    evidence: Annotated[list[dict], merge_evidence]          # 발췌는 160자, 원문은 디스크
+    cache_keys: Annotated[dict[str, str], merge_dict]
 
 
 def initial_state(query: str, trace_id: str, seed: dict | None = None) -> GraphState:
@@ -82,7 +131,8 @@ def initial_state(query: str, trace_id: str, seed: dict | None = None) -> GraphS
     state: GraphState = {
         "user_query": query, "trace_id": trace_id, "step_count": 0, "next_agents": [],
         "perspective_status": {name: "pending" for name in PERSPECTIVES},
-        "retry_counts": {**{name: 0 for name in RETRY_LIMITS}, **{followup_key(name): 0 for name in FOLLOWUP_LIMITS}},
+        "retry_counts": {name: 0 for name in RETRY_LIMITS},
+        "followup_counts": {name: 0 for name in FOLLOWUP_LIMITS},
         "node_status": {name: "pending" for name in (*PERSPECTIVES, "synthesis", "report", "quality_evaluator")},
         "last_error": {}, "feedback": {}, "eval_result": {}, "last_decision": {}, "gaps": [],
         "status": "running",
@@ -96,15 +146,22 @@ def perspective(state: dict, name: str) -> dict:
     return (state.get("perspectives") or {}).get(name) or {}
 
 
-def followup_key(name: str) -> str:
-    """종합·평가가 요청한 후속 재조사 횟수를 세는 retry_counts 키(충분성 재조사 횟수와 따로 센다)."""
-    return f"{name}:followup"
-
-
 def attempt_of(state: dict, name: str) -> int:
-    """관점 에이전트의 시도 번호 = 충분성 재조사 + 후속 재조사 횟수(Evidence의 attempt 표기용)."""
-    counts = state.get("retry_counts") or {}
-    return int(counts.get(name, 0)) + int(counts.get(followup_key(name), 0))
+    """관점 에이전트의 시도 번호(충분성 재조사 + 후속 재조사)."""
+    return int((state.get("retry_counts") or {}).get(name, 0)) + int((state.get("followup_counts") or {}).get(name, 0))
+
+
+def legacy_gaps(gaps: list) -> list[Gap]:
+    """문자열 공백("관점: 내용")을 저장한 이전 final_state.json을 읽을 때 쓴다."""
+    out = []
+    for gap in gaps or []:
+        if isinstance(gap, dict):
+            out.append(gap)
+            continue
+        name = re.match(r"^(\w+)", str(gap))
+        technology, detail = split_scope(gap)
+        out.append(make_gap(name.group(1) if name else "기타", "insufficient", detail, technology))
+    return out
 
 
 def deduplicate_evidence(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

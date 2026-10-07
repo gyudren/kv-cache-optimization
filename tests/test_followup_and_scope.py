@@ -12,7 +12,7 @@ from kv_eval.config import PERSPECTIVES, RETRY_LIMITS
 from kv_eval.evaluation.quality import CRITERIA, check_groundedness, evidence_shortfalls
 from kv_eval.evidence_store import source_unit, source_units
 from kv_eval.observability import read_decisions
-from kv_eval.state import followup_key, initial_state, merge_evidence
+from kv_eval.state import initial_state, merge_evidence
 from kv_eval.supervisor.policy import Policy, decide
 
 
@@ -20,7 +20,8 @@ def decisions(state: dict) -> list[str]:
     return [d["decision"] for d in read_decisions(state["trace_id"]) if d["node"] == "supervisor"]
 
 
-def evaluated_state(failing: dict[str, list[str]] | None = None, retry: dict | None = None, **extra) -> dict:
+def evaluated_state(failing: dict[str, list[str]] | None = None, retry: dict | None = None,
+                    followup: dict | None = None, **extra) -> dict:
     """4관점 충분 → 종합·보고서·평가까지 끝난 State. failing = {평가 항목: 원인 에이전트 목록}."""
     failing = failing or {}
     base = initial_state("q", "t-followup")
@@ -34,6 +35,7 @@ def evaluated_state(failing: dict[str, list[str]] | None = None, retry: dict | N
             "perspective_status": {p: "sufficient" for p in PERSPECTIVES},
             "synthesis": {"needs_source_agents": [], "evidence_gaps": []}, "report": "## SUMMARY\n본문",
             "retry_counts": {**base["retry_counts"], **(retry or {})},
+            "followup_counts": {**base["followup_counts"], **(followup or {})},
             "eval_result": {"passed": not failing, "criteria": criteria}, **extra}
 
 
@@ -42,7 +44,7 @@ def test_policy_judge_blames_tech_after_sufficiency_retries_exhausted():
     state = evaluated_state({"groundedness": ["tech"]}, retry={"tech": RETRY_LIMITS["tech"]})
     decision = decide(state)
     assert decision.decision == "reinvestigate:tech" and decision.targets == ["tech"]
-    assert decision.updates["retry_counts"] == {followup_key("tech"): 1}  # 충분성 재시도(tech)는 건드리지 않는다
+    assert decision.updates["followup_counts"] == {"tech": 1} and "retry_counts" not in decision.updates
     assert decision.updates["node_status"]["tech"] == "running"
     assert {decision.updates["node_status"][n] for n in ("synthesis", "report", "quality_evaluator")} == {"pending"}
 
@@ -54,7 +56,7 @@ def test_judge_blames_tech_reinvestigates_even_when_sufficiency_retries_used_up(
     log = decisions(state)
     assert log[:limit + 1] == ["dispatch:tech,market,stakeholder,domain", *["dispatch:tech"] * limit]
     assert log[log.index("evaluate") + 1] == "reinvestigate:tech"
-    assert state["retry_counts"]["tech"] == limit and state["retry_counts"][followup_key("tech")] == 1
+    assert state["retry_counts"]["tech"] == limit and state["followup_counts"]["tech"] == 1
     assert llm.runs["tech"] == limit + 2
     assert all(llm.runs[name] == 1 for name in ("market", "stakeholder", "domain"))
     assert log[-1] == "end:passed" and state["status"] == "completed"
@@ -70,20 +72,21 @@ def test_synthesis_request_after_retries_exhausted_runs_once_then_becomes_gap(ru
     assert log[first + 1] == "dispatch:market"                 # 1회차 요청: 후속 재조사
     assert log[first + 1:].count("dispatch:market") == 1
     assert log[second + 1] == "report"                         # 2회차 요청: 공백 기록 후 보고서로 진행
-    assert state["retry_counts"]["market"] == limit and state["retry_counts"][followup_key("market")] == 1
+    assert state["retry_counts"]["market"] == limit and state["followup_counts"]["market"] == 1
     assert llm.runs["market"] == limit + 2 and llm.runs["synthesis"] == 2
-    assert any(g.startswith("market:") and "후속 조사 한도 소진" in g for g in state["gaps"])
+    assert any(g["perspective"] == "market" and g["kind"] == "followup_exhausted" for g in state["gaps"])
     assert "**시장성** — 근거 부족:" in state["report"]
     assert log[-1].startswith("end:") and state["status"] == "completed_with_gaps"
 
 
 def test_policy_second_synthesis_request_is_recorded_as_gap():
-    state = evaluated_state(retry={"market": RETRY_LIMITS["market"], followup_key("market"): 1},
+    state = evaluated_state(retry={"market": RETRY_LIMITS["market"]}, followup={"market": 1},
                             synthesis={"needs_source_agents": ["market"], "evidence_gaps": ["market: 시장 규모 근거"]})
     state["node_status"].update(report="pending", quality_evaluator="pending")
     decision = decide(state)
     assert decision.decision == "report"
-    assert any(g.startswith("market: 종합 단계에서 추가 근거") for g in decision.updates["gaps"])
+    assert any(g["perspective"] == "market" and g["kind"] == "followup_exhausted" and "종합 단계" in g["detail"]
+               for g in decision.updates["gaps"])
 
 
 # ---- (c) 고유 출처는 문서 단위, domain은 출처 수 규칙 대신 단일 문헌 하향 ------------------------------
@@ -178,4 +181,4 @@ def test_report_agent_always_failing_ends_within_max_steps_with_gap(run_graph):
     """보고서 에이전트 자체가 항상 실패하면 보고서는 만들 수 없다. 이때도 상한 안에서 끝나고 공백을 남긴다."""
     state = run_graph(FakeLLM(raise_on={"report": INF}))
     assert decisions(state)[-1] == "end:report_failed" and state["step_count"] <= Policy().max_steps
-    assert any(g.startswith("report:") for g in state["gaps"]) and state["status"] == "unverified"
+    assert any(g["perspective"] == "report" for g in state["gaps"]) and state["status"] == "unverified"

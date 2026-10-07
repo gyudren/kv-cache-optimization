@@ -22,7 +22,7 @@ def test_one_source_per_attempt_never_accumulates_to_sufficient(run_graph):
     # 매 시도 출처 1개 → 누적하면 2회차에 통과하지만, 최신 시도 기준이라 한도까지 재조사 후 제외된다
     assert llm.runs["market"] == 1 + RETRY_LIMITS["market"]
     assert state["perspective_status"]["market"] == "excluded"
-    assert any(g.startswith("market:") and "고유 출처 1개" in g for g in state["gaps"])
+    assert any(g["perspective"] == "market" and "고유 출처 1개" in g["detail"] for g in state["gaps"])
     assert state["perspectives"]["market"]["source_units"]["mla"] and len(state["perspectives"]["market"]["source_units"]["mla"]) == 1
 
 
