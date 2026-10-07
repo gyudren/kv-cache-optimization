@@ -32,7 +32,7 @@ LangSmith → Projects → `kv-cache-supervisor` → Runs에서 이름 `kv-eval-
 
 | 파일 | 화면 | 확인할 것 |
 |---|---|---|
-| `tracing-1.png` | Runs 목록(태그 `pattern:supervisor` 필터) | run_name, 태그, 실행 시간 |
+| `tracing-1.png` | Runs 목록(태그 `pattern:supervisor` + metadata `trace_id = <최종 trace_id>` 필터, 완료된 실행 1건만) | run_name, 태그, 실행 시간. 중단된 실행(`running`)이나 다른 실행이 섞이지 않게 한다 |
 | `tracing-2.png` | run 상세 > Metadata | `trace_id`가 콘솔·결정 로그 파일명과 같음 |
 | `tracing-3.png` | run 트리: 첫 `supervisor` 다음에 tech·market·stakeholder·domain이 한 번에 할당되어(같은 단계) 하나씩 순차 실행된 부분 | Send fan-out, 각 노드 아래 LLM·웹 호출이 자식 run으로 붙음(고아 root run 없음) |
 | `tracing-4.png` | 재작업 또는 평가 구간: `supervisor`(dispatch:market 등) → 해당 에이전트 → `supervisor`(evaluate) → `quality_evaluator` | 부족 관점만 재실행, 보고서 후 Supervisor가 평가를 부름 |

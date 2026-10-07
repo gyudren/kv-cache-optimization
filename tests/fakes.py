@@ -76,7 +76,9 @@ def _runs_left(table: dict, agent: str, run: int) -> bool:
 
 class FakeLLM:
     """시나리오 옵션(모두 '처음 N회 실행'에 적용, math.inf = 항상):
-    - insufficient: {agent: N}  sufficient=False와 missing 반환
+    - insufficient: {agent: N}  판정을 막는 필수 결함(TRL 미기재·인용 없음·인용 없는 판정)과 세부 미확인 항목(missing) 반환.
+                                LLM이 missing만 적고 결과가 성립하면 필수 결함이 아니므로 재조사하지 않는다(optional_only).
+    - optional_only: {agent: N} 결과는 성립하고 LLM이 세부 미확인 항목만 적는다(재조사 대상 아님)
     - one_sided:    {agent: N}  시장·이해관계자 판정을 모두 '긍정'으로(편향 규칙 미달 유도)
     - raise_on:     {agent: N}  RuntimeError (에이전트 래퍼가 failed로 기록)
     - crash_on:     {agent: N}  SimulatedCrash (프로세스 중단 흉내, 재개 테스트용)
@@ -85,8 +87,9 @@ class FakeLLM:
     """
 
     def __init__(self, insufficient=None, one_sided=None, raise_on=None, crash_on=None,
-                 banned_report=0, judge_fail=None, needs_source=None, cite_limit=None):
+                 banned_report=0, judge_fail=None, needs_source=None, cite_limit=None, optional_only=None):
         self.insufficient = insufficient or {}
+        self.optional_only = optional_only or {}
         self.one_sided = one_sided or {}
         self.raise_on = raise_on or {}
         self.crash_on = crash_on or {}
@@ -115,14 +118,15 @@ class FakeLLM:
         if _runs_left(self.raise_on, agent, run):
             raise RuntimeError(f"{agent} upstream API error")
         insufficient = _runs_left(self.insufficient, agent, run)
+        self._optional = insufficient or _runs_left(self.optional_only, agent, run)
         return getattr(self, f"_{agent}")(prompt, run, insufficient)
 
     def _tech(self, prompt, run, insufficient):
         return TechnologyAssessment(
             summary="MLA와 ITME의 기술 범위와 한계를 원문 근거로 정리했다.",
-            trl=PerTechnologyText(mla="개별 기술 TRL 4-6", itme="개별 기술 TRL 4-5"),
+            trl=PerTechnologyText(mla="" if insufficient else "개별 기술 TRL 4-6", itme="개별 기술 TRL 4-5"),
             trl_basis=PerTechnologyText(mla="공개 구현과 서빙 백엔드 근거", itme="FPGA 프로토타입 근거"),
-            sufficient=not insufficient, missing=["MLA 상용 채택 직접 근거"] if insufficient else [])
+            sufficient=not self._optional, missing=["MLA 상용 채택 직접 근거"] if self._optional else [])
 
     @staticmethod
     def _ids(prompt: str, prefix: str) -> list[str]:
@@ -135,8 +139,8 @@ class FakeLLM:
             summary=f"{tech} 시장 근거 요약", market_size_growth="시장 성장 근거", adoption="채택 근거",
             ecosystem="생태계 근거", market_size_growth_verdict=verdicts[0], adoption_verdict=verdicts[1],
             ecosystem_verdict=verdicts[2], verdict=verdicts[3],
-            cited_ids=self._ids(prompt, f"web:{tech}:")[:self.cite_limit.get("market", {}).get(tech)],
-            sufficient=not insufficient, missing=[f"{tech} 시장 규모 정량 근거"] if insufficient else [])
+            cited_ids=[] if insufficient else self._ids(prompt, f"web:{tech}:")[:self.cite_limit.get("market", {}).get(tech)],
+            sufficient=not self._optional, missing=[f"{tech} 시장 규모 정량 근거"] if self._optional else [])
 
     def _stakeholder(self, prompt, run, insufficient):
         tech = "mla" if "web:stakeholder:mla:" in prompt else "itme"
@@ -145,17 +149,18 @@ class FakeLLM:
             summary=f"{tech} 이해관계자 반응 요약", competitors="경쟁 진영 반응", developers_adopters="개발자 반응",
             investors="투자 업계 반응", competitors_verdict=verdicts[0], developers_adopters_verdict=verdicts[1],
             investors_verdict=verdicts[2], verdict=verdicts[3],
-            cited_ids=self._ids(prompt, f"web:stakeholder:{tech}:"),
-            sufficient=not insufficient, missing=[f"{tech} 투자 업계 발언 근거"] if insufficient else [])
+            cited_ids=[] if insufficient else self._ids(prompt, f"web:stakeholder:{tech}:"),
+            sufficient=not self._optional, missing=[f"{tech} 투자 업계 발언 근거"] if self._optional else [])
 
     def _domain(self, prompt, run, insufficient):
         ids = {"mla": re.findall(r"^(deepseek_v2_mla#p\d+#\w+):", prompt, re.M),
                "itme": re.findall(r"^(itme#p\d+#\w+):", prompt, re.M)}
         items = [DomainItem(dimension=dim, technology=tech, verdict="적합" if i % 2 == 0 else "조건부",
-                            explanation=f"{tech} {dim} 근거 기반 판정", cited_ids=ids[tech][:1])
+                            explanation=f"{tech} {dim} 근거 기반 판정",
+                            cited_ids=[] if insufficient and i == 0 else ids[tech][:1])
                  for tech in ("mla", "itme") for i, dim in enumerate(DIMENSIONS)]
-        return DomainAssessment(items=items, summary="D1~D7 판정", sufficient=not insufficient,
-                                missing=["D5 운영 안정성 장기 측정 근거"] if insufficient else [])
+        return DomainAssessment(items=items, summary="D1~D7 판정", sufficient=not self._optional,
+                                missing=["D5 운영 안정성 장기 측정 근거"] if self._optional else [])
 
     def _synthesis(self, prompt, run, insufficient):
         needs = self.needs_source if run == 1 else []

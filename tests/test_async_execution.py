@@ -1,6 +1,6 @@
 """비동기 실행·에이전트 순차 처리·문서 임베딩 1회 저장을 검증한다."""
 from __future__ import annotations
-import asyncio
+import inspect
 import threading
 import time
 
@@ -42,7 +42,7 @@ def _track_agent_concurrency(monkeypatch) -> dict:
 def test_worker_nodes_are_async():
     graph = build_graph(None, None, None)
     for name in WORKER_NODES:
-        assert asyncio.iscoroutinefunction(graph.builder.nodes[name].runnable.afunc), name
+        assert inspect.iscoroutinefunction(graph.builder.nodes[name].runnable.afunc), name
 
 
 def test_perspective_agents_run_one_at_a_time_by_default(monkeypatch, run_graph):

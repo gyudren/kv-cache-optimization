@@ -82,6 +82,7 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
                          "technology": tech, "source_type": "web", "url": r["url"], "title": r["title"],
                          "publisher": r["publisher"], "published_at": r["published_at"]} for r in cited)
     return {"perspectives": {"market": {"technologies": results, "attempt": attempt,
+                                       "llm_sufficient": all(r.get("llm_sufficient", False) for r in results.values()),
                                        "sufficient": all(r.get("sufficient", False) for r in results.values()),
                                        "missing": list(dict.fromkeys(missing)),
                                        "missing_optional": list(dict.fromkeys(optional))}},

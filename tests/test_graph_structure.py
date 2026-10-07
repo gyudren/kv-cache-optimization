@@ -101,7 +101,8 @@ def test_agent_always_failing_is_excluded_and_reported_as_gap(run_graph):
     assert state["perspective_status"]["stakeholder"] == "excluded"
     gap = next(g for g in state["gaps"] if g.startswith("stakeholder:"))
     assert "실행 실패" in gap and "RuntimeError" in gap
-    assert gap.split(" — ")[0][:30] in state["report"]  # 보고서 7장 한계점에 기록
+    section = state["report"].split("#### 근거 공백 (Supervisor 기록)", 1)[1]
+    assert "**이해관계자**" in section and "실행 실패" in section  # 7장 한계점에 읽을 수 있는 형태로 기록
     assert state["status"] == "completed_with_gaps"
 
 

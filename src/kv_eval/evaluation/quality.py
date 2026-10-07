@@ -42,12 +42,14 @@ _TECH = r"(MLA|ITME|SW|HW|소프트웨어|하드웨어)"
 COMPARATIVE = re.compile(rf"{_TECH}\S*\s*보다\s*[^.。|]{{0,20}}?((더\s*)?(우수|우월|뛰어나|낫|효율적|유리|앞서|성숙|적합|빠르))")
 ENDORSEMENT = re.compile(r"(추천한다|추천됨|권장한다|권고한다|승자|우승|압도적|최선의\s*선택|최고의\s*(기술|선택)|능가|우위에\s*있|우위를\s*점)")
 TECH_DIRECTIVE = re.compile(r"((MLA|ITME)\S*\s*(을|를)?\s*(우선\s*)?(채택|도입|선택)(해야|하라|할\s*것을))")
-# 표현 바로 뒤(25자 안)의 부정·유보("우수하다고 단정할 수 없다", "승자를 정하지 않는다")만 면제한다.
+# 표현 바로 뒤(25자 안, 같은 절)의 부정·유보("우수하다고 단정할 수 없다", "승자를 정하지 않는다")만 면제한다.
+# "우수하지만 비용은 확인되지 않았다"처럼 뒤 절의 부정은 앞 절의 우열 판정을 지우지 않는다.
 NEARBY_NEGATION = re.compile(r"^[^.。|]{0,25}?(않|아니|없|어렵|판단하지|가리지|정하지)")
+CLAUSE_BREAK = re.compile(r"(지만|는데|으나|이나|반면|그러나|,|;)")
 # 단위가 붙은 수치(성능·용량·비율). TRL 같은 등급 숫자나 날짜는 대상이 아니다.
 QUANTITY = re.compile(r"\d[\d,.]*\s*(%|배|×|GB|GiB|TB|TiB|MB|ms|μs|us\b|tokens?\b|토큰|tok/s|req/s|x\b)")
 EVIDENCE_CITATION = re.compile(r"\[\d+,\s*p\.\d+\]|\[W\d+\]")
-DESIGN_CHAPTERS = ("SUMMARY", "1", "2")  # 팀 설계 문서 [D]를 근거로 쓸 수 있는 장(배경·선정, 요약의 설계 전제)
+DESIGN_CHAPTERS = ("1", "2")  # 팀 설계 문서 [D]를 쓸 수 있는 장(배경·선정의 설계 조건). 기술 사실의 근거로는 쓰지 않는다
 POSITIVE = {"긍정", "적합"}
 CONCERN = {"우려", "제약"}
 MIXED = {"혼재", "조건부"}  # 조건부 = 조건이 붙은 적합 → 긍정·우려 양쪽 근거를 함께 담은 판정
@@ -139,7 +141,13 @@ def check_groundedness(state: dict) -> dict:
     for chapter, text in _chapters(_body(report)):
         design_ok = chapter in DESIGN_CHAPTERS
         for sentence in _sentences(text):
-            if sentence in static or not QUANTITY.search(sentence):
+            if sentence in static:
+                continue
+            if not design_ok and "[D]" in sentence and not EVIDENCE_CITATION.search(sentence):
+                # 설계 문서는 조사 근거가 아니다. 1·2장 밖에서 [D]만 붙은 문장은 사실 근거 없이 서술한 것이다.
+                issues.append(f"설계 문서 [D]만 인용(1·2장 설계 조건 밖): {sentence[:120]}")
+                continue
+            if not QUANTITY.search(sentence):
                 continue
             # [D](팀 설계 문서)는 1·2장의 설계 전제에만 근거가 된다. 다른 장의 수치를 [D]로 막으면 조사 근거 검사를 우회한다.
             cited = EVIDENCE_CITATION.search(sentence) or (design_ok and "[D]" in sentence)
@@ -154,7 +162,8 @@ def neutrality_issues(text: str) -> list[str]:
     for sentence in _sentences(text):
         for pattern in (COMPARATIVE, ENDORSEMENT, TECH_DIRECTIVE):
             match = pattern.search(sentence)
-            if match and not NEARBY_NEGATION.search(sentence[match.end():]):
+            tail = CLAUSE_BREAK.split(sentence[match.end():], maxsplit=1)[0] if match else ""
+            if match and not NEARBY_NEGATION.search(tail):
                 issues.append(f"우열·추천 표현 '{match.group(0)[:30]}': {sentence[:120]}")
                 break
     return issues

@@ -84,6 +84,7 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
                          "publisher": r["publisher"], "published_at": r["published_at"],
                          "speaker": r.get("speaker", "기타")} for r in cited)
     return {"perspectives": {"stakeholder": {"technologies": results, "attempt": attempt,
+                                       "llm_sufficient": all(r.get("llm_sufficient", False) for r in results.values()),
                                        "sufficient": all(r.get("sufficient", False) for r in results.values()),
                                        "missing": list(dict.fromkeys(missing)),
                                        "missing_optional": list(dict.fromkeys(optional))}},

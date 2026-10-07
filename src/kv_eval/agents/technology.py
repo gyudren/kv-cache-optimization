@@ -48,6 +48,20 @@ TRL_WEB_QUERIES = {
              "CXL memory module tiered memory LLM inference commercial deployment announcement"],
 }
 TECH_LABEL = {"mla": "DeepSeek-V2 MLA", "itme": "ITME"}
+# 보고서가 TRL 숫자 구간(1~3/4~6/7~9)을 쓸 때 인용할 척도 정의 출처. 기술 근거가 아니라 평가 척도의 근거다.
+TRL_SCALE_QUERY = "NASA technology readiness level TRL 1-9 definitions scale"
+TRL_SCALE_SOURCES = 2
+TRL_SCALE_CLAIM = "TRL 단계 정의(평가 척도)"
+
+
+def _trl_scale_evidence(web: Any, attempt: int) -> list[dict]:
+    found = web.search_market(TRL_SCALE_QUERY, "general")[:TRL_SCALE_SOURCES]
+    return [{
+        "source_id": f"web:trl:scale:{sha256(item['url'].encode()).hexdigest()[:14]}",
+        "agent": "tech", "attempt": attempt, "claim": TRL_SCALE_CLAIM, "excerpt": item["excerpt"],
+        "technology": "general", "source_type": "web", "url": item["url"], "title": item["title"],
+        "publisher": item["publisher"], "published_at": item["published_at"],
+    } for item in found]
 
 
 def _trl_web_evidence(web: Any, tech: str, attempt: int) -> tuple[list[dict], list[str]]:
@@ -86,8 +100,10 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
         baseline_future = pool.submit(answer_with_cache, rag, cache, BASELINE_QUESTION, "itme_baseline", feedback)
         web_by_tech = {tech: pool.submit(_trl_web_evidence, web, tech, attempt)
                        for tech in ("mla", "itme")}
+        scale_future = pool.submit(_trl_scale_evidence, web, attempt)
         baseline = baseline_future.result()
         web_results = {tech: future.result() for tech, future in web_by_tech.items()}
+        scale_evidence = scale_future.result()
 
     for tech in ("mla", "itme"):
         answers = []
@@ -108,6 +124,9 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
         findings[tech]["trl_web_sources"] = [
             f"{item['source_id']}: {item['publisher']} | {item['excerpt'][:400]}" for item in web_evidence
         ]
+    evidence.extend(scale_evidence)
+    if not scale_evidence:
+        optional.append("TRL 단계 정의 출처를 찾지 못함(보고서는 TRL 구간 대신 근거 수준을 서술)")
     findings["itme_baseline"] = baseline["answer"]
     optional.extend(baseline["missing"])
     if not baseline["evidence"]:
@@ -119,7 +138,8 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     web_refs = "\n".join(
         f"{ev['source_id']} ({ev.get('publisher') or '발행 주체 미확인'}, "
         f"{ev.get('published_at') or '게시일 미확인'}): {ev['excerpt'][:300]}"
-        for ev in evidence if ev.get("source_type") == "web")
+        for ev in evidence if ev.get("source_type") == "web" and ev.get("technology") != "general")
+    scale_refs = "\n".join(f"{ev['source_id']}: {ev['excerpt'][:300]}" for ev in scale_evidence)
     result = llm.generate_structured(
         prompt_template("technology") + "\n" + "Summarize MLA and ITME technical scope, reported results, limitations and separately assessed TRL from ONLY the supplied excerpts. "
         "TRL ranges: 1-3 published concept, 4-6 implementation/validation, 7-9 documented operational adoption. "
@@ -130,10 +150,13 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
         "ITSELF, not of a mere family; do not write that MLA's operation is unconfirmed when such a source or the paper says it is deployed. "
         "For ITME, availability of CXL memory products is family-level evidence only and must not raise ITME's own TRL. "
         "State the maturity of the specific technology separately from the maturity of its general family. "
+        "In trl_basis describe the evidence level in words (e.g. 프로토타입·내부 평가 확인, 상용 서비스 운영 확인) and, when something is "
+        "not confirmed, narrow it to exactly what is missing (e.g. 독립 재현·외부 고객 채택 미확인) instead of a broad '운영 미확인'. "
         "List in missing only facts you could not confirm; they are reported as limitations. No unsupported claims.\n"
         + "\n".join(f"{k}: {v}" for k, v in findings.items())
         + "\nPaper sources (구현·검증 수준):\n" + paper_refs
-        + "\nWeb sources (상용화·통합 발표):\n" + (web_refs or "없음") + rework_note(feedback),
+        + "\nWeb sources (상용화·통합 발표):\n" + (web_refs or "없음")
+        + "\nTRL scale definition sources (척도 정의, 기술 근거 아님):\n" + (scale_refs or "없음") + rework_note(feedback),
         TechnologyAssessment,
     )
     optional.extend(result.missing)

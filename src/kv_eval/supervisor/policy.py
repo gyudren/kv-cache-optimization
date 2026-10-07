@@ -118,10 +118,18 @@ def _rework(items: list[tuple[list[str], str, str]]) -> dict:
             "rewritten_queries": list(dict.fromkeys(q for qs in by_tech.values() for q in qs))}
 
 
-def _sufficiency_feedback(shortfalls: list[dict], missing: list[str]) -> dict:
-    """Supervisor 결정적 검사(구조화)와 에이전트 부족 항목(자유 서술)을 재작업 지시로 만든다."""
+def _sufficiency_feedback(shortfalls: list[dict], missing: list[str], optional: list[str] = ()) -> dict:
+    """재작업 지시: 사유는 결정적 검사와 필수 결함, 검색 힌트는 에이전트가 확인하지 못한 세부 항목에서 만든다.
+
+    필수 결함 문장("검증 가능한 출처 인용 없음")은 검색어가 되지 못하므로 사유로만 넘기고, 같은 기술의 선택 항목
+    (예: "MLA 시장 규모 정량 근거")을 검색 힌트로 쓴다. 힌트가 하나도 없는 기술에는 일반 힌트를 붙인다.
+    """
     items = [([x["technology"]], x["reason"], SHORTFALL_HINT) for x in shortfalls]
-    items += [(_item_tech(m), str(m), _agent_missing_query(m)) for m in missing if str(m).strip()]
+    items += [(_item_tech(m), str(m), "") for m in missing if str(m).strip()]
+    items += [(_item_tech(o), "", _agent_missing_query(o)) for o in optional if str(o).strip()]
+    hinted = {tech for techs, _, query in items if query for tech in techs}
+    needy = {tech for techs, reason, _ in items if reason for tech in techs}
+    items += [([tech], "", SHORTFALL_HINT) for tech in sorted(needy - hinted)]
     return _rework(items)
 
 
@@ -214,7 +222,8 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
                 b.bump(name, {**state.get("feedback", {}).get(name, {}), "last_error": error})
                 reasons.append(f"{name}: 실행 실패 재시도 {b.retry[name]}/{policy.limit(name)} ({error[:80]})")
             else:
-                b.bump(name, _sufficiency_feedback(shortfalls, perspective(state, name).get("missing", [])))
+                result = perspective(state, name)
+                b.bump(name, _sufficiency_feedback(shortfalls, result.get("missing", []), result.get("missing_optional", [])))
                 reasons.append(f"{name}: 근거 부족 재조사 {b.retry[name]}/{policy.limit(name)} "
                                f"({'; '.join(map(str, missing[:2]))[:120]})")
             to_run.append(name)
