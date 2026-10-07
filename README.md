@@ -155,6 +155,8 @@ Payload는 각 agent가 수집·생성한 결과를 담는다.
 ---
 config:
   layout: dagre
+  themeVariables:
+    edgeLabelBackground: '#ffffff'
 ---
 flowchart TB
     START([START]) --> D1
@@ -206,6 +208,7 @@ flowchart TB
     class START term
     style SUP fill:#f4effd,stroke:#5b3a9b,color:#5b3a9b
     style AG fill:#f7fbfd,stroke:#1f6f94,color:#1f6f94
+    linkStyle default stroke:#8b949e,stroke-width:1.5px,color:#1d232a
     linkStyle 12,13,14 stroke:#d4761c,stroke-width:2px,color:#d4761c
     linkStyle 15 stroke:#b0397f,stroke-width:2px,color:#b0397f
 ```
