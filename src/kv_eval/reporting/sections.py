@@ -5,6 +5,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
+from ..config import MAX_REPORT_PAGES
 from ..state import deduplicate_evidence
 
 
@@ -130,11 +131,22 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
             positions.append(report.index(marker))
     if positions != sorted(positions):
         issues.append("목차 순서가 설계 E와 불일치")
-    if "## SUMMARY\n" in report and "\n## 1. 분석 배경" in report:
-        from .export import summary_fits_half_page
+    pages = None
+    from .export import korean_fonts, report_page_count, summary_fits_half_page
+    try:
+        korean_fonts()
+        renderable = True
+    except RuntimeError:
+        # 한글 폰트가 없는 환경에서는 물리 조판 검사(1/2페이지·10페이지)를 할 수 없다. 이슈가 아니라 미검사로 남긴다.
+        renderable = False
+    if renderable and "## SUMMARY\n" in report and "\n## 1. 분석 배경" in report:
         summary = report.split("## SUMMARY\n", 1)[1].split("\n## 1. 분석 배경", 1)[0].strip()
         if not summary_fits_half_page(summary):
             issues.append("SUMMARY가 PDF 렌더링 기준 1/2페이지 초과")
+    if renderable and report.strip():
+        pages = report_page_count(report)
+        if pages is not None and pages > MAX_REPORT_PAGES:
+            issues.append(f"보고서 PDF {pages}p: 최대 {MAX_REPORT_PAGES}p 초과")
     body = report.split("\n## REFERENCE", 1)[0]
     for bad in dict.fromkeys(MALFORMED_CITATION.findall(body)):
         issues.append(f"정규 형식이 아닌 묶음 인용 {bad}: [n, p.X] / [Wn] 단위로 나눠야 검증 가능")
@@ -147,4 +159,5 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
         issues.append("실제 사용한 근거가 REFERENCE에 누락")
     if not refs and "근거 부족" not in report:
         issues.append("검증 가능한 출처 및 근거 부족 표기 모두 없음")
-    return {"passed": not issues, "issues": issues, "used_references": refs}
+    return {"passed": not issues, "issues": issues, "used_references": refs,
+            "pdf_pages": pages, "page_check": "checked" if pages is not None else "skipped(no Korean font)"}

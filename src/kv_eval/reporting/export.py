@@ -39,6 +39,8 @@ _FONT_CANDIDATES = [
     ("/usr/share/fonts/truetype/unfonts-core/UnDotum.ttf", 0,
      "/usr/share/fonts/truetype/unfonts-core/UnDotumBold.ttf", 0),
     ("/Library/Fonts/Arial Unicode.ttf", 0, None, 0),
+    # 한글 글리프를 포함한 범용 CJK 폰트(나눔·은 폰트가 없는 리눅스 컨테이너용 마지막 후보)
+    ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0, None, 0),
 ]
 _FONTS: tuple[str, str] | None = None
 
@@ -215,22 +217,7 @@ def _page_footer(canvas, doc) -> None:
     canvas.restoreState()
 
 
-def export_report(report_md: str, output_dir: str, stem: str) -> dict:
-    if not report_md.strip() or "## SUMMARY\n" not in report_md or "## REFERENCE\n" not in report_md:
-        raise ValueError("Cannot export blank or structurally incomplete report")
-    output = Path(output_dir)
-    output.mkdir(parents=True, exist_ok=True)
-    md_path, pdf_path = output / f"{stem}.md", output / f"{stem}.pdf"
-    header = f"# {REPORT_TITLE}\n\n{REPORT_SUBTITLE}\n\n{REPORT_AUTHORS} · {date.today().isoformat()}\n\n"
-    md_path.write_text(header + report_md, encoding="utf-8")
-    styles = _styles()
-    summary = report_md.split("## SUMMARY\n", 1)[1].split("\n## 1. 분석 배경", 1)[0].strip()
-    # 물리적 1/2페이지 제한은 보고서 게이트(validate_report)가 판정해 재작성을 요구한다.
-    # 한도 소진 후에도 초과하면 validation.json에 이슈로 남기고 PDF는 그대로 만든다.
-    fits = summary_fits_half_page(summary)
-    doc = SimpleDocTemplate(str(pdf_path), pagesize=A4, leftMargin=24*mm, rightMargin=24*mm,
-                            topMargin=22*mm, bottomMargin=22*mm, title=REPORT_TITLE,
-                            author=REPORT_AUTHORS)
+def _story(report_md: str, styles: dict) -> list:
     story: list = [
         Paragraph(escape(REPORT_TITLE), styles["title"]),
         Paragraph(escape(REPORT_SUBTITLE), styles["subtitle"]),
@@ -240,5 +227,42 @@ def export_report(report_md: str, output_dir: str, stem: str) -> dict:
               style=TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.8, RULE)])),
     ]
     story.extend(markdown_flowables(report_md, styles))
-    doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
-    return {"md": str(md_path), "pdf": str(pdf_path), "summary_fits_half_page": fits}
+    return story
+
+
+def _build_pdf(report_md: str, target) -> int:
+    """PDF를 만들고 페이지 수를 돌려준다. target은 파일 경로 또는 BytesIO."""
+    doc = SimpleDocTemplate(target, pagesize=A4, leftMargin=24*mm, rightMargin=24*mm,
+                            topMargin=22*mm, bottomMargin=22*mm, title=REPORT_TITLE,
+                            author=REPORT_AUTHORS)
+    doc.build(_story(report_md, _styles()), onFirstPage=_page_footer, onLaterPages=_page_footer)
+    return doc.page
+
+
+def report_page_count(report_md: str) -> int | None:
+    """export_report와 같은 조판으로 메모리에 렌더링해 PDF 페이지 수를 센다(10p 상한 검사용).
+
+    한글 폰트가 없어 PDF를 만들 수 없는 환경이면 None(검사 불가)을 돌려준다.
+    """
+    from io import BytesIO
+    try:
+        korean_fonts()
+    except RuntimeError:
+        return None
+    return _build_pdf(report_md, BytesIO())
+
+
+def export_report(report_md: str, output_dir: str, stem: str) -> dict:
+    if not report_md.strip() or "## SUMMARY\n" not in report_md or "## REFERENCE\n" not in report_md:
+        raise ValueError("Cannot export blank or structurally incomplete report")
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    md_path, pdf_path = output / f"{stem}.md", output / f"{stem}.pdf"
+    header = f"# {REPORT_TITLE}\n\n{REPORT_SUBTITLE}\n\n{REPORT_AUTHORS} · {date.today().isoformat()}\n\n"
+    md_path.write_text(header + report_md, encoding="utf-8")
+    summary = report_md.split("## SUMMARY\n", 1)[1].split("\n## 1. 분석 배경", 1)[0].strip()
+    # 물리적 1/2페이지·10페이지 제한은 품질 평가 노드(validate_report)가 판정해 재작성을 요구한다.
+    # 한도 소진 후에도 초과하면 validation.json에 이슈로 남기고 PDF는 그대로 만든다.
+    fits = summary_fits_half_page(summary)
+    pages = _build_pdf(report_md, str(pdf_path))
+    return {"md": str(md_path), "pdf": str(pdf_path), "pages": pages, "summary_fits_half_page": fits}
