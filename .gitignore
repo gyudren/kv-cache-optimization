@@ -22,3 +22,5 @@ uv.lock
 /data/chroma/
 # 웹 검색 응답 캐시(재실행 시 크레딧 절약)
 /data/cache/
+# LangGraph 체크포인트(SQLite, 실행별 재개용)
+/outputs/checkpoints.sqlite*
