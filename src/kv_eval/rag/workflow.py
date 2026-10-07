@@ -1,4 +1,4 @@
-"""Inner Agentic RAG workflow. Not a top-level graph agent."""
+"""Agentic RAG workflow used inside research agents."""
 from __future__ import annotations
 import json
 import re
@@ -52,7 +52,7 @@ class RAGWorkflow:
         evidence = [{"source_id": c.chunk_id, "claim": question, "excerpt": c.text,
                      "doc_id": c.doc_id, "page": c.page, "technology": c.technology,
                      "citation_number": c.citation_number, "source_type": "paper"} for c in valid]
-        # Deterministic citation suffix ensures answer is traceable even if model omitted citations.
+        # Append citations in code in case the model omitted them.
         citations = " ".join(f"[{c.citation_number}, p.{c.page}]" for c in valid)
         return {"answer": f"{generated.answer}\n근거: {citations}", "evidence": evidence,
                 "sufficient": not bool(generated.missing), "missing": generated.missing,
@@ -60,7 +60,7 @@ class RAGWorkflow:
 
 
 def feedback_fingerprint(feedback: dict | None) -> str:
-    """재작업 지시(missing·재검색 질의)의 지문. 지시가 바뀌면 캐시 키가 바뀐 것으로 본다."""
+    """재작업 지시(missing·재검색 질의)의 지문."""
     items = [*(feedback or {}).get("missing", []), *(feedback or {}).get("rewritten_queries", [])]
     if not items:
         return ""
@@ -68,7 +68,7 @@ def feedback_fingerprint(feedback: dict | None) -> str:
 
 
 def question_targeted(question: str, technology_filter: str, feedback: dict | None) -> bool:
-    """재작업 지시가 이 질문을 겨냥하는가: 이 기술에 대한 검색 힌트가 있고, 지시에 D-코드가 있으면 그 차원만."""
+    """재작업 지시가 이 질문을 겨냥하는가. 지시에 D-코드가 있으면 그 차원의 질문만 해당한다."""
     scoped = scoped_feedback(feedback, technology_filter)
     if not scoped:
         return False
@@ -78,13 +78,11 @@ def question_targeted(question: str, technology_filter: str, feedback: dict | No
 
 
 def answer_with_cache(rag: Any, cache: dict, question: str, technology_filter: str, feedback: dict | None) -> dict:
-    """재시도 시 이미 근거가 충분했던 질문은 이전 답변을 재사용한다(부족 항목만 재검색).
+    """재시도 시 근거가 충분했던 질문은 이전 답변을 재사용한다.
 
-    단, Supervisor의 재작업 지시(feedback)가 이 질문을 겨냥하면 캐시 키에 지시 지문이 들어간 것으로 보고
-    재사용하지 않는다. 그래야 품질 평가가 "반대 방향 근거"를 요구했을 때 같은 답을 돌려주지 않고
-    지시가 반영된 질의로 다시 검색한다(같은 지시로 이미 다시 검색한 답은 재사용).
+    재작업 지시가 이 질문을 겨냥하면 같은 지시로 검색한 답일 때만 재사용한다.
     """
-    scoped = scoped_feedback(feedback, technology_filter)  # 이 질문의 기술에 해당하는 지시만
+    scoped = scoped_feedback(feedback, technology_filter)
     fingerprint = feedback_fingerprint(scoped)
     targeted = bool(fingerprint) and question_targeted(question, technology_filter, feedback)
     previous = cache.get(question)

@@ -1,20 +1,9 @@
-"""데이터 전처리 파이프라인.
+"""PDF 전처리 파이프라인. 결과는 data/processed/chunks.jsonl과 summary.json에 쓴다.
 
-파싱(2단 레이아웃 재정렬) → header/footer 제거 → 표 분리(캡션·각주·병합셀 정규화)
-→ 참고문헌 구간 제외 → 청킹(페이지 경계 문장 이어붙이기 포함) → 페이지 예산 검증
-→ 메타데이터 부착 순으로 처리한다.
+파싱, 머리글/바닥글 제거, 표 분리, 참고문헌 제외, 청킹, 페이지 예산 검사 순으로 처리한다.
+차트 위 텍스트나 표 헤더 이월처럼 자동 판단이 위험한 항목은 review_flags와
+pages_with_charts에 표시만 한다.
 
-역할 범위(데이터 전처리)만 다룬다. 임베딩 생성, FAISS/BM25 색인, 에이전트/프롬프트 로직은
-다른 담당자의 영역이므로 이 모듈에서 다루지 않는다.
-
-자동으로 판단하기 위험한 항목(차트/이미지 위 텍스트, 표 헤더 이월 의심 등)은 임의로
-넘겨짚지 않고 review_flags / pages_with_charts 로 표시만 하여 사람이 확인하도록 한다.
-
-출력:
-    data/processed/chunks.jsonl  - 다음 단계(vector db 구성)에서 바로 임베딩할 수 있는 청크 목록
-    data/processed/summary.json - 문서별 통계, 페이지 예산 검증 결과, 수동 확인이 필요한 항목 목록
-
-실행:
     python -m preprocessing.pipeline
 """
 
@@ -35,8 +24,8 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 MANIFEST_PATH = DATA_DIR / "manifest.json"
 
-CHART_AREA_RATIO_THRESHOLD = 0.15  # 페이지 면적의 이 비율을 넘는 이미지는 차트로 간주해 검토 대상 표시
-VECTOR_DIAGRAM_SHAPE_THRESHOLD = 20  # 이 개수 이상의 사각형/선/곡선이 있으면 벡터 다이어그램으로 간주
+CHART_AREA_RATIO_THRESHOLD = 0.15  # 페이지 면적 대비 이 비율 이상인 이미지는 차트로 본다
+VECTOR_DIAGRAM_SHAPE_THRESHOLD = 20  # 벡터 도형이 이만큼 있으면 다이어그램으로 본다
 
 
 def format_citation(doc_index: int, start_page: int, end_page: int) -> str:
@@ -67,10 +56,9 @@ def _pages_with_large_images(raw_pages: list[RawPage]) -> list[int]:
 
 
 def _pages_with_vector_diagrams(raw_pages: list[RawPage]) -> list[int]:
-    """래스터 이미지가 아니라 사각형/선/곡선으로 직접 그린 아키텍처 다이어그램·차트를 감지한다.
+    """벡터 도형으로 그린 다이어그램·차트가 있는 페이지를 찾는다.
 
-    이런 다이어그램은 표로도, 이미지로도 잡히지 않고 라벨 텍스트만 본문 흐름 중간에 끼어들어가
-    주변 문장과 뒤섞일 수 있어(성능 실험 결과) 별도로 표시해 사람이 확인하게 한다.
+    표나 이미지로 잡히지 않아 라벨이 본문 사이에 섞일 수 있으므로 사람이 확인하게 표시한다.
     """
     return [
         raw_page.page_number
@@ -136,7 +124,7 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
                 "chunk_id": f"{doc['doc_id']}_text_{chunk.chunk_index:04d}",
                 "doc_id": doc["doc_id"],
                 "title": doc["title"],
-                "camp": doc["camp"],  # SW / HW - 기술별 문서 필터용
+                "camp": doc["camp"],  # SW / HW, 기술별 필터용
                 "role": doc["role"],  # primary / baseline
                 "content_type": "text",
                 "start_page": chunk.start_page,
@@ -149,8 +137,7 @@ def _process_document(doc: dict, doc_index: int) -> tuple[list[dict], dict, int]
 
     table_chunk_index = 0
     for table in all_tables:
-        # 큰 표(행이 많은 표)는 1,200자/겹침 200자 기준으로 여러 조각으로 나뉠 수 있으므로,
-        # 표 하나당 청크 인덱스가 아니라 전체 표 청크에 대해 순번을 매긴다.
+        # 큰 표는 여러 조각으로 나뉘므로 순번은 표 단위가 아니라 표 청크 전체에 매긴다.
         for text in split_table_into_chunks(table, chunk_size=CHUNK_SIZE, overlap=OVERLAP):
             doc_chunks.append(
                 {

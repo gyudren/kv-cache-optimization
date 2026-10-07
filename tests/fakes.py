@@ -1,8 +1,4 @@
-"""API 키 없이 그래프 흐름을 검증하기 위한 Fake LLM·Web·RAG.
-
-FakeLLM은 스키마 종류로 어느 에이전트의 호출인지 구분하고, 시나리오 옵션에 따라
-근거 부족·한쪽 판정·예외·금지 표현·Judge 미달을 정해진 실행 회차에만 만들어 낸다.
-"""
+"""API 키 없이 그래프를 돌리기 위한 Fake LLM·Web·RAG."""
 from __future__ import annotations
 import math
 import re
@@ -22,15 +18,15 @@ SCHEMA_AGENT = {TechnologyAssessment: "tech", MarketAssessment: "market", Stakeh
 
 
 class SimulatedCrash(BaseException):
-    """프로세스 강제 종료를 흉내 낸다(에이전트 래퍼가 잡지 않는 BaseException)."""
+    """프로세스 강제 종료 흉내. 에이전트 래퍼가 잡지 못하게 BaseException을 쓴다."""
 
 
 class FakeRAG:
-    """no_evidence: {질문 일부 문자열: N}  그 문자열을 포함한 질문은 처음 N회 관련 청크를 찾지 못한다(근거 없음)."""
+    """no_evidence={질문 일부: N}이면 그 문자열이 든 질문은 처음 N회 근거를 못 찾는다."""
 
     def __init__(self, no_evidence=None):
         self.calls = 0
-        self.log: list[dict] = []  # 호출별 질문·재작업 지시·워커 스레드에서 본 실행 설정
+        self.log: list[dict] = []  # 호출별 질문·feedback·실행 설정
         self.no_evidence = dict(no_evidence or {})
         self._misses: Counter = Counter()
 
@@ -55,8 +51,7 @@ class FakeRAG:
 
 
 class FakeWeb:
-    """single_source_calls: {"market"|"stakeholder": K}  해당 검색의 처음 K회 호출은 같은 URL 1건만 돌려준다
-    (검색이 출처 1개만 찾은 상황 → 고유 출처 2개 미만)."""
+    """single_source_calls={"market"|"stakeholder": K}이면 그 검색의 처음 K회는 같은 URL 1건만 돌려준다."""
     PUBLISHERS = [f"news{i}.example.com" for i in range(5)]
 
     def __init__(self, single_source_calls=None):
@@ -97,18 +92,17 @@ def _runs_left(table: dict, agent: str, run: int) -> bool:
 
 
 class FakeLLM:
-    """시나리오 옵션(모두 '처음 N회 실행'에 적용, math.inf = 항상):
-    - insufficient: {agent: N}  판정을 막는 필수 결함(TRL 미기재·인용 없음·인용 없는 판정)과 세부 미확인 항목(missing) 반환.
-                                LLM이 missing만 적고 결과가 성립하면 필수 결함이 아니므로 재조사하지 않는다(optional_only).
-    - optional_only: {agent: N} 결과는 성립하고 LLM이 세부 미확인 항목만 적는다(재조사 대상 아님)
-    - one_sided:    {agent: N}  시장·이해관계자 판정을 모두 '긍정'으로(편향 규칙 미달 유도)
-    - raise_on:     {agent: N}  RuntimeError (에이전트 래퍼가 failed로 기록)
-    - crash_on:     {agent: N}  SimulatedCrash (프로세스 중단 흉내, 재개 테스트용)
-    - banned_report: N          보고서에 우열 표현 삽입(중립성 규칙 미달 유도)
-    - judge_fail:   {criterion: (N, target_agent)}  LLM Judge 미달
-    - judge_reason_varies: True  Judge 사유 문장이 실행마다 달라진다(실제 LLM처럼 같은 지적을 다른 문장으로)
-    - needs_source: [agent]     종합이 추가 근거를 요청할 관점(처음 needs_source_runs회 종합 실행에서)
-    - cite_limit:   {agent: {tech: n}}  인용 출처 수 제한(cite_limit_runs={agent: N}이면 처음 N회만, 없으면 매 시도)
+    """옵션의 N은 '처음 N회 실행'이다(math.inf = 항상).
+    - insufficient: {agent: N}   필수 결함(TRL 미기재·인용 없음)과 missing을 함께 반환
+    - optional_only: {agent: N}  결과는 성립하고 missing만 적는다
+    - one_sided: {agent: N}      시장·이해관계자 판정을 모두 '긍정'으로
+    - raise_on: {agent: N}       RuntimeError
+    - crash_on: {agent: N}       SimulatedCrash
+    - banned_report: N           보고서에 우열 표현 삽입
+    - judge_fail: {criterion: (N, target_agent)}  Judge 미달
+    - judge_reason_varies: True  Judge 사유 문장을 실행마다 바꾼다
+    - needs_source: [agent]      처음 needs_source_runs회 종합에서 추가 근거 요청
+    - cite_limit: {agent: {tech: n}}  인용 수 제한, cite_limit_runs={agent: N}이면 처음 N회만
     """
 
     def __init__(self, insufficient=None, one_sided=None, raise_on=None, crash_on=None,
@@ -124,12 +118,12 @@ class FakeLLM:
         self.judge_reason_varies = judge_reason_varies
         self.needs_source = needs_source or []
         self.needs_source_runs = needs_source_runs
-        self.cite_limit = cite_limit or {}  # {agent: {tech: n}} 인용 출처 수 제한
+        self.cite_limit = cite_limit or {}
         self.cite_limit_runs = cite_limit_runs or {}
         self.runs: Counter = Counter()
         self.prompts: dict[str, list[str]] = {}
 
-    # 시장·이해관계자는 기술별로 2번 호출되므로 mla 호출에서만 실행 회차를 센다.
+    # 시장·이해관계자는 기술마다 한 번씩 호출되므로 mla 호출만 센다.
     def _run(self, agent: str, prompt: str) -> int:
         if agent in ("market", "stakeholder"):
             if "web:mla:" in prompt or "web:stakeholder:mla:" in prompt:
@@ -213,7 +207,7 @@ class FakeLLM:
         cite = " ".join(paper + web)
         banned = "\n\nMLA가 ITME보다 더 우수하다." if run <= self.banned_report else ""
         para = lambda topic: f"MLA와 ITME의 {topic}을 근거와 함께 서술한다 {cite}. 두 기술은 관점에 따라 평가가 달라진다."
-        # 판정 한계 명시 지시가 있으면 그 절 서술 첫 문장을 '한계:'로 쓴다(실제 LLM이 지시를 따른 경우를 흉내)
+        # VERDICT LIMITATIONS 지시가 있으면 해당 절 서술을 '한계:'로 시작한다
         limited = set(re.findall(r"^- 4\.[1-4] \((perspective_\w+)\):", prompt.split("VERDICT LIMITATIONS", 1)[-1], re.M)
                       if "VERDICT LIMITATIONS" in prompt else [])
         lead = lambda field: "한계: 품질 평가가 지적한 근거 결함 때문에 위 표의 판정은 수집된 근거 범위 안에서만 유효하다.\n" \

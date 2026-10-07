@@ -10,10 +10,9 @@ def mentioned_techs(text: str) -> set[str]:
 
 
 def scoped_feedback(feedback: dict | None, tech: str) -> dict:
-    """재작업 지시 중 이 기술에 해당하는 부분만 돌려준다(다른 기술 이름이 검색어에 섞이지 않게).
+    """재작업 지시 중 이 기술에 해당하는 부분만 돌려준다.
 
-    Supervisor는 `queries_by_tech`(기술별 검색 힌트)를 구조화해서 넘긴다. 이전 형식(rewritten_queries만)은
-    다른 기술만 언급한 항목을 걸러 낸다.
+    `queries_by_tech`가 없으면 rewritten_queries에서 다른 기술만 언급한 항목을 걸러 낸다.
     """
     feedback = feedback or {}
     tech = "itme" if tech.startswith("itme") else tech
@@ -29,10 +28,9 @@ def scoped_feedback(feedback: dict | None, tech: str) -> dict:
 
 
 def retry_queries(subject: str, feedback: dict, limit: int = 2, tech: str | None = None) -> list[str]:
-    """Supervisor가 넘긴 기술별 검색 힌트를 재검색 질의로 바꾼다.
+    """Supervisor가 넘긴 기술별 검색 힌트에 기술명을 붙여 재검색 질의로 만든다.
 
-    부족 사유 문장을 그대로 붙이면 검색어가 문장 나열이 되어 결과가 나오지 않으므로, Supervisor가 구조화한
-    힌트(`queries_by_tech[tech]`)만 쓰고 기술명(subject)과 묶은 독립 질의로 만든다.
+    부족 사유 문장을 그대로 검색어에 넣으면 결과가 나오지 않아서 힌트만 쓴다.
     """
     scoped = scoped_feedback(feedback, tech) if tech else (feedback or {})
     queries = []
@@ -44,7 +42,7 @@ def retry_queries(subject: str, feedback: dict, limit: int = 2, tech: str | None
 
 
 def rework_note(feedback: dict) -> str:
-    """Supervisor의 재작업 지시를 프롬프트 끝에 붙인다(지시가 없으면 빈 문자열)."""
+    """Supervisor의 재작업 지시를 프롬프트 끝에 붙일 문장으로 만든다."""
     if not feedback or not (feedback.get("missing") or feedback.get("queries_by_tech")):
         return ""
     return ("\nSUPERVISOR REWORK REQUEST (this is a re-run; address every item using the supplied sources, "

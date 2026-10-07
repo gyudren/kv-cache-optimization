@@ -1,35 +1,27 @@
-"""단(컬럼) 레이아웃 감지 및 읽기 순서 재구성.
+"""2단 레이아웃을 감지해 읽기 순서를 다시 맞춘다.
 
-논문 PDF는 한 페이지가 좌/우 2단으로 나뉜 경우가 많다. pdfplumber의 기본 추출은
-y좌표(top) 순으로 단어를 나열하기 때문에 2단 문서에서는 좌/우 컬럼이 줄 단위로
-섞여버린다. 이 모듈은 단어 좌표를 기준으로 2단 여부를 감지하고, 좌측 컬럼을
-위→아래로 모두 읽은 뒤 우측 컬럼을 위→아래로 읽는 순서로 재조립한다.
+pdfplumber는 y좌표 순으로 단어를 나열해서 2단 문서에서는 좌우 컬럼이 줄 단위로 섞인다.
+왼쪽 컬럼을 끝까지 읽은 뒤 오른쪽 컬럼을 읽는 순서로 다시 붙인다.
 """
 
 from preprocessing.headers_footers import BOTTOM_BAND_RATIO, TOP_BAND_RATIO
 from preprocessing.loader import Word
 
-LINE_Y_TOLERANCE = 3.0  # pt, 이 거리 이내의 단어는 같은 줄로 묶음
-COLUMN_GAP_THRESHOLD = 15.0  # pt, 이보다 큰 단어 간 간격은 컬럼 사이 거터로 간주
-TWO_COLUMN_ROW_RATIO_THRESHOLD = 0.4  # 거터 간격을 포함한 줄의 비율이 이 값 이상이면 2단으로 판정
+LINE_Y_TOLERANCE = 3.0  # pt, 이 안이면 같은 줄
+COLUMN_GAP_THRESHOLD = 15.0  # pt, 이보다 넓은 단어 간격은 컬럼 거터로 본다
+TWO_COLUMN_ROW_RATIO_THRESHOLD = 0.4  # 거터가 있는 줄 비율이 이 이상이면 2단
 
-MIN_COLUMN_SPLIT_GAP = 15.0  # pt, 실제 컬럼 거터는 보통 20~40pt 수준이라 이를 기준으로 잡음
-MIN_COLUMN_SIDE_LINE_RATIO = 0.15  # 분리선 양쪽에 각각 최소 이 비율 이상의 줄이 있어야 함
+MIN_COLUMN_SPLIT_GAP = 15.0  # pt, 실제 거터는 보통 20~40pt
+MIN_COLUMN_SIDE_LINE_RATIO = 0.15  # 분리선 양쪽에 각각 있어야 하는 최소 줄 비율
 
-# 이 논문들은 문단 사이에 빈 줄을 넣지 않고 "첫 줄 들여쓰기"로만 문단을 구분한다.
-# 빈 줄 기준으로만 문단을 나누면 페이지 전체가 하나의 거대한 문단이 되어 청킹이
-# 사실상 작동하지 않으므로, 컬럼의 일반적인 좌측 여백보다 들여써진 줄을 새 문단의
-# 시작으로 보고 명시적으로 빈 줄을 삽입한다.
-PARAGRAPH_INDENT_THRESHOLD = 6.0  # pt, 이 값 이상 더 들여써지면 새 문단 시작으로 간주
+# 이 논문들은 빈 줄 없이 첫 줄 들여쓰기로만 문단을 나눠서, 들여쓴 줄 앞에 빈 줄을 넣는다.
+PARAGRAPH_INDENT_THRESHOLD = 6.0  # pt
 
 
 def _split_line_by_large_gaps(line_words: list[Word]) -> list[list[Word]]:
-    """한 줄로 묶인 단어들 중 큰 간격이 있으면 서로 다른 컬럼이 우연히 같은 높이에서
-    섞인 것으로 보고 다시 분리한다.
+    """같은 높이에 걸린 좌우 컬럼 단어를 큰 간격 기준으로 다시 나눈다.
 
-    좌/우 컬럼의 줄 높이가 우연히 일치하면 y좌표만으로는 하나의 줄로 묶여, 우측 컬럼의
-    실제 시작 x좌표 정보가 사라져 버린다(컬럼 경계 탐지가 불가능해짐). 정상적인 단어
-    간 간격(이 논문들은 약 2~3pt)보다 훨씬 큰 간격을 기준으로 미리 쪼개 이 정보를 보존한다.
+    y좌표로만 묶으면 오른쪽 컬럼의 시작 x좌표가 사라져 컬럼 경계를 찾을 수 없다.
     """
     if len(line_words) < 2:
         return [line_words]
@@ -43,10 +35,7 @@ def _split_line_by_large_gaps(line_words: list[Word]) -> list[list[Word]]:
 
 
 def group_into_lines(words: list[Word]) -> list[list[Word]]:
-    """단어를 y좌표 기준으로 같은 줄끼리 묶는다(컬럼 구분 없이).
-
-    같은 높이에서 우연히 겹치는 서로 다른 컬럼의 단어는 큰 간격을 기준으로 다시 분리한다.
-    """
+    """단어를 y좌표 기준으로 줄 단위로 묶는다. 같은 높이의 다른 컬럼 단어는 다시 나눈다."""
     if not words:
         return []
     ordered = sorted(words, key=lambda w: (w.top, w.x0))
@@ -79,11 +68,7 @@ def line_top(line_words: list[Word]) -> float:
 
 
 def _row_has_center_gutter_gap(row_words: list[Word], page_width: float) -> bool:
-    """한 줄(row) 안에서 단어 간 간격이 페이지 중앙을 가로지르며 크게 벌어지는지 확인한다.
-
-    2단 레이아웃에서는 좌/우 컬럼의 줄 높이가 우연히 같아 같은 줄로 묶이더라도,
-    두 컬럼 사이 거터만큼은 단어가 전혀 없는 빈 구간으로 남는다.
-    """
+    """줄 안에 페이지 중앙을 가로지르는 넓은 빈 간격(컬럼 거터)이 있는지 본다."""
     if len(row_words) < 2:
         return False
     ordered = sorted(row_words, key=lambda w: w.x0)
@@ -102,20 +87,14 @@ def _gutter_row_ratio(lines: list[list[Word]], page_width: float) -> float:
     return gutter_rows / len(lines)
 
 
-MIN_WORDS_FOR_COLUMN_GAP_DETECTION = 3  # 페이지 번호·각주 기호 등 짧은 줄은 거터 탐지에서 제외
+MIN_WORDS_FOR_COLUMN_GAP_DETECTION = 3  # 페이지 번호 같은 짧은 줄은 거터 탐지에서 뺀다
 
 
 def _detect_column_split_x(lines: list[list[Word]], page_height: float) -> float | None:
-    """줄이 실제로 차지하는 가로 범위(x0~x1)를 모아 컬럼 분리선(빈 거터)을 찾는다.
+    """줄들의 x 범위를 합쳐, 어느 줄도 걸치지 않는 빈 구간을 컬럼 분리선으로 잡는다.
 
-    줄이 "시작하는" x좌표만 보면 왼쪽 컬럼의 긴 줄이 분리선 오른쪽까지 넘어와 있는
-    경우를 놓친다(그 줄의 뒷부분 단어가 분리선 너머로 잘못 배정됨). 각 줄이 끝나는
-    x좌표까지 함께 봐서, 어느 줄도 걸치지 않는 실제 빈 구간을 거터로 삼는다.
-
-    페이지 번호·각주 기호처럼 단어 수가 아주 적은 줄과, 페이지 상/하단 여백에 걸친
-    running header/footer(저자 목록 등 전체 폭에 걸치는 줄)는 실제 거터를 가리거나
-    두 컬럼을 다리처럼 이어붙일 수 있으므로 탐지에서 제외한다(분리선이 정해진 뒤
-    좌/우 배정에는 모든 단어가 그대로 사용된다).
+    시작 x좌표만 보면 분리선을 넘어가는 왼쪽 컬럼의 긴 줄을 놓친다. 짧은 줄과 상·하단
+    여백의 running header는 거터를 가리거나 두 컬럼을 이어 버릴 수 있어 탐지에서만 뺀다.
     """
     top_cutoff = page_height * TOP_BAND_RATIO
     bottom_cutoff = page_height * (1 - BOTTOM_BAND_RATIO)
@@ -160,7 +139,7 @@ def _detect_column_split_x(lines: list[list[Word]], page_height: float) -> float
 
 
 def _resolve_column_split(lines: list[list[Word]], page_width: float, page_height: float) -> float | None:
-    """x0 분포 기반 분리선을 우선 사용하고, 못 찾으면 같은 줄 내 거터 간격 신호로 보완한다."""
+    """분리선을 먼저 찾고, 없으면 중앙 거터가 있는 줄 비율로 2단 여부를 정한다."""
     split_x = _detect_column_split_x(lines, page_height)
     if split_x is not None:
         return split_x
@@ -220,10 +199,9 @@ def reconstruct_reading_order_text(
     page_height: float | None = None,
     exclude_bboxes: list[tuple[float, float, float, float]] | None = None,
 ) -> str:
-    """단(컬럼) 레이아웃을 좌→우 다음 위→아래 읽기 순서로 재구성한다.
+    """왼쪽 컬럼, 오른쪽 컬럼 순으로 읽어 페이지 텍스트를 만든다.
 
-    표 영역(exclude_bboxes)에 속한 단어는 본문 텍스트에서 제외한다 — 표는 별도로
-    캡션·각주와 함께 묶어 처리하므로(tables.py) 본문에 중복/파편화된 형태로 섞이면 안 된다.
+    exclude_bboxes 안의 단어는 뺀다. 표는 tables.py에서 캡션·각주와 함께 따로 처리한다.
     """
     exclude_bboxes = exclude_bboxes or []
     kept_words = [w for w in words if not _word_in_any_bbox(w, exclude_bboxes)]
@@ -243,7 +221,7 @@ def reconstruct_reading_order_text(
             elif w.x0 > split_x:
                 right_words.append(w)
             else:
-                # 분리선을 가로지르는 단어(전체 폭 제목 등)는 겹침이 더 큰 쪽으로 배정
+                # 분리선에 걸친 단어(전체 폭 제목 등)는 더 많이 걸친 쪽에 넣는다
                 left_overlap = max(0.0, split_x - w.x0)
                 right_overlap = max(0.0, w.x1 - split_x)
                 (left_words if left_overlap >= right_overlap else right_words).append(w)

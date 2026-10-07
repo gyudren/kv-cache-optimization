@@ -1,8 +1,6 @@
-"""Dense(FAISS) + BM25 하이브리드 검색을 RRF로 융합하고 기술별 문서 필터를 적용한다.
+"""Dense(FAISS) + BM25 하이브리드 검색을 RRF로 융합한다.
 
-설계 B-3): "Dense(FAISS) + BM25(키워드) → RRF 순위 융합, 기술별 문서 필터로 다른 기술
-수치 혼입 방지". 필터를 먼저 적용해 허용된 문서만 순위 경쟁에 참여시키므로, 예를 들어
-MLA 질의의 상위 k에 ITME 수치가 섞여 들어가지 않는다.
+기술별 문서 필터를 먼저 적용해 다른 기술의 청크가 상위 k에 섞이지 않게 한다.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -10,8 +8,8 @@ import threading
 from ..config import RRF_CONSTANT, RETRIEVAL_K
 from .index import RetrievalStore, tokenize
 
-# Send fan-out(tech·domain)과 RAG 병렬 질문이 같은 임베딩 모델을 동시에 부른다. macOS MPS(Metal)는
-# 스레드 간 동시 encode를 지원하지 않아 프로세스가 abort되므로, 짧은 질의 임베딩만 직렬화한다.
+# 병렬 노드와 RAG 질문이 같은 임베딩 모델을 동시에 부른다. macOS MPS는 스레드 간 동시 encode에서
+# 프로세스가 abort되므로 질의 임베딩을 직렬화한다.
 _ENCODE_LOCK = threading.Lock()
 
 
@@ -29,8 +27,7 @@ class RetrievedChunk:
 def permitted_technologies(technology_filter: str) -> set[str]:
     """질의 대상 기술에 따라 검색을 허용할 문서 그룹을 정한다.
 
-    itme_baseline은 ITME 원문과 HW 베이스라인 2편(InfiniGen, CXL-PNM)을 함께 검색해
-    선정 기술의 한계를 제3의 시각에서 교차 확인하기 위한 필터다(설계 B-3 ②).
+    itme_baseline은 ITME 원문에 HW 베이스라인(InfiniGen, CXL-PNM)을 더해 한계를 교차 확인할 때 쓴다.
     """
     if technology_filter == "mla":
         return {"mla"}
@@ -39,7 +36,7 @@ def permitted_technologies(technology_filter: str) -> set[str]:
     if technology_filter == "itme_baseline":
         return {"itme", "baseline"}
     if technology_filter == "all":
-        # 문서 4편 전체 검색. 운영 Agent는 쓰지 않고, 검색 순위 품질 측정(eval)에만 사용한다.
+        # 검색 품질 측정(eval) 전용
         return {"mla", "itme", "baseline"}
     raise ValueError(f"Unsupported research filter: {technology_filter!r}")
 
@@ -67,19 +64,17 @@ class HybridRetriever:
         if not subset:
             return []
 
-        # Qwen3-Embedding은 검색 질의에 instruction을 붙여 임베딩하도록 학습돼 있다
-        # (설계 B-4가 이 모델을 고른 근거). 문서는 instruction 없이 임베딩한다.
+        # Qwen3-Embedding은 질의에만 instruction을 붙이고 문서는 그대로 임베딩한다.
         with _ENCODE_LOCK:
             query_embedding = np.asarray(
                 self.store.model.encode([query], prompt_name="query"), dtype="float32"
             )
         faiss.normalize_L2(query_embedding)
-        # 허용된 문서만 점수를 매긴다(제외된 기술이 top-k 자리를 차지하지 못하게).
         dense_scores = self.store.vectors[subset] @ query_embedding[0]
         lexical_scores = self.store.bm25.get_scores(tokenize(query))
 
         local_top = min(max(k, 1), len(subset))
-        # 점수 동률이면 전역 인덱스 순으로 정렬해 실행마다 결과가 흔들리지 않게 한다.
+        # 동률은 전역 인덱스 순으로 정렬해 결과를 고정한다.
         dense_order = sorted(range(len(subset)), key=lambda j: (-float(dense_scores[j]), subset[j]))[:local_top]
         lexical_order = sorted(subset, key=lambda i: (-float(lexical_scores[i]), i))[:local_top]
 

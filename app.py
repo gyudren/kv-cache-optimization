@@ -41,7 +41,7 @@ def checkpoint_path(output_dir: Path) -> Path:
 
 @asynccontextmanager
 async def open_checkpointer(path: Path):
-    """파일 기반 비동기 체크포인터. thread_id=trace_id로 저장되어 프로세스가 죽어도 --resume으로 이어 간다."""
+    """SQLite 비동기 체크포인터. 프로세스가 죽어도 --resume <trace_id>로 이어 갈 수 있다."""
     from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
     path.parent.mkdir(parents=True, exist_ok=True)
     async with AsyncSqliteSaver.from_conn_string(str(path)) as saver:
@@ -56,7 +56,7 @@ def build_runtime(settings: Settings, started_at: float):
     from kv_eval.rag.retrieve import HybridRetriever
     from kv_eval.rag.workflow import RAGWorkflow
     from kv_eval.tools.web_search import WebSearch
-    # 파싱·노이즈 제거·청킹은 preprocessing 파이프라인이 이미 수행했다(python -m preprocessing.pipeline).
+    # 청크는 preprocessing 파이프라인(python -m preprocessing.pipeline)이 미리 만들어 둔다.
     manifest = paper_manifest(settings.manifest_path)
     chunks = load_processed_chunks(settings.chunks_path, manifest)
     print(f"[     0s] 청크 {len(chunks)}개 적재 · 색인 생성 중(FAISS + BM25)...", flush=True)
@@ -72,10 +72,7 @@ def build_runtime(settings: Settings, started_at: float):
 
 
 async def execute(graph, trace_id: str, initial: dict | None, started_at: float) -> dict:
-    """그래프를 비동기 stream으로 실행한다. initial=None이면 체크포인트에서 이어서 실행한다(resume).
-
-    LLM 호출이 100회 이상 일어나므로 노드가 끝날 때마다 진행 상황과 Supervisor 결정 사유를 출력한다.
-    """
+    """그래프를 astream으로 돌리며 노드마다 진행 상황을 출력한다. initial=None이면 체크포인트에서 이어 간다."""
     config = run_config(trace_id)
     async for update in graph.astream(initial, config=config, stream_mode="updates"):
         for node, delta in update.items():
@@ -106,24 +103,22 @@ async def _run(query: str, resume: str | None) -> dict:
           + f" · 에이전트 동시 실행 {AGENT_CONCURRENCY}", flush=True)
     async with open_checkpointer(checkpoint_path(settings.output_dir)) as checkpointer:
         if resume:
-            # 색인(수 분)을 만들기 전에 체크포인트부터 확인한다. 상태 조회에는 런타임이 필요 없다.
+            # 상태 조회에는 런타임이 필요 없으니 몇 분 걸리는 색인보다 먼저 확인한다.
             snapshot = await build_graph(None, None, None, checkpointer=checkpointer).aget_state(run_config(trace_id))
             if not snapshot.values:
                 raise ValueError(f"체크포인트에 trace_id={trace_id} 실행이 없습니다")
             if not snapshot.next:
                 print("[resume] 이미 종료된 실행입니다. 결과만 다시 내보냅니다.", flush=True)
                 return save_and_finalize(snapshot.values, settings.output_dir)
-        # 색인 생성은 그래프 실행 전 한 번뿐이고 이때 루프에서 도는 다른 작업이 없으므로 그대로 호출한다.
+        # 블로킹 호출이지만 이 시점에는 루프에서 도는 다른 작업이 없다.
         rag, web, llm = build_runtime(settings, started_at)
         graph = build_graph(rag, web, llm, checkpointer=checkpointer)
-        # resume이면 입력 None = 마지막 체크포인트부터 이어서 실행(완료된 노드는 다시 실행하지 않음)
         state = await execute(graph, trace_id, None if resume else initial_state(query, trace_id), started_at)
     return save_and_finalize(state, settings.output_dir)
 
 
 def save_and_finalize(state: dict, output_dir: Path) -> dict:
-    # 최종 State를 남겨 두면 LLM을 다시 호출하지 않고 보고서만 재내보내기할 수 있다(--export-only).
-    # RAG 캐시와 결정 로그 본문은 State 밖에 있으므로 이 파일은 작게 유지된다.
+    # --export-only가 LLM 없이 다시 내보낼 수 있도록 최종 State를 저장해 둔다.
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "final_state.json").write_text(
         json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -142,15 +137,15 @@ def from_legacy(state: dict) -> dict:
 
 
 def finalize(state: dict, output_dir: Path) -> dict:
-    """검증 → validation.json / 보고서 .md·.pdf / run_logs.json(결정 로그) 저장."""
+    """검증 결과(validation.json), 보고서(.md·.pdf), 결정 로그(run_logs.json)를 저장한다."""
     from kv_eval.reporting.export import export_report
     from kv_eval.reporting.sections import validate_report
-    (output_dir / "failure.json").unlink(missing_ok=True)  # 이전 실행의 실패 기록이 남아 혼동되지 않게
+    (output_dir / "failure.json").unlink(missing_ok=True)  # 지난 실행의 실패 기록이 남아 헷갈리지 않게
     trace_id = state.get("trace_id", "")
     report = state.get("report", "")
     eval_result = state.get("eval_result") or {}
     decisions = read_decisions(trace_id) if trace_id else []
-    if decisions:  # 결정 로그가 없는 실행(이전 형식 State 내보내기 등)은 기존 run_logs.json을 덮어쓰지 않는다
+    if decisions:  # 결정 로그가 없으면(예전 형식 State) 기존 run_logs.json을 그대로 둔다
         (output_dir / "run_logs.json").write_text(json.dumps(decisions, ensure_ascii=False, indent=2), encoding="utf-8")
     if not report.strip():
         validation = {"passed": False, "issues": ["보고서 미생성"], "gaps": state.get("gaps", []), "trace_id": trace_id}
@@ -177,7 +172,7 @@ def finalize(state: dict, output_dir: Path) -> dict:
     validation["warnings"] = list(dict.fromkeys(
         validation.get("warnings", []) + eval_result.get("warnings", [])
         + ([f"Evidence {store_missing}건의 원문이 저장소(data/cache/)에 없음: 축약 발췌만 남아 있음"] if store_missing else [])))
-    # 10p 상한은 validate_report가 같은 조판으로 이미 검사했다. 실제 파일의 페이지 수를 함께 남긴다.
+    # 페이지 상한은 validate_report가 이미 검사했다. 여기서는 실제 PDF 페이지 수만 남긴다.
     export = export_report(report, str(output_dir), REPORT_STEM)
     validation["pdf_pages"] = export["pages"]
     (output_dir / "validation.json").write_text(json.dumps(validation, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -198,20 +193,18 @@ def export_only() -> dict:
 
 
 def report_only() -> dict:
-    """직전 실행의 조사·평가·종합 결과를 그대로 두고 보고서 → 품질 평가 루프만 다시 돈다.
+    """직전 실행의 조사·종합 결과를 그대로 두고 보고서와 품질 평가 루프만 다시 돈다.
 
-    같은 Supervisor 그래프를 쓰되 관점 재조사 한도를 0으로 둔다(새 검색 없음). 평가가 관점 재조사를
-    요구하면 근거 공백으로 기록하고 보고서 재작성으로 처리한다.
+    관점 재조사 한도를 0으로 두므로 새 검색은 없고, 평가가 재조사를 요구하면 근거 공백으로 남긴다.
     """
     from kv_eval import evidence_store
     from kv_eval.llm import StructuredLLM
     settings = Settings.from_env()
     if not settings.openai_key:
         raise RuntimeError("OPENAI_API_KEY is required")
-    configure_tracing()  # LLM 클라이언트(wrap_openai 여부)를 만들기 전에 트레이싱 설정을 확정한다
+    configure_tracing()  # wrap_openai 여부가 갈리므로 LLM 클라이언트보다 먼저 호출한다
     previous = _load_final_state(settings.output_dir)
-    # 보고서·평가는 발췌 원문이 필요하다. final_state에는 축약본과 참조만 있으므로 원문 저장소가 없으면
-    # (새로 clone한 저장소 등) 축약 발췌로 조용히 다시 쓰지 않고 여기서 멈춘다.
+    # 원문 저장소가 없으면 축약 발췌로 보고서를 조용히 다시 쓰지 않도록 여기서 멈춘다.
     store_stats: dict = {}
     hydrated = evidence_store.hydrate(previous.get("evidence", []), store_stats)
     if store_stats.get("missing_full_text"):
@@ -223,7 +216,7 @@ def report_only() -> dict:
     seed = {key: previous.get(key) for key in ("perspectives", "synthesis", "evidence", "cache_keys")
             if previous.get(key) is not None}
     seed["gaps"] = legacy_gaps(previous.get("gaps", []))
-    # 이전 형식 State의 원문 발췌도 저장소로 옮겨 State에는 축약본만 넣는다(보고서는 hydrate로 원문 사용).
+    # 예전 형식 State의 원문 발췌도 저장소로 옮기고 State에는 축약본만 넣는다.
     seed["evidence"] = evidence_store.offload(trace_id, "seed", hydrated)
     seed["perspective_status"] = {name: "sufficient" if (previous["perspectives"].get(name) or {}).get("sufficient")
                                   else "excluded" for name in PERSPECTIVES}

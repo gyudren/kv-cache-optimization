@@ -1,8 +1,7 @@
-"""표 추출: 캡션·각주 분리, 병합 셀 정규화, 마크다운 변환.
+"""표를 추출해 캡션·각주를 붙이고 병합 셀을 채운 뒤 마크다운으로 바꾼다.
 
-- 표는 캡션까지 하나의 단위로 묶는다(출처 확인용). 각주는 표 본문과 분리해 별도 필드로 보관한다.
-- 병합 셀은 pdfplumber에서 빈 문자열/None으로 반환되는데, 그대로 두면 "키가 없는 빈 데이터"가
-  되어 검색·해석이 어려워지므로 같은 열의 직전 값으로 채워(forward-fill) 단일 표로 정규화한다.
+캡션은 표와 한 단위로 묶고 각주는 별도 필드로 둔다. pdfplumber는 병합 셀을
+None/빈 문자열로 주므로 같은 열의 직전 값으로 채운다.
 """
 
 import re
@@ -14,7 +13,7 @@ from preprocessing.loader import TableBlock, Word
 
 CAPTION_RE = re.compile(r"^\s*(table|표)\s*\d+", re.IGNORECASE)
 FOOTNOTE_START_RE = re.compile(r"^\s*(\*|†|주\s*[:：]|note\s*[:：])", re.IGNORECASE)
-CAPTION_SEARCH_MARGIN = 40.0  # pt, 표 위/아래로 이 거리 이내에서 캡션·각주를 찾는다
+CAPTION_SEARCH_MARGIN = 40.0  # pt, 표 위·아래 이 거리 안에서 캡션·각주를 찾는다
 
 
 @dataclass(frozen=True)
@@ -28,11 +27,7 @@ class NormalizedTable:
 
 
 def _forward_fill_rows(rows: list[list[str | None]]) -> list[list[str]]:
-    """세로로 병합된 셀(rowspan)이 None/빈 문자열로 내려오는 것을 같은 열의 직전 값으로 채운다.
-
-    예: 카테고리 라벨이 여러 행에 걸쳐 병합된 표에서, 병합으로 비어 보이는 하위 행의
-    셀이 "키가 없는 빈 데이터"가 되지 않도록 바로 위 행(같은 열)의 값을 이어받는다.
-    """
+    """세로 병합 셀(rowspan)의 빈 값을 같은 열의 직전 값으로 채운다."""
     if not rows:
         return []
     num_cols = max(len(row) for row in rows)
@@ -114,7 +109,7 @@ def extract_tables_for_page(
 
 
 def table_chunk_text(table: NormalizedTable) -> str:
-    """표 청크 본문: 캡션 + 마크다운 표 + 각주를 하나의 텍스트로 묶는다."""
+    """캡션, 마크다운 표, 각주를 하나의 텍스트로 묶는다."""
     parts = []
     if table.caption:
         parts.append(table.caption)
@@ -127,22 +122,19 @@ def table_chunk_text(table: NormalizedTable) -> str:
 def split_table_into_chunks(
     table: NormalizedTable, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP
 ) -> list[str]:
-    """큰 표를 chunk_size 근처 크기로 나눈다 (설계서 1,200자/겹침 200자 기준).
+    """chunk_size를 넘는 표를 행 단위로 나눈다.
 
-    표 전체가 chunk_size 이하면 지금처럼 한 청크로 반환한다. 표가 더 크면(행이 많은 표)
-    행 단위로 나누되, 매 조각마다 헤더 행(컬럼명 + 구분선)을 반복해서 붙여
-    조각 하나만 봐도 어떤 열인지 알 수 있게 한다. 행 하나가 이미 chunk_size보다 큰
-    비정상적인 경우에는 헤더/줄 구조를 신뢰할 수 없으므로 글자 단위로 나눈다(split_long_text).
+    조각 하나만 봐도 열을 알 수 있게 조각마다 헤더 행과 구분선을 다시 붙인다.
     """
     full_text = table_chunk_text(table)
     if len(full_text) <= chunk_size:
         return [full_text]
 
     lines = table.markdown.split("\n")
-    if len(lines) < 3:  # 헤더 + 구분선 + 본문 1행 미만이면 표 구조를 신뢰할 수 없음
+    if len(lines) < 3:  # 본문 행이 없으면 표 구조를 믿을 수 없어 글자 단위로 자른다
         return split_long_text(full_text, chunk_size=chunk_size, overlap=overlap)
 
-    header_block = "\n".join(lines[:2])  # "| col | ... |" + "| --- | ... |"
+    header_block = "\n".join(lines[:2])  # 헤더 행 + 구분선
     body_lines = lines[2:]
 
     prefix_parts = [table.caption] if table.caption else []
@@ -162,7 +154,7 @@ def split_table_into_chunks(
 
         pieces.append(render(current_rows))
 
-        # 겹침: 방금 확정한 조각의 마지막 행들을 overlap 글자 수만큼 다음 조각 앞에 이어붙인다.
+        # 직전 조각의 마지막 행들을 overlap 글자 수만큼 다음 조각 앞에 붙인다.
         overlap_rows: list[str] = []
         overlap_len = 0
         for prev_row in reversed(current_rows):

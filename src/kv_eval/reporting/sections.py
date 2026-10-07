@@ -1,4 +1,4 @@
-"""E: eight mandatory sections, provenance and citation validation."""
+"""Mandatory report sections, citation normalization and validation."""
 from __future__ import annotations
 import json
 import os
@@ -11,10 +11,7 @@ from ..state import deduplicate_evidence
 
 @lru_cache(maxsize=1)
 def bibliography() -> dict[str, dict]:
-    """manifest.json의 서지 정보를 doc_id로 찾을 수 있게 읽어 둔다.
-
-    확인되지 않은 항목(학회/권호 등)은 추정하지 않고 '미확인'으로 표기한다.
-    """
+    """manifest.json의 서지 정보를 doc_id 기준으로 읽어 둔다."""
     path = Path(os.getenv("MANIFEST_PATH", "data/manifest.json"))
     if not path.is_file():
         return {}
@@ -23,10 +20,9 @@ def bibliography() -> dict[str, dict]:
 
 
 def format_paper_reference(number: int, doc_id: str, pages: list[int]) -> str:
-    """가이드 REFERENCE 형식(논문): 저자(YYYY). 논문제목. 학술지/학회명, 권(호), 페이지.
+    """논문 REFERENCE 항목: 저자(YYYY). 논문제목. 학술지/학회명, 권(호), 페이지.
 
-    확인되지 않은 항목은 추정하지 않고 '미확인'으로 적는다. 페이지에는 보고서가 실제로
-    인용한 원문 페이지만 기재한다(활용한 자료만 기재한다는 규칙에 맞춘다).
+    없는 서지 항목은 추정하지 않고 '미확인'으로 적고, 페이지는 본문에서 인용한 쪽만 넣는다.
     """
     meta = bibliography().get(doc_id, {})
     authors = meta.get("authors") or "저자 미확인"
@@ -44,19 +40,19 @@ def format_paper_reference(number: int, doc_id: str, pages: list[int]) -> str:
 MANDATORY = ["SUMMARY", "1. 분석 배경", "2. 기술 선정", "3. 기술 개요", "4. 관점별 평가", "5. 종합 의견", "6. 시사점", "7. 한계점", "REFERENCE"]
 PAPER_CITATION = re.compile(r"\[(\d+),\s*p\.(\d+)\]")
 WEB_CITATION = re.compile(r"\[W(\d+)\]")
-# "[1, p.6; p.15]", "[1, p.6, p.15]", "[2, pp.8-9]", "[W1, W2]" 처럼 한 괄호에 여러 쪽·출처를 묶은 인용.
-# 정규 형식이 아니면 검증기를 우회하므로 먼저 "[1, p.6] [1, p.15]" 형태로 펼친다.
+# "[1, p.6; p.15]", "[2, pp.8-9]", "[W1, W2]" 같은 묶음 인용. 검증기를 우회하지 않도록
+# "[1, p.6] [1, p.15]" 형태로 펼친다.
 _GROUPED_PAPER = re.compile(r"\[(\d+),\s*(p{1,2}\.\s*\d+(?:\s*[-–]\s*\d+)?(?:\s*[;,]\s*(?:p{1,2}\.)?\s*\d+(?:\s*[-–]\s*\d+)?)+|pp\.\s*\d+\s*[-–]\s*\d+)\]")
 _GROUPED_WEB = re.compile(r"\[(W\d+(?:\s*[,;]\s*W\d+)+)\]")
 MALFORMED_CITATION = re.compile(r"\[\d+,\s*p{1,2}\.[^\]]*[;,–-][^\]]*\]|\[W\d+\s*[,;][^\]]*\]")
 # 에이전트 출력에 남는 내부 식별자 인용: 문서 ID("[deepseek_v2, p.1]")와 웹 source_id("web:trl:mla:…").
-# 보고서 카탈로그 형식이 아니라 검증·REFERENCE 연결을 우회하므로 코드가 [n, p.X]/[Wn]으로 바꾸고, 남으면 이슈로 잡는다.
+# link_source_refs가 [n, p.X]/[Wn]으로 바꾸고, 남은 것은 검증에서 이슈로 잡는다.
 DOC_ID_CITATION = re.compile(r"\[([a-z][a-z0-9_]*),\s*(p{1,2}\.[^\]]*)\]")
 SOURCE_ID = re.compile(r"\[?(web:[a-z:]+[0-9a-f]{14})\]?")
 
 
 def link_source_refs(text: str, evidence: list[dict]) -> str:
-    """에이전트가 쓴 문서 ID·source_id 인용을 보고서 인용 형식으로 바꾼다(모르는 ID는 그대로 두어 검증에서 걸리게 한다)."""
+    """문서 ID·source_id 인용을 보고서 인용 형식으로 바꾼다. 모르는 ID는 그대로 둔다."""
     doc_number = {ev["doc_id"]: ev["citation_number"] for ev in evidence
                   if ev.get("source_type") == "paper" and ev.get("doc_id") and ev.get("citation_number")}
     web_number = {ev["url"]: n for n, ev in citation_catalog(evidence)["web"].items()}
@@ -74,7 +70,7 @@ def link_source_refs(text: str, evidence: list[dict]) -> str:
 
 
 def normalize_citations(text: str) -> str:
-    """묶음 인용을 페이지·출처별 정규 인용으로 펼친다(검증·REFERENCE 페이지 목록에 모두 반영되도록)."""
+    """묶음 인용을 페이지·출처별 정규 인용으로 펼친다."""
     def paper(match: re.Match) -> str:
         number, body = match.group(1), match.group(2)
         pages: list[int] = []
@@ -117,7 +113,7 @@ def used_references(report: str, evidence: list[dict]) -> tuple[list[str], list[
     refs = []
     # Do not count references themselves as proof of an in-text citation.
     body = report.split("\n## REFERENCE", 1)[0]
-    # 같은 논문의 여러 페이지를 인용하면 REFERENCE에는 한 항목으로 모아 쓴다(설계 E).
+    # 같은 논문의 여러 페이지는 REFERENCE 한 항목으로 모은다.
     paper_pages: dict[tuple[int, str], list[int]] = {}
     for n_str, p_str in dict.fromkeys(PAPER_CITATION.findall(body)):
         key = (int(n_str), int(p_str))
@@ -133,7 +129,7 @@ def used_references(report: str, evidence: list[dict]) -> tuple[list[str], list[
         if ev is None:
             issues.append(f"웹 인용 [W{number}]의 URL 근거 없음")
         else:
-            # 가이드 REFERENCE 형식(기타/웹): 기관명 또는 작성자(YYYY-MM-DD). 제목. 사이트명, URL
+            # 웹 REFERENCE 형식: 기관명 또는 작성자(YYYY-MM-DD). 제목. 사이트명, URL
             publisher = ev.get("publisher") or "발행 주체 미확인"
             date = ev.get("published_at") or "게시일 미확인"
             title = ev.get("title") or "제목 미확인"
@@ -159,7 +155,7 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
         korean_fonts()
         renderable = True
     except RuntimeError:
-        # 한글 폰트가 없으면 물리 조판 검사(1/2페이지·10페이지)를 할 수 없다. 조용히 넘기지 않고 이슈로 드러낸다.
+        # 한글 폰트가 없으면 조판 검사를 건너뛰고 아래에서 이슈로 남긴다.
         renderable = False
     if renderable and "## SUMMARY\n" in report and "\n## 1. 분석 배경" in report:
         summary = report.split("## SUMMARY\n", 1)[1].split("\n## 1. 분석 배경", 1)[0].strip()
@@ -188,7 +184,7 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
         warnings.append(f"보고서 PDF {pages}p: 목표 {TARGET_REPORT_PAGES}p 초과(상한 {MAX_REPORT_PAGES}p까지 여유 없음)")
     if not renderable:
         message = f"PDF 조판 검사 불가(한글 TrueType 폰트 없음): {MAX_REPORT_PAGES}p 상한·SUMMARY 1/2p 미검증"
-        # 오프라인 테스트처럼 조판과 무관한 검증만 할 때는 ALLOW_UNCHECKED_PDF=1로 경고로 낮출 수 있다.
+        # 조판과 무관한 테스트에서는 ALLOW_UNCHECKED_PDF=1로 경고로 낮춘다.
         (warnings if os.getenv("ALLOW_UNCHECKED_PDF") == "1" else issues).append(message)
     return {"passed": not issues, "issues": issues, "warnings": warnings, "used_references": refs,
             "pdf_pages": pages, "page_check": "checked" if pages is not None else "unchecked(no Korean font)"}

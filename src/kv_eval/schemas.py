@@ -1,4 +1,4 @@
-"""Internal Pydantic output schemas, not extra Graph agents."""
+"""Pydantic schemas for structured LLM outputs."""
 from pydantic import BaseModel, Field
 from typing import Literal
 
@@ -22,14 +22,14 @@ class EvidenceAssessment(BaseModel):
     reason: str = ""
 
 class PerTechnologyText(BaseModel):
-    """기술별 값. OpenAI 구조화 출력(strict)은 자유형 dict를 허용하지 않아 키를 명시한다."""
+    """기술별 값. strict 구조화 출력은 자유형 dict를 받지 않아 키를 명시한다."""
     mla: str
     itme: str
 
 class TechnologyAssessment(BaseModel):
     summary: str
-    trl: PerTechnologyText        # mla and itme independently
-    trl_basis: PerTechnologyText  # distinct evidence and limitations per technology
+    trl: PerTechnologyText
+    trl_basis: PerTechnologyText
     sufficient: bool
     missing: list[str] = Field(default_factory=list)
 
@@ -73,7 +73,7 @@ class DomainAssessment(BaseModel):
     missing: list[str] = Field(default_factory=list)
 
 class PerTechnologyItems(BaseModel):
-    """기술별 목록(상충 사례 등). strict 스키마 제약으로 키를 명시한다."""
+    """기술별 목록(상충 사례 등)."""
     mla: list[str] = Field(default_factory=list)
     itme: list[str] = Field(default_factory=list)
 
@@ -95,10 +95,10 @@ class CriterionVerdict(BaseModel):
     passed: bool
     score: int
     reason: str
-    target_agent: EvalTarget | None = None  # 미달 원인 에이전트(관점 재조사 대상 또는 report)
+    target_agent: EvalTarget | None = None  # 미달 원인(관점 또는 report)
 
 class EvalVerdict(BaseModel):
-    """DEV_PLAN §6 품질 평가 4항목. 규칙 검사 실패는 이 판정으로 뒤집을 수 없다."""
+    """품질 평가 4항목의 Judge 판정. 규칙 검사 실패는 이 판정으로 뒤집을 수 없다."""
     groundedness: CriterionVerdict
     neutrality: CriterionVerdict
     bias_control: CriterionVerdict

@@ -1,7 +1,4 @@
-"""후속 재조사 한도·출처 단위·[D] 범위·근거 교체·실패 주입 종료를 검증한다(P0-2).
-
-그래프는 Fake로 실제 실행하거나(run_graph), policy.decide를 직접 호출한다.
-"""
+"""후속 재조사 한도, 출처 단위, [D] 인용 범위, 근거 교체, 실패 주입 종료 테스트."""
 from __future__ import annotations
 
 import pytest
@@ -22,7 +19,7 @@ def decisions(state: dict) -> list[str]:
 
 def evaluated_state(failing: dict[str, list[str]] | None = None, retry: dict | None = None,
                     followup: dict | None = None, **extra) -> dict:
-    """4관점 충분 → 종합·보고서·평가까지 끝난 State. failing = {평가 항목: 원인 에이전트 목록}."""
+    """평가까지 끝난 State. failing={평가 항목: 원인 에이전트 목록}."""
     failing = failing or {}
     base = initial_state("q", "t-followup")
     evidence = [{"agent": p, "technology": t, "source_type": "web", "url": f"https://x/{p}/{t}/{i}", "claim": "c",
@@ -39,7 +36,6 @@ def evaluated_state(failing: dict[str, list[str]] | None = None, retry: dict | N
             "eval_result": {"passed": not failing, "criteria": criteria}, **extra}
 
 
-# ---- (a) Judge가 groundedness 원인을 tech로 지목 → tech 후속 재조사 ------------------------------
 def test_policy_judge_blames_tech_after_sufficiency_retries_exhausted():
     state = evaluated_state({"groundedness": ["tech"]}, retry={"tech": RETRY_LIMITS["tech"]})
     decision = decide(state)
@@ -62,16 +58,15 @@ def test_judge_blames_tech_reinvestigates_even_when_sufficiency_retries_used_up(
     assert log[-1] == "end:passed" and state["status"] == "completed"
 
 
-# ---- (b) 종합이 market 추가 근거 요청, market 충분성 재시도 소진 -----------------------------------
 def test_synthesis_request_after_retries_exhausted_runs_once_then_becomes_gap(run_graph):
     limit = RETRY_LIMITS["market"]
     llm = FakeLLM(insufficient={"market": limit}, needs_source=["market"], needs_source_runs=2)
     state = run_graph(llm)
     log = decisions(state)
     first, second = [i for i, d in enumerate(log) if d == "synthesis"]
-    assert log[first + 1] == "dispatch:market"                 # 1회차 요청: 후속 재조사
+    assert log[first + 1] == "dispatch:market"                 # 첫 요청: 후속 재조사
     assert log[first + 1:].count("dispatch:market") == 1
-    assert log[second + 1] == "report"                         # 2회차 요청: 공백 기록 후 보고서로 진행
+    assert log[second + 1] == "report"                         # 두 번째 요청: 공백 기록 후 보고서로
     assert state["retry_counts"]["market"] == limit and state["followup_counts"]["market"] == 1
     assert llm.runs["market"] == limit + 2 and llm.runs["synthesis"] == 2
     assert any(g["perspective"] == "market" and g["kind"] == "followup_exhausted" for g in state["gaps"])
@@ -89,7 +84,6 @@ def test_policy_second_synthesis_request_is_recorded_as_gap():
                for g in decision.updates["gaps"])
 
 
-# ---- (c) 고유 출처는 문서 단위, domain은 출처 수 규칙 대신 단일 문헌 하향 ------------------------------
 def test_source_unit_is_document_not_page():
     page3 = {"source_type": "paper", "doc_id": "deepseek_v2", "page": 3, "technology": "mla"}
     page16 = {**page3, "page": 16}
@@ -112,13 +106,12 @@ def test_single_document_fit_is_downgraded_to_conditional(run_graph):
     out = downgrade_single_document([{"verdict": "적합", "explanation": "e", "cited_ids": ["p3", "p9"]},
                                      {"verdict": "적합", "explanation": "e", "cited_ids": ["p3", "b1"]}], evidence)
     assert [i["verdict"] for i in out] == ["조건부", "적합"]
-    # 실제 그래프에서도 원문 1편만 인용한 '적합'은 남지 않는다(Fake 도메인 에이전트는 짝수 항목을 '적합'으로 판정)
+    # Fake 도메인은 짝수 항목을 '적합'으로 내지만 모두 원문 1편 인용이라 하향된다
     items = run_graph(FakeLLM())["perspectives"]["domain"]["items"]
     assert not [i for i in items if i["verdict"] == "적합"]
     assert sum(SINGLE_DOC_NOTE in i["explanation"] for i in items) == 8
 
 
-# ---- (d) [D]는 SUMMARY·1·2장에서만 수치 근거 ------------------------------------------------------
 def test_design_citation_is_number_evidence_only_in_summary_and_chapters_1_2(run_graph):
     state = run_graph(FakeLLM())
     assert check_groundedness(state)["passed"] is True
@@ -134,7 +127,6 @@ def test_design_citation_is_number_evidence_only_in_summary_and_chapters_1_2(run
     assert any("93.3%" in issue and "[D]" in issue for issue in result["issues"])
 
 
-# ---- (e) merge_evidence: 같은 agent의 새 쓰기는 이전 근거를 교체, agent 없는 seed는 이어 붙임 -----------
 def test_merge_evidence_replaces_same_agent_and_appends_agentless_seed():
     old = [{"source_id": "w1", "claim": "c", "url": "u1", "agent": "market", "attempt": 0},
            {"source_id": "w2", "claim": "c", "url": "u2", "agent": "market", "attempt": 0},
@@ -154,7 +146,6 @@ def test_reinvestigation_leaves_only_latest_attempt_evidence(run_graph):
     assert attempts["market"] == {1} and all(attempts[n] == {0} for n in ("tech", "stakeholder", "domain"))
 
 
-# ---- (f) 실패 주입 시나리오는 모두 MAX_STEPS 안에서 end:*로 끝나고 보고서가 남는다 ------------------
 FAILURE_SCENARIOS = {
     "항상 근거 부족(4관점)": dict(insufficient={n: INF for n in PERSPECTIVES}),
     "항상 판정 한쪽뿐": dict(one_sided={"market": INF, "stakeholder": INF}),
@@ -178,7 +169,7 @@ def test_failure_injection_ends_within_max_steps_with_report(run_graph, name):
 
 
 def test_report_agent_always_failing_ends_within_max_steps_with_gap(run_graph):
-    """보고서 에이전트 자체가 항상 실패하면 보고서는 만들 수 없다. 이때도 상한 안에서 끝나고 공백을 남긴다."""
+    """보고서 에이전트가 항상 실패해도 상한 안에서 끝나고 공백을 남긴다."""
     state = run_graph(FakeLLM(raise_on={"report": INF}))
     assert decisions(state)[-1] == "end:report_failed" and state["step_count"] <= Policy().max_steps
     assert any(g["perspective"] == "report" for g in state["gaps"]) and state["status"] == "unverified"

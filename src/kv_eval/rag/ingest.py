@@ -1,15 +1,7 @@
-"""전처리 파이프라인 산출물(data/processed/chunks.jsonl)을 색인 입력으로 적재한다.
+"""전처리 산출물(data/processed/chunks.jsonl)을 색인 입력으로 읽는다.
 
-설계 산출물 B-3)의 파싱·노이즈 제거·청킹(1,200자/겹침 200자)·페이지 예산(≤200p) 검증은
-preprocessing 패키지(`python -m preprocessing.pipeline`)가 담당하고, 이 모듈은 그 결과를
-읽어 검색 색인이 쓰는 형태로 변환하는 역할만 한다. 같은 PDF를 여기서 다시 파싱하면
-2단 레이아웃 재정렬·표 분리·header/footer 제거·참고문헌 제외가 모두 사라지므로,
-원문 PDF를 직접 읽지 않는다.
-
-chunks.jsonl 한 줄(청크)의 필드 중 색인에 쓰는 값:
-    chunk_id, doc_id, content_type(text/table), start_page, text
-manifest(data/manifest.json)에서 문서별 진영/역할을 읽어 기술 필터용 technology와
-보고서 인용 번호 [n, p.X]의 n(citation_number)을 문서 순서대로 부여한다.
+파싱·청킹은 preprocessing 패키지가 맡으므로 여기서는 원문 PDF를 읽지 않는다.
+manifest 순서대로 문서별 technology와 인용 번호(citation_number)를 붙인다.
 """
 from __future__ import annotations
 import json
@@ -32,7 +24,7 @@ class PaperSpec:
 
 
 def _technology_of(camp: str, role: str) -> Technology:
-    """선정 기술 2건(SW=MLA, HW=ITME)과 비교용 베이스라인을 구분한다(설계 A-4)."""
+    """문서를 mla(SW)·itme(HW)·baseline으로 나눈다."""
     if role != "primary":
         return "baseline"
     return "mla" if camp == "SW" else "itme"
@@ -41,8 +33,7 @@ def _technology_of(camp: str, role: str) -> Technology:
 def paper_manifest(manifest_path: Path) -> list[PaperSpec]:
     """data/manifest.json 순서대로 문서 메타데이터를 만든다.
 
-    인용 번호는 manifest의 문서 순서(1부터)이며, 전처리 단계가 chunks.jsonl의
-    citation 문자열을 만들 때 쓴 번호와 동일하다.
+    인용 번호는 문서 순서(1부터)이며 전처리가 chunks.jsonl에 쓴 번호와 같다.
     """
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     return [
@@ -57,27 +48,20 @@ def paper_manifest(manifest_path: Path) -> list[PaperSpec]:
     ]
 
 
-# 수식이 깨져 나온 줄 판별용: 영문 3자 이상 단어가 하나도 없는 줄은 본문 문장이 아니다.
+# 3자 이상 영단어가 하나도 없는 줄은 깨진 수식으로 본다.
 _REAL_WORD_RE = re.compile(r"[A-Za-z]{3,}")
 
 
 def clean_formula_noise(text: str) -> str:
-    """임베딩 전에 깨진 수식 줄을 제거한다.
-
-    PDF의 수식은 렌더링되지 않고 글리프만 좌표 순서대로 추출되기 때문에 "𝐡𝐡𝑡𝑡",
-    "𝐿𝐿", "4 …" 처럼 단어가 없는 줄이 생긴다. 이런 줄은 문장이 아니라서 임베딩에
-    의미 없는 토큰만 더해 검색 관련성을 떨어뜨리므로 색인 전에 걷어낸다.
-    실제 문장에는 3자 이상 영단어가 거의 항상 있어 오탐 위험은 낮다.
-    """
+    """임베딩 전에 PDF 수식 추출로 생긴 깨진 줄("𝐡𝐡𝑡𝑡", "𝐿𝐿" 등)을 지운다."""
     kept = [line for line in text.split("\n") if not line.strip() or _REAL_WORD_RE.search(line)]
     return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()
 
 
 def load_processed_chunks(chunks_path: Path, manifest: list[PaperSpec]) -> list[dict]:
-    """chunks.jsonl을 읽어 색인용 청크 목록으로 변환한다.
+    """chunks.jsonl을 읽어 색인용 청크 목록으로 바꾼다.
 
-    표 청크는 숫자·짧은 라벨 위주라 수식 노이즈 제거 기준을 적용하면 정상 데이터가
-    지워질 수 있으므로 본문(text) 청크에만 정제를 적용한다.
+    표 청크는 숫자 위주라 정상 데이터가 지워질 수 있어 수식 노이즈 제거는 본문 청크에만 한다.
     """
     path = Path(chunks_path)
     if not path.is_file():
@@ -107,7 +91,7 @@ def load_processed_chunks(chunks_path: Path, manifest: list[PaperSpec]) -> list[
         chunks.append({
             "chunk_id": record["chunk_id"],
             "doc_id": record["doc_id"],
-            # 청크가 페이지를 걸치면 시작 페이지로 인용한다(보고서 인용 형식 [n, p.X] 유지).
+            # 페이지를 걸친 청크는 시작 페이지로 인용한다.
             "page": record["start_page"],
             "text": text,
             "technology": spec.technology,
@@ -124,10 +108,9 @@ def load_processed_chunks(chunks_path: Path, manifest: list[PaperSpec]) -> list[
 
 
 def corpus_stats(chunks: list[dict], manifest: list[PaperSpec], summary_path: Path) -> dict:
-    """페이지 예산(≤200p)과 설계서 대비 편차를 기록한다(설계 B-3 ④).
+    """페이지 예산과 설계서 대비 편차를 기록한다.
 
-    페이지 수는 전처리 단계가 원문 PDF에서 실제로 센 값(summary.json)을 사용하고,
-    설계서에 적힌 값과 다르면 숨기지 않고 warnings로 남긴다.
+    페이지 수는 전처리 summary.json의 실측값을 쓰고, 설계서 값과 다르면 warnings에 남긴다.
     """
     summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
     actual = {doc["doc_id"]: doc["total_pages"] for doc in summary["documents"]}

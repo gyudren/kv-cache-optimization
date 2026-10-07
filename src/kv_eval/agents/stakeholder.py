@@ -1,4 +1,4 @@
-"""Stakeholder evidence with identifiable attributed voices (Tavily web only)."""
+"""이해관계자 평가: 발언 주체가 확인되는 웹 자료(Tavily)만 근거로 쓴다."""
 from __future__ import annotations
 from typing import Any
 from ..prompts import prompt_template
@@ -9,7 +9,7 @@ from ..tools import retry_queries, rework_note
 from ..state import attempt_of
 from ..tools.web_search import COMMUNITY_SPEAKER
 
-# 설계 C-3의 평가 대상별 검색어(경쟁 진영 / 도입 기업·개발자 / 투자 업계)
+# 평가 대상(경쟁 진영, 도입 기업·개발자, 투자 업계)별 검색어
 STAKEHOLDER_QUERIES = {
     "mla": [
         "DeepSeek multi-head latent attention competitors response OpenAI Meta Google",
@@ -26,14 +26,14 @@ STAKEHOLDER_QUERIES = {
 }
 
 
-# 이해관계자 유형별 판정 필드. 하나라도 근거로 판정했으면 관점 결과가 성립한다.
+# 이 중 하나라도 판정했으면 관점 결과가 성립한다.
 CRITERION_VERDICTS = ("competitors_verdict", "developers_adopters_verdict", "investors_verdict")
 
 
 def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
     attempt = attempt_of(state, "stakeholder")
     feedback = state.get("feedback", {}).get("stakeholder", {})
-    # missing = 필수 결함(자료·인용·판정 없음, 재조사 대상) / optional = LLM이 적은 세부 미확인 발언(한계점에만 기록)
+    # missing은 Supervisor 재조사 대상, optional은 보고서 한계점에만 남는다.
     results, evidence, missing, optional = {}, [], [], []
     for tech, name in (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME CXL hybrid memory")):
         found = []
@@ -64,7 +64,7 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
         )
         cited = [r for r in raw if r["source_id"] in set(assessment.cited_ids)]
         if cited and all(r.get("speaker") == COMMUNITY_SPEAKER for r in cited):
-            # 개인·커뮤니티 글만으로는 경쟁 진영·투자 업계의 반응을 판정하지 않는다(개발자 반응 판정만 유지).
+            # 개인·커뮤니티 글만으로는 경쟁 진영·투자 업계 반응을 판정하지 않는다.
             held = [f for f in ("competitors_verdict", "investors_verdict") if getattr(assessment, f)]
             if held:
                 assessment = assessment.model_copy(update={f: None for f in held})

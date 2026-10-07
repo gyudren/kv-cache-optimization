@@ -1,6 +1,6 @@
 """Load the common contract and role system prompts from the project root.
 
-Supervisor는 LLM을 쓰지 않는 결정적 정책이라 프롬프트가 없다(명세: docs/SUPERVISOR_POLICY.md).
+Supervisor는 LLM을 쓰지 않아 프롬프트가 없다.
 """
 from pathlib import Path
 
@@ -30,8 +30,7 @@ def _system_prompt(name: str) -> str:
 def prompt_template(name: str, *additional_names: str) -> str:
     """Combine the common contract with one or more role system prompts.
 
-    Agent functions already provide their runtime task data and Pydantic output
-    schema, so the documentation-oriented TASK TEMPLATE sections are not added.
+    TASK TEMPLATE sections are skipped; agents pass task data and output schemas at runtime.
     """
     names = (name, *additional_names)
     unsupported = [item for item in names if item not in ALLOWED]

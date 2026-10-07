@@ -1,8 +1,6 @@
-"""Neutral report using only approved results and verified citation catalog.
+"""검증된 결과와 인용 카탈로그만으로 보고서를 만든다.
 
-본문 서술은 LLM이 쓰고, 판정값이 그대로 드러나야 하는 표(설계 E의 기준별 신호표, D1~D7 판정표,
-증거 균형표)와 설계 산출물의 고정 표(A-2 KV cache 규모, A-4 비선정 후보)는 코드가 State에서
-직접 만든다. 표와 앞 단계 Agent 판정이 서로 어긋나지 않게 하기 위해서다.
+본문은 LLM이 쓰고, 판정표·증거 균형표·설계 고정 표는 Agent 판정과 어긋나지 않게 코드가 State에서 직접 만든다.
 """
 from __future__ import annotations
 from collections import Counter
@@ -22,11 +20,11 @@ from datetime import date
 
 AS_OF = date.today().isoformat()
 
-# 팀 설계 산출물. 1·2장의 고정 표와 설계 판단(SUMMARY에서 그 전제를 다시 말할 때 포함)은 이 문서를 출처 [D]로 표기한다.
+# 팀 설계 산출물. 1·2장의 고정 표와 설계 판단은 이 문서를 출처 [D]로 표기한다.
 DESIGN_REF = ("[D] 판교 9반 2조 (2026). RAG-Design 설계 산출물: KV cache 최적화 기술 다관점 평가 "
               "(A-2 문제 상황, A-4 선정 사유, C 평가 기준). 내부 설계 문서.")
 
-# 설계 산출물 A-2 (Llama-3.1-70B, FP16: 80 layers × 8 KV heads × 128 dim × K·V 2 × 2B = 320 KiB/token)
+# 설계 산출물 A-2 (Llama-3.1-70B, FP16)
 KV_SCALE_FORMULA = ("산식: 토큰당 KV = 레이어 80 × KV head 8(GQA) × head dim 128 × (K, V) 2 × FP16 2B = 327,680B = 320KiB. "
                     "요청 1건 = 문맥 토큰 수 × 320KiB (8K = 8,192 토큰, 128K = 131,072 토큰, 1M = 1,048,576 토큰). "
                     "HBM 대비 비율은 80GB = 80×10⁹B ≈ 74.5GiB를 분모로 계산했다(설계서 A-2의 3%·50%·400%는 GiB/GB 단위를 혼용한 근사치라 여기서 바로잡음) [D].")
@@ -83,10 +81,9 @@ _OWN_HEADING = re.compile(r"^\s*#{1,6}\s*(REFERENCE|참고\s*문헌|참고자료
 
 
 def sanitize_field(text: str) -> str:
-    """LLM이 섹션 안에 자체 REFERENCE 목록이나 '## ' 장 제목을 넣으면 필수 목차가 중복된다.
+    """필드 안의 참고문헌 블록은 잘라내고 장 제목급 헤딩은 '#### '로 낮춘다.
 
-    REFERENCE는 본문 인용에서 코드가 한 번만 만들므로, 필드 안의 참고문헌 블록은 잘라내고
-    '## '(장 제목) 수준 헤딩은 소제목('#### ')으로 낮춘다.
+    REFERENCE와 장 제목은 코드가 붙이므로 LLM이 넣으면 목차가 중복된다.
     """
     lines = []
     for line in text.strip().splitlines():
@@ -117,7 +114,7 @@ def _web_citations(ids: list[str], evidence: list[dict]) -> str:
 
 
 def trl_table(state: dict) -> str:
-    """기술 조사 에이전트의 TRL 판정을 그대로 옮긴다. 에이전트가 쓴 문서 ID·source_id 인용은 보고서 인용 형식으로 바꾼다."""
+    """기술 조사 Agent의 TRL 판정을 그대로 옮기고, 인용은 보고서 형식으로 바꾼다."""
     tech = perspective(state, "tech")
     evidence = deduplicate_evidence(state["evidence"])
     cell = lambda text: _cell(link_source_refs(str(text or "근거 부족"), evidence))
@@ -193,10 +190,9 @@ def readable_gaps(gaps: list[dict]) -> dict[str, list[str]]:
 
 
 def gap_section(state: dict) -> str:
-    """Supervisor가 재시도 상한·실행 실패로 남긴 근거 공백을 코드가 직접 7장에 적는다.
+    """Supervisor가 남긴 근거 공백을 7장에 관점별 목록으로 적는다.
 
-    LLM 서술에만 맡기면 공백이 빠질 수 있으므로 State의 gaps를 옮기되, 내부 로그 문장이 아니라
-    관점별로 묶은 읽을 수 있는 목록으로 적는다.
+    LLM 서술에만 맡기면 공백이 빠질 수 있어 코드가 직접 넣는다.
     """
     grouped = readable_gaps(state.get("gaps") or [])
     if not grouped:
@@ -209,17 +205,16 @@ def gap_section(state: dict) -> str:
     return "#### 근거 공백 (Supervisor 기록)\n" + "\n".join(lines) + "\n\n"
 
 
-MAX_OPTIONAL_IN_PROMPT = 8  # 관점별 선택 미확인 항목을 프롬프트에 넣는 상한(전체는 final_state에 남는다)
-# 판정표 바로 아래에 오는 서술 필드(코드가 '### 4.x' 제목·표 다음에 이 필드를 붙인다)
+MAX_OPTIONAL_IN_PROMPT = 8  # 관점별로 프롬프트에 넣는 선택 미확인 항목 수
+# 4.x 판정표 바로 아래에 붙는 서술 필드
 SECTION_FIELD = {"4.1": "perspective_trl", "4.2": "perspective_market",
                  "4.3": "perspective_stakeholder", "4.4": "perspective_domain"}
 
 
 def verdict_limit_note(limits: list[dict]) -> str:
-    """재조사하지 못한 관점 원인 평가 미달을 판정표 아래의 '한계:' 문장으로 드러내라는 지시.
+    """더 재조사할 수 없는 판정 결함을 표 아래 '한계:' 문장으로 밝히게 하는 지시문.
 
-    표는 에이전트 판정을 코드가 그대로 옮기므로 보고서가 판정을 바꿀 수 없다. 대신 판정의 제약을 표 바로 아래에
-    밝히고, 표 판정과 충돌하거나 근거 범위를 넘는 서술을 근거 범위로 좁히게 한다.
+    표는 Agent 판정을 그대로 옮기므로 판정은 바꾸지 않고 서술만 근거 범위로 좁힌다.
     """
     if not limits:
         return ""
@@ -242,7 +237,7 @@ def report_view(state: dict, name: str) -> dict:
 
 
 def render_report(state: dict, llm: Any) -> str:
-    # 인용 카탈로그에는 발췌 원문이 필요하므로 디스크 저장소에서 되살린다(State에는 축약본만 있음).
+    # State에는 발췌 축약본만 있어서 인용 카탈로그용 원문은 디스크 저장소에서 되살린다.
     sources = citeable_evidence(hydrate(state["evidence"]))
     tables = {"4.1": trl_table(state), "4.2": verdict_table(state, "market"),
               "4.3": verdict_table(state, "stakeholder"), "4.4": domain_table(state)}

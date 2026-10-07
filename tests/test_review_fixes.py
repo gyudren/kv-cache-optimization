@@ -1,4 +1,4 @@
-"""외부 리뷰(6c709c0) 지적 사항 검증: 충분성 기준, 원인 귀속, 후속 재조사 한도, 출처 단위·등급, 규칙 보완."""
+"""충분성 기준, 원인 귀속, 후속 재조사 한도, 출처 단위·등급, 규칙 보완 테스트."""
 from __future__ import annotations
 
 from fakes import INF, FakeLLM, FakeWeb
@@ -16,7 +16,6 @@ def decisions(state: dict) -> list[str]:
     return [d["decision"] for d in read_decisions(state["trace_id"]) if d["node"] == "supervisor"]
 
 
-# ---- 충분성: LLM이 적은 세부 미확인 항목은 재조사 사유가 아니다 ---------------------------------
 def test_optional_missing_does_not_trigger_rework(run_graph):
     llm = FakeLLM(optional_only={name: INF for name in PERSPECTIVES})
     state = run_graph(llm)
@@ -39,7 +38,6 @@ def test_blocking_defect_reworks_only_that_perspective_with_searchable_hints(run
     assert not any("인용 없음" in q for q in web.queries)
 
 
-# ---- 원인 귀속: 에이전트 판정에서 온 근거 결함은 그 관점을 재조사 -------------------------------------
 def test_groundedness_defect_in_agent_table_reinvestigates_agent(run_graph):
     llm = FakeLLM(judge_fail={"groundedness": (1, "tech")})
     state = run_graph(llm)
@@ -56,7 +54,6 @@ def test_groundedness_defect_in_prose_rewrites_report(run_graph):
     assert "rewrite:report" in decisions(state) and not any(d.startswith("reinvestigate") for d in decisions(state))
 
 
-# ---- 후속 재조사 한도: 충분성 한도를 다 써도 종합 요청으로 한 번 더 조사 ------------------------------
 def test_synthesis_request_runs_even_after_sufficiency_retries_exhausted(run_graph):
     limit = RETRY_LIMITS["stakeholder"]
     llm = FakeLLM(insufficient={"stakeholder": limit + 1}, needs_source=["stakeholder"])
@@ -77,7 +74,6 @@ def test_followup_limit_exhausted_is_recorded_as_readable_gap(run_graph):
     assert "한도" not in section and "**시장성**" in section
 
 
-# ---- 출처 단위·등급 -----------------------------------------------------------------------------
 def test_paper_sources_count_per_document():
     pages = [{"source_type": "paper", "doc_id": "deepseek_v2", "page": p, "technology": "mla"} for p in (3, 7, 16)]
     web = [{"source_type": "web", "url": f"https://a.example/{i}", "technology": "mla"} for i in range(2)]
@@ -114,7 +110,6 @@ def test_community_posts_cannot_carry_competitor_or_investor_verdicts(run_graph)
     assert any("개인·커뮤니티 글뿐" in m for m in state["perspectives"]["stakeholder"]["missing_optional"])
 
 
-# ---- 이전 시도 근거 교체 ---------------------------------------------------------------------------
 def test_rerun_replaces_previous_attempt_evidence():
     old = [{"source_id": "w1", "claim": "c", "url": "u1", "agent": "market"},
            {"source_id": "p1", "claim": "c", "page": 1, "agent": "domain"}]
@@ -124,7 +119,6 @@ def test_rerun_replaces_previous_attempt_evidence():
     assert len(merge_evidence(merged, [{"source_id": "x", "claim": "c", "url": "u"}])) == 3  # agent 없는 입력은 추가
 
 
-# ---- 규칙 보완 -------------------------------------------------------------------------------
 def test_neutrality_rule_catches_comparisons_but_not_normal_sentences():
     flagged = ["MLA가 ITME보다 효율적이다.", "ITME는 MLA를 능가한다.", "데이터센터 사업자는 MLA를 채택해야 한다.",
                "MLA가 ITME보다 우수하지만 비용은 확인되지 않았다."]
@@ -156,7 +150,6 @@ def test_readable_gaps_group_by_perspective():
                                 "종합 단계에서 추가 근거가 필요하다고 판단함"]}
 
 
-# ---- 에이전트 내부 식별자 인용 → 보고서 인용 형식 ---------------------------------------------------
 def test_agent_doc_ids_and_source_ids_become_report_citations():
     from kv_eval.reporting.sections import DOC_ID_CITATION, SOURCE_ID, link_source_refs
     evidence = [{"source_type": "paper", "doc_id": "deepseek_v2", "citation_number": 1, "page": 1, "source_id": "p1"},

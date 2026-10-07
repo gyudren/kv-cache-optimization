@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 @pytest.fixture(autouse=True)
 def isolated_outputs(tmp_path, monkeypatch):
-    """결정 로그·RAG 캐시·체크포인트를 테스트 임시 폴더로 보낸다(저장소 outputs/ 오염 방지)."""
+    """결정 로그와 RAG 캐시를 테스트 임시 폴더에 쓰게 한다."""
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "outputs"))
     monkeypatch.setenv("RAG_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MANIFEST_PATH", str(ROOT / "data" / "manifest.json"))
@@ -20,14 +20,14 @@ def isolated_outputs(tmp_path, monkeypatch):
     try:
         korean_fonts()
     except RuntimeError:
-        # 한글 폰트가 없는 CI에서는 조판 검사만 경고로 낮춰 흐름 테스트를 돌린다(운영 기본값은 이슈).
+        # 한글 폰트가 없는 환경에서는 PDF 조판 검사를 경고로 낮춘다.
         monkeypatch.setenv("ALLOW_UNCHECKED_PDF", "1")
     return tmp_path
 
 
 @pytest.fixture
 def run_graph():
-    """운영(app.py)과 같은 경로로 실행한다: 비동기 ainvoke + run_config(max_concurrency 포함)."""
+    """app.py와 같은 방식(ainvoke + run_config)으로 실행한다."""
     import asyncio
     from fakes import FakeRAG, FakeWeb
     from kv_eval.graph import build_graph

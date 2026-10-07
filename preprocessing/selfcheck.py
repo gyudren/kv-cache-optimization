@@ -1,13 +1,7 @@
-"""실제 PDF 없이 전처리 로직을 검증하는 자체 점검 스크립트.
+"""실제 PDF 없이 합성 데이터로 전처리 각 단계를 점검한다.
 
-pypdf/pdfplumber가 반환하는 자료구조(Word, TableBlock 등)를 손으로 흉내 낸 합성 데이터로
-각 단계(2단 레이아웃 재정렬, header/footer 제거, 표 정규화, 참고문헌 제외, 청킹,
-페이지 경계 문장 이어붙이기)를 단위 검증한다.
+reportlab이 있으면 2단 레이아웃 합성 PDF로 로더부터 한 번 더 확인한다.
 
-reportlab이 설치되어 있으면 실제 2단 레이아웃 + header/footer + 표가 있는 합성 PDF를
-만들어 pipeline 전체(로더 포함)를 한 번 더 통합 검증한다(선택적, 없으면 건너뜀).
-
-실행:
     python -m preprocessing.selfcheck
 """
 
@@ -38,8 +32,7 @@ def check_reference_exclusion() -> None:
 
 
 def check_reference_heading_at_bottom_of_page() -> None:
-    # 2단 레이아웃 논문에서는 본문이 끝나자마자 같은 페이지 하단에 "References" 제목만 나오는
-    # 경우가 있다. 이때 그 페이지의 본문(제목 이전)은 계속 색인 대상이어야 한다.
+    # 2단 논문은 References 제목이 페이지 하단에 나오기도 한다. 제목 앞 본문은 남아야 한다.
     pages = [
         Page(doc_id="doc", page_number=1, text="Section 4.\n\nWe conclude the discussion here.\n\nReferences"),
         Page(doc_id="doc", page_number=2, text="[1] Someone. Some Paper. 2024."),
@@ -66,7 +59,7 @@ def check_manual_reference_override() -> None:
 
 
 def check_chunking_preserves_paragraphs() -> None:
-    long_paragraph = "가나다라마바사아자차카타파하. " * 100  # 단일 문단이 chunk_size(1200)보다 큼
+    long_paragraph = "가나다라마바사아자차카타파하. " * 100  # chunk_size(1200)보다 긴 단일 문단
     pages = [
         Page(doc_id="doc", page_number=1, text="짧은 문단 A.\n\n" + long_paragraph),
         Page(doc_id="doc", page_number=2, text="짧은 문단 B.\n\n짧은 문단 C."),
@@ -102,7 +95,7 @@ def check_overlap_between_consecutive_chunks() -> None:
 
 
 def check_cross_page_sentence_stitching() -> None:
-    # 페이지 1의 마지막 문단이 마침표 없이 끊기고, 페이지 2 첫 문단에서 이어짐
+    # 1페이지 끝 문장이 마침표 없이 2페이지로 이어진다
     pages = [
         Page(doc_id="doc", page_number=1, text="Section A.\n\nThe model reduces memory by compressing"),
         Page(doc_id="doc", page_number=2, text="key and value vectors into a latent space.\n\nSection B."),
@@ -129,9 +122,7 @@ def _make_text_line(words_text: list[str], x0: float, top: float) -> list[Word]:
 
 
 def check_two_column_detection_and_reorder() -> None:
-    # 페이지 폭 600pt, 좌 컬럼(왼쪽) 3줄 + 우 컬럼(오른쪽) 3줄인 2단 레이아웃을 흉내낸다.
-    # 실제 본문 줄처럼 한 줄에 여러 단어가 있어야 하고(짧은 줄은 거터 탐지에서 제외됨),
-    # 좌/우 줄의 높이가 완전히 같은(우연히 겹치는) 상황까지 함께 검증한다.
+    # 좌우 줄 높이가 정확히 같은 2단. 짧은 줄은 거터 탐지에서 빠지므로 줄마다 단어를 여러 개 둔다.
     page_width = 600.0
     words = []
     for i, text in enumerate(["Left one two", "Left three four", "Left five six"]):
@@ -149,15 +140,12 @@ def check_two_column_detection_and_reorder() -> None:
 
 
 def check_two_column_with_offset_row_baselines() -> None:
-    # 실제 논문에서는 좌/우 컬럼의 줄 높이가 완전히 일치하지 않는 경우가 흔하다(한쪽이
-    # 몇 pt씩 어긋남). 이 경우 같은 줄로 묶이지 않아 "같은 줄 안의 거터 간격" 방식으로는
-    # 2단을 놓치고, 페이지 전체를 y좌표 순으로만 정렬해 좌/우 문장이 번갈아 섞여버린다.
+    # 좌우 줄 높이가 몇 pt씩 어긋나면 같은 줄로 묶이지 않아 줄 내부 거터 방식으로는 2단을 놓친다.
     page_width = 600.0
     words = []
     for i in range(6):
         words.extend(_make_text_line([f"Left{i}", "word", "word"], x0=50, top=100 + i * 20))
     for i in range(6):
-        # 우측 컬럼 줄 높이를 좌측과 살짝 어긋나게 배치(실제 관측된 패턴)
         words.extend(_make_text_line([f"Right{i}", "word", "word"], x0=350, top=103 + i * 20))
 
     assert is_two_column(words, page_width), "줄 높이가 어긋난 2단 레이아웃이 감지되지 않음"
@@ -170,11 +158,10 @@ def check_two_column_with_offset_row_baselines() -> None:
 
 
 def check_indent_based_paragraph_break() -> None:
-    # 이 논문들은 문단 사이에 빈 줄이 없고 첫 줄만 들여쓰기 되어 있다. 들여써진 줄을
-    # 새 문단의 시작으로 인식하지 못하면 페이지 전체가 하나의 거대한 문단이 되어버린다.
+    # 빈 줄 없이 첫 줄 들여쓰기로만 문단을 나누는 경우.
     page_width = 600.0
     baseline_x0 = 54.0
-    indent_x0 = 64.0  # 10pt 들여쓰기
+    indent_x0 = 64.0
     words = [
         Word(text="First", x0=baseline_x0, x1=baseline_x0 + 30, top=100, bottom=110),
         Word(text="paragraph.", x0=baseline_x0, x1=baseline_x0 + 60, top=120, bottom=130),
@@ -248,7 +235,7 @@ def check_table_normalization() -> None:
         bbox=(40.0, 105.0, 300.0, 240.0),
         rows=[
             ["Model", "Metric", "Value"],
-            ["MLA", None, "0.93"],  # 병합 셀(None) -> forward-fill 필요
+            ["MLA", None, "0.93"],  # 병합 셀
             ["ITME", "Latency", "12ms"],
         ],
     )
@@ -279,7 +266,7 @@ def check_synthetic_pdf_pipeline() -> None:
         pdf_path = Path(tmp_dir) / "synthetic.pdf"
         c = canvas.Canvas(str(pdf_path), pagesize=(600, 800))
 
-        # 2단 레이아웃 + header/footer 흉내
+        # 2단 레이아웃과 머리글/바닥글
         c.drawString(250, 770, "Synthetic Paper Title")
         for i in range(6):
             c.drawString(60, 700 - i * 20, f"Left column line {i}")

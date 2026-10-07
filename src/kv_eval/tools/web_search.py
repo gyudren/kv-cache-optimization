@@ -1,11 +1,6 @@
-"""외부 검색 도구 (Tavily). 시장 평가·이해관계자 평가 Agent 공용.
+"""Tavily 웹 검색 도구.
 
-설계 B-2에서 두 Agent는 RAG 여부 X로, 논문 풀 대신 웹 검색만 근거로 쓴다
-(논문 4편에는 시장 규모·채택 현황·이해관계자 발언 근거가 없기 때문).
-이 모듈은 근거 수집까지만 담당하고, 긍정/우려/혼재 판정은 Agent의 LLM이 한다.
-
-반환 항목은 Agent가 evidence로 바로 옮길 수 있도록 정규화한다:
-    url, title, excerpt, publisher, published_at, speaker
+근거 수집까지만 하고 긍정/우려/혼재 판정은 각 Agent의 LLM이 한다.
 """
 from __future__ import annotations
 import json
@@ -16,23 +11,21 @@ from urllib.parse import urlparse
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
-# 어느 관점에서도 입장 근거가 되지 못하는 영상·강의 사이트와 SNS(게시물 본문이 검증 가능한 발췌로 남지 않는다)
+# 영상·강의 사이트와 SNS는 검증 가능한 발췌가 남지 않아 뺀다.
 DEFAULT_EXCLUDED_DOMAINS = ["youtube.com", "udemy.com", "coursera.org",
                             "instagram.com", "facebook.com", "tiktok.com", "x.com", "twitter.com", "pinterest.com"]
 
-# 이해관계자 전용 추가 제외: 프로필 페이지는 입장 표명이 아니고, 논문은 RAG 담당
+# 이해관계자 검색에서는 프로필 페이지와 논문(RAG 담당)도 뺀다.
 STAKEHOLDER_EXCLUDED_DOMAINS = DEFAULT_EXCLUDED_DOMAINS + ["linkedin.com", "arxiv.org"]
 
-MIN_SCORE = 0.4  # Tavily 관련도 점수가 이보다 낮은 결과는 근거로 쓰지 않는다
+MIN_SCORE = 0.4  # Tavily 관련도 하한
 MAX_RESULTS = 4
 
-# 개인 의견 게시물. 개발자 반응의 보조 근거로만 쓰고 기업·시장·투자자 반응의 근거로는 쓰지 않는다.
+# 개인 의견 글. 개발자 반응의 보조 근거로만 쓴다.
 COMMUNITY_SPEAKER = "개인·커뮤니티 글"
 
-# 발언 주체 구분용 도메인 힌트(설계 C-3: 발언 주체를 함께 기록).
-# 최종 귀속은 Agent가 본문을 보고 판단하며, 여기서는 후보만 붙인다.
-# 순서대로 처음 맞는 유형을 붙인다. 개인·커뮤니티 글(포럼·HN·개인 블로그)은 다른 유형보다 먼저 판별한다
-# (예: discussion.fool.com은 투자 매체가 아니라 이용자 토론 게시판).
+# URL로 붙이는 발언 주체 후보. 최종 판단은 Agent가 본문을 보고 한다.
+# 처음 맞는 유형을 쓰므로 커뮤니티 글을 먼저 본다(discussion.fool.com은 투자 매체가 아니라 토론 게시판).
 SPEAKER_HINTS = {
     COMMUNITY_SPEAKER: ("reddit.com", "news.ycombinator.com", "stackoverflow.com", "discussion.", "forum.",
                         "forums.", "community.", ".github.io", "medium.com", "substack.com", "tistory.com",
@@ -68,7 +61,7 @@ def _normalize(hit: dict) -> dict:
         "title": hit.get("title", ""),
         "excerpt": hit.get("content", ""),
         "publisher": _publisher(url),
-        # 게시일이 없는 결과가 많다. 없으면 빈 값으로 두고 REFERENCE에서 "게시일 미확인"으로 표기된다.
+        # 게시일이 없는 결과가 많다. 빈 값은 REFERENCE에서 "게시일 미확인"으로 표기된다.
         "published_at": hit.get("published_date", "") or "",
         "speaker": speaker_hint(url),
         "score": hit.get("score"),
@@ -82,15 +75,14 @@ class WebSearch:
         if not api_key and client is None:
             raise ValueError("TAVILY_API_KEY is required")
         self.api_key = api_key
-        self._client = client  # 테스트용 주입 지점. 실제 실행에서는 requests를 쓴다.
+        self._client = client  # 테스트용 주입 지점
 
     def _post(self, payload: dict) -> list[dict]:
         if self._client is not None:
             return self._client.search(payload)
         import requests
 
-        # 같은 질의는 디스크 캐시에서 읽는다. 재시도·재실행마다 Tavily 크레딧을 다시 쓰지 않고,
-        # 동일 근거로 보고서를 재현할 수 있다(WEB_CACHE_DIR를 빈 값으로 두면 캐시를 끈다).
+        # 같은 질의는 디스크 캐시를 읽어 크레딧을 아끼고 같은 근거로 재현한다. WEB_CACHE_DIR를 비우면 캐시를 끈다.
         cache_file = None
         cache_dir = os.getenv("WEB_CACHE_DIR", "data/cache/tavily")
         if cache_dir:
@@ -129,16 +121,16 @@ class WebSearch:
         })
         results = [_normalize(hit) for hit in hits
                    if (hit.get("score") or 0) >= min_score and hit.get("url")]
-        # 근거로 쓸 수 없는 빈 본문은 버린다(인용해도 검증이 불가능하므로).
+        # 본문이 빈 결과는 인용해도 검증할 수 없어 버린다.
         return [item for item in results if item["excerpt"].strip()]
 
     def search_market(self, query: str, topic: str = "news") -> list[dict]:
-        """C-2 시장 규모·성장성, 상용화·채택, 생태계 지지 근거 수집.
+        """시장 규모·채택·생태계 근거를 검색한다.
 
-        생태계 지지(공식 문서·릴리스 노트)는 뉴스가 아니므로 topic="general"로 찾는다.
+        공식 문서·릴리스 노트는 뉴스가 아니므로 topic="general"로 찾는다.
         """
         return self._search(query, topic=topic, exclude_domains=DEFAULT_EXCLUDED_DOMAINS)
 
     def search_stakeholder(self, query: str) -> list[dict]:
-        """C-3 경쟁사·개발자/도입기업·투자업계의 '발언' 근거 수집."""
+        """경쟁사·개발자·도입 기업·투자 업계의 발언 근거를 검색한다."""
         return self._search(query, topic="general", exclude_domains=STAKEHOLDER_EXCLUDED_DOMAINS)

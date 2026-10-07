@@ -1,18 +1,7 @@
-"""Supervisor 결정 정책: State 제어 필드만 읽고 다음 실행 노드를 정한다(순수 함수).
+"""Supervisor 결정 정책. State 제어 필드만 보고 다음 노드를 고르는 순수 함수다.
 
-입력: perspective_status · node_status · retry_counts · eval_result · step_count (+ 결과의 sufficient/missing)
-출력: Decision(targets, decision, reason, updates)
-
-고정된 실행 순서는 없다. 매 진입마다 아래 우선순위로 "지금 State에서 해야 할 일"을 고른다.
-1) 근거가 없거나 부족하거나 실패한 관점 → 해당 관점만 (재)할당 (재시도 상한 안에서)
-2) 모든 관점이 결론 상태 → 종합 (종합이 특정 관점의 추가 근거를 요구하면 그 관점만 재조사)
-3) 종합 완료 → 보고서 (보고서는 품질 평가 노드를 거쳐 돌아온다)
-4) 평가 결과 → 통과면 종료, 미달이면 원인별 경로(원인이 관점이면 그 관점 재조사 / report면 보고서 재작성).
-   원인이 관점인데 후속 재조사 한도가 소진됐으면 그 이슈 원문을 보고서 재작성 지시에 넣어 해당 판정표 아래에
-   '한계:'로 명시하게 하고, 그 재작성 후에도 같은 항목이 같은 사유로 미달이면 재작성을 멈추고 미검증으로 끝낸다.
-상한(MAX_STEPS·재시도 한도)은 안전장치다. 도달하면 근거 공백을 기록하고 보고서까지 만든 뒤 종료한다.
-재시도 한도는 둘로 나뉜다. 충분성 재조사(1)는 RETRY_LIMITS, 종합·평가가 요청한 후속 재조사(2·4)는
-FOLLOWUP_LIMITS를 쓴다. 충분성 재조사가 한도를 다 써도 종합·평가가 지목한 관점은 따로 한 번 더 조사할 수 있다.
+매 진입마다 관점 조사, 종합, 보고서, 품질 평가 순으로 지금 할 일을 고른다.
+충분성 재조사는 RETRY_LIMITS, 종합·평가가 요청한 후속 재조사는 FOLLOWUP_LIMITS로 따로 센다.
 """
 from __future__ import annotations
 import re
@@ -27,12 +16,12 @@ from ..tools import TECH_TOKENS, mentioned_techs
 END_NODE = "__end__"
 DOWNSTREAM = ("synthesis", "report", "quality_evaluator")
 LABEL = {"tech": "기술 성숙도(TRL)", "market": "시장성", "stakeholder": "이해관계자", "domain": "도메인 적용성"}
-SECTION_OF = {name: number for number, name in SECTION_PERSPECTIVE.items()}  # 관점 → 판정표 절(4.1~4.4)
+SECTION_OF = {name: number for number, name in SECTION_PERSPECTIVE.items()}  # 관점별 판정표 절(4.1~4.4)
 
 
 @dataclass(frozen=True)
 class _AgentIssue:
-    """원인이 관점 에이전트인 평가 미달 1건. key는 '같은 항목·같은 사유'를 판정하는 비교 키다."""
+    """원인이 관점 에이전트인 평가 미달 항목. key가 같으면 같은 항목·같은 사유로 본다."""
     agent: str
     criterion: str
     text: str
@@ -70,21 +59,21 @@ class Decision:
 
 
 def classify(state: dict, name: str) -> str:
-    """관점 1개의 근거 충분도. excluded는 한 번 정해지면 유지한다(재시도 상한 소진)."""
+    """관점의 근거 충분도. 한 번 excluded가 되면 그대로 유지한다."""
     if (state.get("perspective_status") or {}).get(name) == "excluded":
         return "excluded"
     status = (state.get("node_status") or {}).get(name, "pending")
     if status == "failed":
         return "failed"
     if status != "done":
-        return "pending"  # 미실행(또는 중단 후 재개로 running이 남은 경우)
-    # 에이전트의 자기 보고(sufficient)만 믿지 않고 Supervisor가 출처 수를 결정적으로 다시 확인한다.
+        return "pending"  # 재개 직후 running으로 남은 경우도 포함
+    # 에이전트의 자기 보고와 별개로 출처 수를 다시 확인한다.
     if not perspective(state, name).get("sufficient") or evidence_shortfalls(state, name):
         return "insufficient"
     return "sufficient"
 
 
-# 사유 → 재검색 힌트. 사유 문장은 사람이 읽는 missing으로만 넘기고 검색어로 쓰지 않는다.
+# 평가 사유 유형별 재검색 힌트. 사유 문장 자체는 검색어로 쓰지 않는다.
 EVAL_QUERY_HINTS = (
     ("긍정 한쪽뿐", "limitations risks concerns criticism"),
     ("우려 한쪽뿐", "adoption benefits positive outlook support"),
@@ -99,7 +88,7 @@ TECHS = ("mla", "itme")
 
 
 def _item_tech(text: str) -> list[str]:
-    """`관점/기술:` 접두어가 있으면 그 기술, 없으면 본문에 언급된 기술(둘 다/없음이면 두 기술 모두)."""
+    """항목이 가리키는 기술. 접두어나 본문 언급으로 하나로 정해지지 않으면 두 기술 모두."""
     prefix = re.match(r"^\w+/(mla|itme):", str(text))
     if prefix:
         return [prefix.group(1)]
@@ -108,7 +97,7 @@ def _item_tech(text: str) -> list[str]:
 
 
 def _agent_missing_query(text: str) -> str:
-    """에이전트가 보고한 부족 항목을 검색어로 다듬는다(접두어·기술명·괄호 주석 제거)."""
+    """에이전트가 보고한 부족 항목을 검색어로 다듬는다."""
     text = re.sub(r"^\w+(/\w+)?:\s*", "", str(text))
     text = re.sub(r"\([^)]*\)", " ", text)
     for tokens in TECH_TOKENS.values():
@@ -118,11 +107,7 @@ def _agent_missing_query(text: str) -> str:
 
 
 def _rework(items: list[tuple[list[str], str, str]]) -> dict:
-    """재작업 지시를 구조화한다. items = [(대상 기술 목록, 사유, 검색 힌트)].
-
-    - missing: 사람이 읽는 사유(프롬프트에 그대로 들어감)
-    - queries_by_tech: 기술별 검색 힌트. 실제로 부족한 기술에만 붙고 다른 기술 이름은 섞이지 않는다.
-    """
+    """(대상 기술, 사유, 검색 힌트) 목록을 재작업 지시로 묶는다. 검색 힌트는 기술별로 따로 둔다."""
     missing, by_tech = [], {tech: [] for tech in TECHS}
     for techs, reason, query in items:
         if reason and reason not in missing:
@@ -136,10 +121,10 @@ def _rework(items: list[tuple[list[str], str, str]]) -> dict:
 
 
 def _sufficiency_feedback(shortfalls: list[dict], missing: list[str], optional: list[str] = ()) -> dict:
-    """재작업 지시: 사유는 결정적 검사와 필수 결함, 검색 힌트는 에이전트가 확인하지 못한 세부 항목에서 만든다.
+    """충분성 재조사 지시를 만든다.
 
-    필수 결함 문장("검증 가능한 출처 인용 없음")은 검색어가 되지 못하므로 사유로만 넘기고, 같은 기술의 선택 항목
-    (예: "MLA 시장 규모 정량 근거")을 검색 힌트로 쓴다. 힌트가 하나도 없는 기술에는 일반 힌트를 붙인다.
+    필수 결함 문장은 검색어로 쓸 수 없어 사유로만 넘기고, 검색 힌트는 선택 항목에서 만든다.
+    힌트가 하나도 없는 기술에는 일반 힌트를 붙인다.
     """
     items = [([x["technology"]], x["reason"], SHORTFALL_HINT) for x in shortfalls]
     items += [(_item_tech(m), str(m), "") for m in missing if str(m).strip()]
@@ -151,7 +136,7 @@ def _sufficiency_feedback(shortfalls: list[dict], missing: list[str], optional: 
 
 
 def _eval_feedback(issues: list[str]) -> dict:
-    """평가 미달 사유는 missing으로 넘기고, 검색어는 사유 유형별 힌트로만 만든다(사유 문장으로 검색하지 않음)."""
+    """평가 미달 사유로 재조사 지시를 만든다. 검색어는 EVAL_QUERY_HINTS에서 고른다."""
     items = []
     for issue in issues:
         hints = [hint for key, hint in EVAL_QUERY_HINTS if key in issue] or [GENERIC_EVAL_HINT]
@@ -183,7 +168,7 @@ class _Builder:
         return self.followups.get(name, 0) < self.policy.followup_limit(name)
 
     def followup(self, names: list[str], feedback_by_name: dict[str, dict]) -> None:
-        """종합·평가가 지목한 관점을 후속 재조사 한도로 다시 보낸다(제외됐던 관점도 다시 조사 대상이 된다)."""
+        """종합·평가가 지목한 관점을 후속 재조사로 다시 보낸다. 제외됐던 관점도 pending으로 되돌린다."""
         for name in names:
             self.followups[name] = self.followups.get(name, 0) + 1
             self.updates["followup_counts"][name] = self.followups[name]
@@ -215,7 +200,6 @@ class _Builder:
         return Decision(targets, decision, reason, updates)
 
     def end(self, decision: str, reason: str, verified: bool) -> Decision:
-        # completed = 평가 통과·공백 없음 / completed_with_gaps = 평가 통과·근거 공백 명시 / unverified = 평가 미통과
         has_gaps = bool(self.state.get("gaps") or self.updates["gaps"])
         status = "unverified" if not verified else "completed_with_gaps" if has_gaps else "completed"
         return self.done([END_NODE], decision, reason, status=status)
@@ -238,7 +222,7 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
         error = (state.get("last_error") or {}).get(name, "")
         if not finalize and b.can_retry(name):
             if status == "failed":
-                # 실행 실패 재시도: 직전 지시를 그대로 다시 넘긴다(새 검색 사유는 없음).
+                # 실행 실패는 직전 지시를 그대로 다시 넘긴다.
                 b.bump(name, {**state.get("feedback", {}).get(name, {}), "last_error": error})
                 reasons.append(f"{name}: 실행 실패 재시도 {b.retry[name]}/{policy.limit(name)} ({error[:80]})")
             else:
@@ -248,7 +232,7 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
                                f"({'; '.join(map(str, missing[:2]))[:120]})")
             to_run.append(name)
             continue
-        # 상한 소진 또는 단계 상한: 제외하고 근거 공백으로 명시한다.
+        # 재시도 한도나 단계 상한에 걸리면 제외하고 근거 공백으로 남긴다.
         b.updates["perspective_status"][name] = "excluded"
         if finalize:
             b.gap(make_gap(name, "step_limit", "조사 단계 상한에 도달해 추가 조사를 멈춤"))
@@ -286,7 +270,7 @@ def _synthesis_step(b: _Builder, finalize: bool) -> Decision | None:
     if status != "done" or finalize:
         return None
     synthesis = state.get("synthesis") or {}
-    # 종합이 특정 관점의 추가 근거를 요구하면 그 관점만 재조사한다(후속 재조사 한도 안에서).
+    # 종합이 추가 근거를 요구한 관점만 후속 재조사한다.
     requested = [n for n in synthesis.get("needs_source_agents", []) if n in PERSPECTIVES]
     rerun = [n for n in requested if b.can_followup(n)]
     gaps = synthesis.get("evidence_gaps", [])
@@ -324,7 +308,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
         return b.end("end:report_failed", "보고서 재시도 한도 소진", verified=False)
 
     if not (state.get("report") or "").strip():
-        # done인데 본문이 비었으면 평가하지 않고 보고서 실패와 같이 처리한다(빈 보고서에 Judge를 부르지 않음).
+        # done인데 본문이 비었으면 Judge를 부르지 않고 실패로 처리한다.
         if not finalize and b.can_retry("report"):
             b.bump("report")
             b.run("report")
@@ -353,7 +337,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
     if finalize:
         return b.end("end:step_limit", f"단계 상한 도달 — 품질 평가 미달 항목 {failed} 남김", verified=False)
 
-    # (a) 미달 원인이 관점 에이전트인 항목(편향·커버리지, 또는 에이전트 판정을 옮긴 표의 근거·중립성 결함) → 그 관점만 재조사
+    # 미달 원인이 관점 에이전트면 그 관점만 재조사한다.
     issues_by_agent: dict[str, list[_AgentIssue]] = {}
     for name in CRITERIA:
         c = criteria.get(name, {})
@@ -364,17 +348,17 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
                 own = [_AgentIssue(agent, name, f"{agent}/{i['technology']}: {i['text']}" if i["technology"]
                                    else f"{agent}: {i['text']}", i["text"], i["technology"])
                        for i in c.get("rule", {}).get("items", []) if i["agent"] == agent]
-                # Judge 사유는 실행마다 문장이 달라지므로 "같은 사유"는 (항목, 원인 관점)으로 본다.
+                # Judge 사유 문장은 실행마다 달라서 항목과 관점만으로 같은 사유를 판단한다.
                 judged = _AgentIssue(agent, name, f"{name}: {c.get('reason', '')[:300]}", "judge")
                 issues_by_agent.setdefault(agent, []).extend(own or [judged])
     rerun = [a for a in issues_by_agent if b.can_followup(a)]
-    carried: list[_AgentIssue] = []  # 후속 한도 소진으로 재조사하지 못한 관점 원인 이슈 → 보고서에서 판정의 한계로 명시
+    carried: list[_AgentIssue] = []  # 재조사하지 못해 보고서에 판정 한계로 적을 이슈
     for agent, issues in issues_by_agent.items():
         if agent in rerun:
             continue
-        for issue in issues:  # 재조사 불가: 근거 공백으로 명시하고 보고서에 드러낸다
+        for issue in issues:
             carried.append(issue)
-            # 같은 관점·항목의 평가 공백은 한 번만 남긴다(Judge 사유 문장은 실행마다 달라진다).
+            # 같은 관점·항목의 평가 공백은 한 번만 남긴다.
             if not any(g["perspective"] == agent and g["kind"] == "evaluation" and g["criterion"] == issue.criterion
                        and g["technology"] == issue.technology
                        and (issue.reason_key == "judge" or g["detail"] == issue.reason_key) for g in b.all_gaps()):
@@ -386,8 +370,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
                       "품질 평가 미달 원인 관점만 재조사: "
                       + "; ".join(i.text for a in rerun for i in issues_by_agent[a])[:300])
 
-    # 재조사하지 못한 관점 원인 이슈로 이미 한 번 재작성했는데 같은 항목이 같은 사유로 또 미달이면 재작성을 멈춘다.
-    # 판정의 한계를 명시한 보고서로도 해소되지 않는 결함이라 재작성을 반복해도 통과할 수 없다(무의미한 루프 방지).
+    # 판정 한계를 적어 재작성했는데도 같은 사유로 미달이면 더 반복해도 통과할 수 없으니 멈춘다.
     carried_keys = sorted({issue.key for issue in carried})
     previous = (state.get("feedback") or {}).get("report") or {}
     if carried_keys and set(carried_keys) <= set(previous.get("carried_keys", [])):
@@ -395,7 +378,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
                      "재조사할 수 없는 관점 원인 미달이 판정 한계를 명시한 재작성 후에도 같은 사유로 반복 → 재작성 중단: "
                      + "; ".join(i.text for i in carried)[:240], verified=False)
 
-    # (b) 원인이 보고서 서술인 항목, 재조사하지 못한 관점 원인 항목(해당 표 아래 판정 한계 명시), 새 근거 공백 → 보고서 재작성
+    # 보고서 서술 결함, 재조사하지 못한 관점 이슈, 새 근거 공백은 보고서 재작성으로 처리한다.
     rewrite_issues = []
     for name in CRITERIA:
         c = criteria.get(name, {})

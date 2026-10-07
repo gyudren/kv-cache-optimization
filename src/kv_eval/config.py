@@ -14,52 +14,42 @@ DECLARED_PAGES = {"deepseek_v2": 52, "itme": 13, "infinigen": 18, "cxl_pnm": 13}
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
 MIN_INDEXED_CHARS = 20  # 정제 후 이보다 짧게 남는 청크는 색인하지 않는다
-# 색인 직전에 "3자 이상 영단어가 없는 줄"(깨진 수식 글리프)을 제거할지 여부.
-# 동일 평가 세트(92케이스) A/B 측정 결과 끄는 쪽이 합격 기준을 통과해 기본값을 0으로 둔다.
-#   ON  : Hit@1 0.86 / MRR 0.93 / 필수 용어 커버리지 0.75 → FAIL
-#   OFF : Hit@1 0.84 / MRR 0.92 / 필수 용어 커버리지 0.92 → PASS
-# 순위는 거의 같은데 표·수식 줄의 근거 용어가 함께 지워지는 손해가 더 크다.
+# 깨진 수식 줄 제거 여부. 켜면 표·수식 줄의 근거 용어까지 지워져 필수 용어 커버리지가 떨어지므로 기본은 끈다.
 CLEAN_FORMULA_NOISE = os.getenv("CLEAN_FORMULA_NOISE", "0") == "1"
-RETRIEVAL_K = 6  # Implementation detail; same setting across technologies.
+RETRIEVAL_K = 6
 RRF_CONSTANT = 60
 MIN_RELEVANT = 2
 RAG_REWRITES = 2
-# 질문 단위 RAG 호출 동시 실행 수. 질문끼리 독립이라 결과는 같고 대기 시간만 줄어든다.
+# 질문별 RAG 호출 동시 실행 수. 질문끼리 독립이라 결과에는 영향이 없다.
 MAX_PARALLEL_QUESTIONS = int(os.getenv("MAX_PARALLEL_QUESTIONS", "12"))
-# 4관점(기술 성숙도·시장성·이해관계자·도메인). Supervisor가 State를 보고 이 중 필요한 것만 고른다.
 PERSPECTIVES = ("tech", "market", "stakeholder", "domain")
-# 한 superstep에서 동시에 실행할 작업 노드 수(LangGraph max_concurrency). Supervisor는 부족한 관점을
-# Send로 한 번에 할당하지만, 실행은 기본 1개씩 순차로 한다. 관점마다 근거 원문·프롬프트·임베딩 호출이 함께
-# 메모리에 올라오므로 동시에 돌리면 최대 메모리가 관점 수만큼 커지고(OOM), MPS 임베딩 경합도 생긴다.
+# 함께 할당된 관점 노드를 동시에 몇 개 돌릴지(max_concurrency).
+# 관점마다 근거 원문과 임베딩 호출이 메모리에 같이 올라오고 MPS 임베딩 경합도 생겨서 기본은 1이다.
 AGENT_CONCURRENCY = max(1, int(os.getenv("AGENT_CONCURRENCY", "1")))
-# 재작업 상한(안전장치). 근거 충분성·품질 평가 통과가 1차 종료 조건이고, 상한은 무한 루프만 막는다.
-# 관점의 값은 "충분성 재조사"(Supervisor 결정적 검사·필수 결함) 전용이다.
+# 무한 루프를 막는 재작업 상한. 관점 값은 충분성 재조사에만 쓴다.
 RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2,
                 "quality_evaluator": 1}
-# 종합 단계 추가 근거 요청·품질 평가 미달로 관점을 다시 부르는 "후속 재조사" 한도(관점별, 충분성 한도와 별도).
-# 충분성 재조사가 한도를 다 써도 종합·평가가 지목한 관점은 한 번 더 조사할 수 있다(retry_counts["<관점>:followup"]).
+# 종합·평가가 관점을 다시 부를 때 쓰는 후속 재조사 한도. RETRY_LIMITS와 따로 센다.
 FOLLOWUP_LIMITS = {name: 1 for name in ("tech", "market", "stakeholder", "domain")}
-# Supervisor 진입 횟수 상한. 넘으면 조사·재작성을 멈추고 종합→보고서→평가만 마친 뒤 정상 종료한다.
+# Supervisor 진입 상한. 넘으면 추가 조사를 멈추고 보고서까지 마무리한 뒤 끝낸다.
 MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
-# 상한 도달 후 마무리에 필요한 Supervisor 진입 수: 종합 → 보고서 → 평가 → 종료 = 4, 여유 1을 더해 5.
-# (마무리 중 실패한 노드는 재시도하지 않고 공백으로 넘기므로 4회를 넘지 않는다. 여유분은 재개 직후의 재진입용)
+# 상한 도달 후 마무리(종합, 보고서, 평가, 종료 4회)에 재개 직후 재진입 여유 1회를 더한 값.
 FINALIZE_STEPS = 5
 
 
 def recursion_limit_for(max_steps: int) -> int:
-    """LangGraph recursion_limit은 Supervisor 단계 상한에서만 계산한다(단일 출처).
+    """Supervisor 단계 상한으로 LangGraph recursion_limit을 계산한다.
 
-    Supervisor 1회 = supervisor + 작업 노드 = 2 superstep. 마무리 단계와 여유 10을 더한다.
-    build_graph가 실제로 쓰는 Policy.max_steps로 이 값을 계산해 그래프 기본 설정에 넣는다.
+    Supervisor 한 번이 supervisor와 작업 노드 2 superstep이라 2배 하고, 여유 10을 더한다.
     """
     return (max_steps + FINALIZE_STEPS) * 2 + 10
-# State에 남기는 Evidence 발췌 길이. 원문은 evidence_store(디스크)에 두고 excerpt_ref로 참조한다.
+# State에 남기는 발췌 길이. 원문은 evidence_store에 둔다.
 STATE_EXCERPT_CHARS = 160
-# 편향 통제 규칙: 기술·관점별 최소 고유 출처 수, 웹 근거의 단일 발행처 비중 상한
+# 편향 통제: 기술·관점별 최소 고유 출처 수, 단일 발행처 비중 상한
 MIN_DISTINCT_SOURCES = 2
 MAX_SINGLE_SOURCE_SHARE = 0.6
 MAX_REPORT_PAGES = 10
-# 목표 페이지(여유 1p). 넘으면 경고만 남긴다(상한 초과는 이슈).
+# 넘으면 경고만 하고, MAX_REPORT_PAGES를 넘으면 이슈로 처리한다.
 TARGET_REPORT_PAGES = 9
 REPORT_STEM = "Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"
 # 이전 과제(RAG) 산출물 파일명. 덮어쓰지 않도록 구분만 해 둔다.
@@ -80,16 +70,14 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         from dotenv import dotenv_values, load_dotenv
-        # 환경변수가 .env보다 우선한다(12-factor, CI 주입 허용). 다만 셸에 남아 있는 옛 키가
-        # .env를 가리면 "키를 바꿨는데 401이 난다"는 오진이 나오므로, 값이 서로 다르면 알린다.
+        # 환경변수가 .env보다 우선한다. 셸에 남은 옛 키가 .env를 가리는 경우를 알 수 있게 값이 다르면 경고한다.
         load_dotenv()
         for name, file_value in dotenv_values().items():
             env_value = os.getenv(name)
             if file_value and env_value and env_value.strip() != file_value.strip():
                 print(f"[config] 경고: 환경변수 {name} 이(가) .env 값을 덮어씁니다. "
                       f"환경변수 값이 사용됩니다(unset 하면 .env 값 사용).")
-        # 키 끝에 붙은 개행·공백은 그대로 쓰면 HTTP 헤더가 불법값이 되어
-        # 인증 오류가 아니라 "Connection error"로 보이므로 여기서 제거한다.
+        # 키 끝의 개행·공백이 HTTP 헤더를 깨뜨리면 "Connection error"로 보이므로 strip한다.
         model = os.getenv("OPENAI_MODEL", MODEL_ID).strip()
         if model != MODEL_ID:
             raise ValueError(f"Generator/Judge model must be {MODEL_ID}; got {model!r}")

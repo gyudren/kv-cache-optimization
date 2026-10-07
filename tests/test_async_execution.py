@@ -1,4 +1,4 @@
-"""비동기 실행·에이전트 순차 처리·문서 임베딩 1회 저장을 검증한다."""
+"""비동기 노드, 에이전트 동시 실행 상한, 임베딩 캐시 테스트."""
 from __future__ import annotations
 import inspect
 import threading
@@ -17,7 +17,7 @@ PERSPECTIVE_FNS = ((technology, "technology_node"), (market, "market_node"),
 
 
 def _track_agent_concurrency(monkeypatch) -> dict:
-    """4관점 에이전트 본문에 진입 카운터를 씌워 동시에 실행된 최대 개수를 잰다."""
+    """관점 에이전트의 최대 동시 실행 수를 잰다."""
     seen = {"active": 0, "peak": 0}
     lock = threading.Lock()
 
@@ -27,7 +27,7 @@ def _track_agent_concurrency(monkeypatch) -> dict:
                 seen["active"] += 1
                 seen["peak"] = max(seen["peak"], seen["active"])
             try:
-                time.sleep(0.05)  # 겹칠 기회를 준다(동시 실행이 허용되면 반드시 겹친다)
+                time.sleep(0.05)  # 동시 실행이 허용되면 여기서 겹친다
                 return fn(*args, **kwargs)
             finally:
                 with lock:
@@ -50,11 +50,11 @@ def test_perspective_agents_run_one_at_a_time_by_default(monkeypatch, run_graph)
     seen = _track_agent_concurrency(monkeypatch)
     state = run_graph(FakeLLM())
     assert state["status"] == "completed"
-    assert seen["peak"] == 1  # Supervisor가 4관점을 한 번에 할당해도 실행은 하나씩
+    assert seen["peak"] == 1  # 4관점을 한 번에 dispatch해도 하나씩 실행
 
 
 def test_concurrency_setting_is_what_serializes_agents(monkeypatch, run_graph):
-    """상한을 4로 풀면 실제로 겹친다 → 위 테스트의 peak==1은 설정 덕분이지 우연이 아니다."""
+    """상한을 풀면 겹치므로 위 테스트의 peak==1은 설정 때문이다."""
     monkeypatch.setattr(observability, "AGENT_CONCURRENCY", 4)
     seen = _track_agent_concurrency(monkeypatch)
     run_graph(FakeLLM())
@@ -79,6 +79,6 @@ def test_document_embeddings_are_computed_once_and_reused(tmp_path):
     assert (cached_first, cached_second) == (False, True)
     assert CountingModel.calls == 1 and np.allclose(first, second)
     assert np.allclose(np.linalg.norm(second, axis=1), 1.0)  # 정규화된 벡터를 저장한다
-    # 청크가 바뀌면(전처리 재실행) 지문이 달라져 다시 임베딩한다
+    # 청크가 바뀌면 다시 임베딩한다
     _, cached_changed = load_or_embed([*chunks, {"chunk_id": "c3", "text": "new"}], CountingModel(), tmp_path)
     assert not cached_changed and CountingModel.calls == 2

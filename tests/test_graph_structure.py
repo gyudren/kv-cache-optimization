@@ -1,4 +1,4 @@
-"""그래프 구조·reducer·실패 처리·재개·관측성 검증."""
+"""그래프 구조, reducer, 실패 처리, 재개, 관측성 테스트."""
 from __future__ import annotations
 import asyncio
 import json
@@ -17,14 +17,13 @@ from kv_eval.supervisor.policy import Policy, decide
 from kv_eval.supervisor.router import route
 
 
-# ---- 패턴 정합성 ------------------------------------------------------------------------------
 def test_no_agent_to_agent_edges_and_single_router():
     compiled = build_graph(None, None, None)
     edges = [(e.source, e.target, e.conditional) for e in compiled.get_graph().edges]
     workers = set(WORKER_NODES)
     assert set(AGENT_NODES) < workers and "quality_evaluator" in workers
     assert not [e for e in edges if e[0] in workers and e[1] in workers], "작업 노드 간 직접 엣지 금지"
-    # 모든 작업 노드(보고서·품질 평가 포함)의 유일한 후속 노드는 supervisor다
+    # 작업 노드 다음은 항상 supervisor
     for worker in workers:
         assert {t for s, t, _ in edges if s == worker} == {"supervisor"}, worker
     assert {t for s, t, _ in edges if s == START} == {"supervisor"}
@@ -53,7 +52,6 @@ def test_routing_is_decided_by_state_only():
     assert route({**state, "next_agents": ["synthesis"]}) == "synthesis"
 
 
-# ---- reducer 동시 쓰기 --------------------------------------------------------------------------
 def test_reducers_merge_and_dedup():
     assert merge_dict({"a": 1}, {"b": 2}) == {"a": 1, "b": 2}
     long = {"source_id": "s1", "claim": "c", "page": 1, "excerpt": "x" * (STATE_EXCERPT_CHARS + 500)}
@@ -63,7 +61,7 @@ def test_reducers_merge_and_dedup():
 
 
 def test_parallel_send_writes_are_merged():
-    """4개 노드가 같은 superstep에서 perspectives·node_status·evidence에 동시에 써도 모두 남는다."""
+    """같은 superstep에서 4개 노드가 동시에 써도 모두 병합된다."""
     def worker(name):
         def node(state):
             return {"perspectives": {name: {"sufficient": True}}, "node_status": {name: "done"},
@@ -84,7 +82,6 @@ def test_parallel_send_writes_are_merged():
     assert len(out["evidence"]) == len(PERSPECTIVES) + 1  # 공통 근거는 한 번만
 
 
-# ---- 실패 처리(fallback) ----------------------------------------------------------------------
 def test_agent_exception_is_retried_then_recovers(run_graph):
     llm = FakeLLM(raise_on={"market": 1})
     state = run_graph(llm)
@@ -102,13 +99,12 @@ def test_agent_always_failing_is_excluded_and_reported_as_gap(run_graph):
     gap = next(g["detail"] for g in state["gaps"] if g["perspective"] == "stakeholder")
     assert "실행 실패" in gap and "RuntimeError" in gap
     section = state["report"].split("#### 근거 공백 (Supervisor 기록)", 1)[1].split("####", 1)[0]
-    # 7장 한계점에 readable_gaps 형식(관점 라벨 + "근거 부족:")으로 기록되고 내부 로그 문구는 빠진다
+    # 한계점에는 관점 라벨로 적고 예외 클래스명은 뺀다
     line = next(row for row in section.splitlines() if row.startswith("- **이해관계자** — 근거 부족:"))
     assert "실행 실패" in line and "RuntimeError" not in line
     assert state["status"] == "completed_with_gaps"
 
 
-# ---- 재개(체크포인트) --------------------------------------------------------------------------
 def test_resume_from_sqlite_checkpoint_skips_completed_nodes(tmp_path):
     llm = FakeLLM(crash_on={"synthesis": 1})
     path = str(tmp_path / "ckpt.sqlite")
@@ -126,7 +122,7 @@ def test_resume_from_sqlite_checkpoint_skips_completed_nodes(tmp_path):
     assert snapshot.next == ("synthesis",)
     assert set(snapshot.values["perspectives"]) == set(PERSPECTIVES)
 
-    # 새 프로세스를 흉내: 같은 파일로 체크포인터와 그래프를 다시 만든 뒤 입력 None으로 이어서 실행
+    # 새 프로세스: 같은 파일로 그래프를 다시 만들고 None으로 이어서 실행
     async def second_process():
         async with AsyncSqliteSaver.from_conn_string(path) as saver:
             return await build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=saver).ainvoke(None, config=config)
@@ -137,7 +133,6 @@ def test_resume_from_sqlite_checkpoint_skips_completed_nodes(tmp_path):
     assert llm.runs["synthesis"] == 2
 
 
-# ---- 관측성 -----------------------------------------------------------------------------------
 def test_decision_log_and_langsmith_config(run_graph):
     state = run_graph(FakeLLM())
     path = decision_log_path(state["trace_id"])
@@ -153,7 +148,7 @@ def test_decision_log_and_langsmith_config(run_graph):
 
 
 def test_supervisor_verifies_sufficiency_deterministically():
-    """에이전트가 sufficient=True라고 해도 고유 출처가 부족하면 Supervisor가 그 관점만 재조사시킨다."""
+    """sufficient=True여도 고유 출처가 부족하면 그 관점만 재조사한다."""
     base = initial_state("q", "t-suff")
     evidence = [{"agent": p, "technology": t, "source_type": "web", "url": f"https://x/{p}/{t}/{i}", "claim": "c",
                  "source_id": f"{p}{t}{i}"} for p in PERSPECTIVES for t in ("mla", "itme") for i in range(2)]
@@ -167,13 +162,13 @@ def test_supervisor_verifies_sufficiency_deterministically():
 
 
 def test_recursion_limit_follows_policy_instance():
-    """Policy(max_steps=30)으로 상한까지 도는 실행도 GraphRecursionError 없이 끝난다(D-20)."""
+    """max_steps까지 도는 실행도 GraphRecursionError 없이 끝난다."""
     from kv_eval.config import FINALIZE_STEPS
     policy = Policy(max_steps=30)
     graph = build_graph(FakeRAG(), FakeWeb(), FakeLLM(insufficient={p: INF for p in PERSPECTIVES}), policy=policy)
     assert graph.config["recursion_limit"] == policy.recursion_limit == (30 + FINALIZE_STEPS) * 2 + 10
     assert "recursion_limit" not in run_config("t")
-    # 재조사 한도를 크게 열어 max_steps까지 실제로 진행시킨다
+    # 재조사 한도를 풀어 max_steps까지 돌게 한다
     wide = Policy(max_steps=30, retry_limits={**RETRY_LIMITS, **{p: 100 for p in PERSPECTIVES}})
     graph = build_graph(FakeRAG(), FakeWeb(), FakeLLM(insufficient={p: INF for p in PERSPECTIVES}), policy=wide)
     trace_id = new_trace_id()

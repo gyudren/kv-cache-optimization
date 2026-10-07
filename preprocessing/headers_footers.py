@@ -1,9 +1,6 @@
-"""반복되는 머리글/바닥글(header/footer) 탐지 및 제거.
+"""여러 페이지 상·하단에서 반복되는 머리글/바닥글을 찾아 본문에서 뺀다.
 
-같은 문구(페이지 번호 등 숫자만 다른 경우 포함)가 여러 페이지의 상단/하단 여백에서
-반복되면 header/footer로 간주해 본문 청크에서 제외한다. 그대로 두면 청크마다 같은
-문구가 반복 삽입되어 검색 시 실제 내용이 없는 header/footer 청크가 우선순위로
-잡히는 문제가 생길 수 있다. 제거된 줄은 감사(audit)를 위해 그대로 버리지 않고 로그로 남긴다.
+페이지 번호처럼 숫자만 다른 줄도 같은 줄로 본다. 그대로 두면 내용 없는 청크가 검색 상위에 잡힐 수 있다.
 """
 
 import re
@@ -12,7 +9,7 @@ from dataclasses import dataclass
 
 TOP_BAND_RATIO = 0.08
 BOTTOM_BAND_RATIO = 0.08
-MIN_REPEAT_RATIO = 0.4  # 전체 페이지 중 이 비율 이상 반복되면 header/footer로 판정
+MIN_REPEAT_RATIO = 0.4  # 전체 페이지 중 이 비율 이상에서 반복되면 머리글/바닥글로 본다
 
 _DIGIT_RE = re.compile(r"\d+")
 
@@ -55,10 +52,7 @@ def detect_boilerplate_lines(band_lines_per_page: list[PageBandLines]) -> set[st
 
 
 def strip_boilerplate_lines(text: str, boilerplate: set[str]) -> tuple[str, list[str]]:
-    """본문 텍스트에서 boilerplate로 판정된 줄을 제거한다.
-
-    반환값: (제거 후 텍스트, 제거된 원본 줄 목록 — summary에 기록해 감사 가능하게 함)
-    """
+    """boilerplate 줄을 지운 텍스트와, summary에 남길 지운 원본 줄 목록을 돌려준다."""
     if not boilerplate:
         return text, []
 

@@ -1,9 +1,6 @@
-"""Evidence 발췌 원문 저장소: `data/cache/{trace_id}/evidence_{agent}.json` (State에는 짧은 발췌와 참조만).
+"""근거 원문 저장소: `data/cache/{trace_id}/evidence_{agent}.json`.
 
-근거 원문(논문 청크 최대 약 1,500자, 웹 본문)을 State에 그대로 두면 체크포인트마다 전체가 다시
-직렬화된다. 작업 노드가 끝날 때(guard) 원문을 디스크에 쓰고, State의 evidence에는
-`excerpt`(앞 STATE_EXCERPT_CHARS자)와 `excerpt_ref`만 남긴다. 원문이 필요한 곳(보고서의 인용 카탈로그,
-품질 평가 Judge의 인용 발췌)은 hydrate()로 원문을 되살려 쓴다.
+체크포인트가 커지지 않도록 State에는 앞부분 발췌와 excerpt_ref만 두고, 원문은 hydrate()로 되살린다.
 """
 from __future__ import annotations
 import json
@@ -13,7 +10,7 @@ from pathlib import Path
 from .config import STATE_EXCERPT_CHARS
 from .rag.cache import cache_dir
 
-_LOCK = threading.Lock()  # 같은 프로세스의 병렬 Send가 같은 trace 폴더에 쓸 때 직렬화
+_LOCK = threading.Lock()  # 병렬 Send가 같은 trace 폴더에 쓰는 것을 직렬화
 
 
 def _key(ev: dict) -> str:
@@ -40,7 +37,7 @@ def offload(trace_id: str, agent: str, evidence: list[dict]) -> list[dict]:
     compact, store = [], {}
     for ev in evidence:
         excerpt = ev.get("excerpt") or ""
-        if len(excerpt) <= STATE_EXCERPT_CHARS:  # 이미 축약본(또는 짧은 원문)이면 그대로 둔다
+        if len(excerpt) <= STATE_EXCERPT_CHARS:
             compact.append(ev)
             continue
         key = _key(ev)
@@ -57,8 +54,7 @@ def offload(trace_id: str, agent: str, evidence: list[dict]) -> list[dict]:
 def hydrate(evidence: list[dict], stats: dict | None = None) -> list[dict]:
     """excerpt_ref가 있는 항목의 발췌를 원문으로 되살린다.
 
-    원문을 찾지 못하면(저장소 삭제, 다른 머신에서 clone 등) 축약본을 쓰되 조용히 넘기지 않는다:
-    항목에 `excerpt_truncated=True`를 표시하고 stats["missing_full_text"]에 개수를 센다.
+    원문이 없으면 축약본을 두고 excerpt_truncated를 표시하며, stats에 개수를 센다.
     """
     files: dict[tuple[str, str], dict] = {}
     out, missing = [], 0
@@ -88,18 +84,14 @@ def missing_full_text(evidence: list[dict]) -> int:
 
 
 def source_unit(ev: dict) -> str:
-    """고유 출처 단위: 웹은 URL(문서 1건), 논문은 문서(doc_id).
-
-    같은 논문의 다른 페이지는 독립 출처가 아니다. 페이지 단위로 세면 논문 1편만으로도 '고유 출처 2개 이상'을
-    통과해 단일 저자 보고에 기댄 판정이 편향 검사를 빠져나간다.
-    """
+    """고유 출처 단위: 웹은 URL, 논문은 doc_id. 같은 논문의 다른 페이지는 같은 출처다."""
     if ev.get("source_type") == "web":
         return ev.get("url", "")
     return f"doc:{ev.get('doc_id')}"
 
 
 def source_units(evidence: list[dict]) -> dict[str, list[str]]:
-    """이번 시도에서 기술별로 수집·인용한 고유 출처(Supervisor 충분성 검사 입력)."""
+    """이번 시도의 기술별 고유 출처. Supervisor 충분성 검사에 쓴다."""
     out: dict[str, set[str]] = {}
     for ev in evidence:
         out.setdefault(ev.get("technology", ""), set()).add(source_unit(ev))

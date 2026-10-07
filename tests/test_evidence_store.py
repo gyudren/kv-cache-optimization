@@ -1,4 +1,4 @@
-"""지속성 비용(D-05): State에는 축약 발췌만, 원문은 디스크 저장소에서 되살려 보고서·평가에 쓴다."""
+"""State에는 축약 발췌만 두고 원문은 디스크 저장소에서 복원하는지 테스트."""
 from __future__ import annotations
 import re
 
@@ -22,10 +22,10 @@ def test_state_keeps_compact_evidence_but_readers_get_full_text(run_graph):
     state = run_graph(llm)
     assert state["evidence"] and all(len(ev["excerpt"]) <= STATE_EXCERPT_CHARS for ev in state["evidence"])
     assert any(ev.get("excerpt_ref") for ev in state["evidence"])
-    # 보고서 에이전트의 인용 카탈로그에는 300자보다 긴 원문(최대 900자)이 들어간다
+    # 보고서 프롬프트에는 축약 전 원문이 들어간다
     excerpts = re.findall(r"'excerpt': '([^']*)'", llm.prompts["report"][-1])
     assert excerpts and max(map(len, excerpts)) > STATE_EXCERPT_CHARS
-    # 품질 평가 Judge의 인용 발췌도 원문이다
+    # Judge에 넘기는 발췌도 원문이다
     snippets = cited_snippets(state)
     assert snippets and max(len(s["excerpt"]) for s in snippets) > STATE_EXCERPT_CHARS
 
@@ -36,11 +36,11 @@ def test_missing_store_is_flagged_not_silent(run_graph, isolated_outputs):
     llm = FakeLLM()
     state = run_graph(llm)
     assert evidence_store.missing_full_text(state["evidence"]) == 0
-    shutil.rmtree(isolated_outputs / "cache")  # 원문 저장소 삭제(새 clone과 같은 상황)
+    shutil.rmtree(isolated_outputs / "cache")  # 새로 clone한 상황
     assert evidence_store.missing_full_text(state["evidence"]) > 0
     result = quality_evaluator_node(state, llm)["eval_result"]
     assert result["evidence_store"]["cited_missing_full_text"] > 0 and result["warnings"]
-    assert "TRUNCATED" in llm.prompts["judge"][-1]  # Judge에게 축약 사실을 알린다
+    assert "TRUNCATED" in llm.prompts["judge"][-1]  # 축약됐다고 Judge에 알린다
     assert all(s["excerpt_truncated"] for s in cited_snippets(state))
 
 

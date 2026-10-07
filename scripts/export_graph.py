@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""컴파일된 LangGraph 그래프를 그림으로 내보낸다(README Architecture용).
+"""LangGraph 그래프 구조를 outputs/architecture.mmd와 architecture.png로 내보낸다.
 
-    python scripts/export_graph.py   → outputs/architecture.mmd (+ 가능하면 outputs/architecture.png)
+    python scripts/export_graph.py
 
-API 키·색인 없이 노드/엣지 구조만 컴파일한다. PNG 렌더링(draw_mermaid_png)은 mermaid.ink
-원격 API를 쓰므로 네트워크가 막힌 환경에서는 실패할 수 있다. 그때는 컴파일된 그래프의 실제 노드·엣지를
-Pillow(reportlab 의존성으로 함께 설치됨)로 직접 그린다. 둘 다 안 되면 Mermaid 원문(.mmd)만 남긴다.
-점선 = Supervisor의 conditional edge(State 기반 라우팅), 실선 = 고정 엣지(모든 작업 노드 → Supervisor 복귀).
+PNG는 mermaid.ink 원격 API로 만들고, 네트워크가 막혀 있으면 Pillow로 직접 그린다.
 """
 from __future__ import annotations
 import sys
@@ -18,7 +15,7 @@ from kv_eval.graph import build_graph  # noqa: E402
 
 
 def _local_png(drawable, path: Path) -> None:
-    """네트워크 없이 컴파일 그래프를 계층 배치로 그린다(노드·엣지는 drawable에서 그대로 읽는다)."""
+    """mermaid.ink 없이 Pillow로 그래프를 그린다."""
     from PIL import Image, ImageDraw, ImageFont
     agents = ["tech", "market", "stakeholder", "domain", "synthesis", "report"]
     width, height = 1320, 600
@@ -62,7 +59,7 @@ def _local_png(drawable, path: Path) -> None:
         draw.polygon(head, fill=color)
 
     for edge in drawable.edges:
-        # 같은 두 노드를 잇는 왕복 엣지는 좌우로 벌려 겹치지 않게 그린다.
+        # 왕복 엣지가 겹치지 않게 좌우로 벌린다.
         shift = -14 if edge.conditional else 14
         a = anchor(edge.source, pos[edge.target], shift)
         b = anchor(edge.target, pos[edge.source], shift)
@@ -92,7 +89,7 @@ def main(output_dir: Path = ROOT / "outputs") -> int:
         target.write_bytes(drawable.draw_mermaid_png())
         print(f"OK: {target} (mermaid.ink)")
         return 0
-    except Exception as exc:  # noqa: BLE001 - 네트워크 차단 시 로컬 렌더링으로 대체
+    except Exception as exc:  # noqa: BLE001
         print(f"WARN: mermaid.ink 렌더링 실패({type(exc).__name__}) → 로컬 렌더링", file=sys.stderr)
     try:
         _local_png(drawable, target)

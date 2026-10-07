@@ -1,4 +1,4 @@
-"""7 shared domain dimensions, grounded in each selected primary paper only."""
+"""도메인 적용성 평가: 공통 D1~D7 항목을 기술별 원문 논문만 근거로 판정한다."""
 from __future__ import annotations
 import re
 from typing import Any
@@ -26,12 +26,9 @@ CANONICAL = {code: f"{code} {title}" for code, title, _ in DIMENSIONS}
 
 
 def normalize_items(items: list[dict], evidence: list[dict]) -> list[dict]:
-    """LLM 출력의 평가항목명·인용을 검증 가능한 형태로 맞춘다.
+    """LLM이 쓴 평가항목명은 D-코드 정식 이름으로, "[1, p.7]" 형식 인용은 source_id로 맞춘다.
 
-    LLM은 항목명을 "MLA D1 워크로드 수용 능력"처럼 기술명을 붙이거나 조금 바꿔 쓰고,
-    인용도 source_id 대신 "[1, p.7]" 문자열로 돌려주는 경우가 많다. 이를 그대로 비교하면
-    판정이 맞아도 매번 "평가 결과 불완전·존재하지 않는 출처"로 실패해 재시도만 소진된다.
-    항목은 D-코드로, 인용은 실제 수집된 Evidence의 source_id로 정규화한다(없는 인용은 남겨 검증에서 걸리게 한다).
+    맞는 source_id가 없는 인용은 그대로 남겨 검증에서 걸리게 한다.
     """
     by_citation: dict[str, list[str]] = {}
     for ev in evidence:
@@ -60,8 +57,7 @@ SINGLE_DOC_NOTE = " (근거가 원문 1편의 저자 보고에 한정되어 '조
 def downgrade_single_document(items: list[dict], evidence: list[dict]) -> list[dict]:
     """'적합' 판정의 근거 문서가 1편뿐이면 '조건부'로 낮춘다.
 
-    도메인 평가는 설계상 각 기술의 원문 1편만 근거로 쓴다. 같은 논문의 여러 페이지는 독립 출처가 아니므로,
-    저자 보고 하나로 '적합'을 확정하지 않고 독립 재현이 필요하다는 조건을 판정에 남긴다.
+    같은 논문의 여러 페이지는 독립 출처가 아니라서 저자 보고 하나로 '적합'을 확정하지 않는다.
     """
     doc_of = {ev["source_id"]: ev.get("doc_id") for ev in evidence}
     out = []
@@ -78,12 +74,13 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
     feedback = state.get("feedback", {}).get("domain", {})
     research = []
     evidence = []
-    missing = []    # 필수 결함(14개 판정 불완전·없는 출처·인용 없는 판정): Supervisor 재조사 대상
-    optional = []   # RAG·LLM이 적은 세부 미확인 항목(GPU 종류·동시 요청 수 등): 보고서 한계점에만 기록
+    # missing은 Supervisor 재조사 대상, optional은 보고서 한계점에만 남는다.
+    missing = []
+    optional = []
     cache = rag_cache.load(state["trace_id"], "domain")
     tasks = [(tech, code, title, question)
              for tech in ("mla", "itme") for code, title, question in DIMENSIONS]
-    # contextvars(LangSmith 부모 run·실행 설정)를 워커 스레드로 복사한다.
+    # 워커 스레드의 호출도 같은 LangSmith trace에 남도록 ContextThreadPoolExecutor를 쓴다.
     with ContextThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
         answers = list(pool.map(
             lambda t: answer_with_cache(rag, cache, f"{t[0]} {t[1]} {t[2]}: {t[3]}", t[0], feedback), tasks))

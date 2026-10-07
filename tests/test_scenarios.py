@@ -1,4 +1,4 @@
-"""Fake LLM·Web·RAG 시나리오: 라우팅이 State에 따라 달라지고, 항상 유한하게 끝나는지 검증한다."""
+"""Fake 시나리오별 라우팅과 종료 테스트."""
 from __future__ import annotations
 
 from fakes import INF, FakeLLM, FakeWeb
@@ -11,7 +11,6 @@ def decisions(state):
     return [d["decision"] for d in read_decisions(state["trace_id"]) if d["node"] == "supervisor"]
 
 
-# (1) 정상 통과 ------------------------------------------------------------------------------
 def test_normal_pass(run_graph):
     llm = FakeLLM()
     state = run_graph(llm)
@@ -20,17 +19,16 @@ def test_normal_pass(run_graph):
     assert set(state["perspectives"]) == set(PERSPECTIVES)
     assert dict(llm.runs) == {"tech": 1, "market": 1, "stakeholder": 1, "domain": 1,
                               "synthesis": 1, "report": 1, "judge": 1}
-    # 4관점은 기술 선행 없이 한 번에 fan-out되고, 이후 종합 → 보고서 → 종료
+    # 4관점을 한 번에 fan-out한 뒤 종합, 보고서, 평가 순으로 끝난다
     assert decisions(state) == ["dispatch:tech,market,stakeholder,domain", "synthesis", "report", "evaluate",
                                 "end:passed"]
     for criterion in ("groundedness", "neutrality", "bias_control", "coverage"):
         c = state["eval_result"]["criteria"][criterion]
         assert set(c) >= {"passed", "score", "reason", "target_agents"}
-    assert "rag_cache" not in str(state["perspectives"])  # 원문 캐시는 State 밖(디스크)
+    assert "rag_cache" not in str(state["perspectives"])  # 원문 캐시는 디스크에 둔다
     assert set(state["cache_keys"]) == {"tech", "domain"}
 
 
-# (2) 시장 근거 부족 → 시장만 재호출 ---------------------------------------------------------------
 def test_market_insufficient_reruns_only_market(run_graph):
     llm, web = FakeLLM(insufficient={"market": 1}), FakeWeb()
     state = run_graph(llm, web=web)
@@ -38,12 +36,11 @@ def test_market_insufficient_reruns_only_market(run_graph):
     assert all(llm.runs[name] == 1 for name in ("tech", "stakeholder", "domain"))
     assert state["retry_counts"]["market"] == 1
     assert decisions(state)[:2] == ["dispatch:tech,market,stakeholder,domain", "dispatch:market"]
-    # 부족 항목(missing)이 재검색 질의로 전달됐다(retry_queries 재사용)
+    # missing 항목이 재검색 질의로 들어간다
     assert any("시장 규모 정량 근거" in q for q in web.queries)
     assert state["status"] == "completed"
 
 
-# (3) 품질 평가 미달 → 원인별 루프 --------------------------------------------------------------
 def test_eval_neutrality_failure_rewrites_report_only(run_graph):
     llm = FakeLLM(banned_report=1)
     state = run_graph(llm)
@@ -63,7 +60,7 @@ def test_eval_bias_failure_reinvestigates_responsible_perspective(run_graph):
     # 관점이 바뀌었으므로 종합·보고서·평가는 다시 만든다
     assert llm.runs["synthesis"] == 2 and llm.runs["report"] == 2 and llm.runs["judge"] == 2
     assert state["eval_result"]["passed"] is True
-    # 한쪽(긍정) 판정뿐이었으므로 재조사 질의는 반대 방향(우려) 근거를 찾도록 바뀐다
+    # 긍정 일색이었으니 재조사는 우려 쪽 근거를 찾는다
     assert "concerns" in " ".join(state["feedback"]["market"]["rewritten_queries"])
 
 
@@ -82,7 +79,7 @@ def test_llm_judge_coverage_failure_reinvestigates_target(run_graph):
 
 
 def test_rule_failure_cannot_be_overruled_by_judge(run_graph):
-    # Judge는 항상 통과를 주지만 규칙(금지 표현)이 실패하면 항목은 미달이어야 한다.
+    # Judge가 통과를 줘도 금지 표현 규칙이 실패하면 미달
     llm = FakeLLM(banned_report=INF)
     state = run_graph(llm)
     neutrality = state["eval_result"]["criteria"]["neutrality"]
@@ -99,7 +96,6 @@ def test_synthesis_requests_more_evidence_for_one_perspective(run_graph):
     assert llm.runs["stakeholder"] == 2 and llm.runs["market"] == 1 and llm.runs["synthesis"] == 2
 
 
-# (4) 항상 부족 → 유한 스텝 END + 근거 공백 --------------------------------------------------------
 def test_always_insufficient_terminates_with_gaps(run_graph):
     llm = FakeLLM(insufficient={name: INF for name in PERSPECTIVES})
     state = run_graph(llm)
@@ -124,9 +120,8 @@ def test_step_limit_ends_gracefully_with_report(run_graph):
     assert log[-1]["decision"].startswith("end:")
 
 
-# 평가 불변식 ----------------------------------------------------------------------------------
 def _assert_passed_only_after_evaluation(state):
-    """end:passed 직전에는 마지막 report 이후의 evaluate가 반드시 있어야 한다."""
+    """end:passed면 마지막 보고서 뒤에 evaluate가 있어야 한다."""
     log = [d["decision"] for d in read_decisions(state["trace_id"]) if d["node"] == "supervisor"]
     if log[-1] != "end:passed":
         return
@@ -149,7 +144,7 @@ def test_failed_report_is_not_evaluated(run_graph):
     log = decisions(state)
     i = log.index("report")
     assert log[i + 1] == "retry:report"          # 실패한 보고서는 평가로 가지 않는다
-    assert llm.runs["judge"] == 1                  # 재작성된 보고서에 대해서만 Judge 1회
+    assert llm.runs["judge"] == 1                  # 재시도한 보고서만 평가
     assert state["status"] == "completed"
 
 

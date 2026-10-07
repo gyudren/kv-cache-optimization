@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""State·체크포인트 크기 실측 (API 키 불필요).
+"""Fake LLM·Web·RAG로 그래프를 한 번 돌려 State와 체크포인트 크기를 잰다(API 키 불필요).
 
-1) Fake LLM·Web·RAG로 그래프를 SqliteSaver와 함께 1회 실행하고(발췌 길이는 실데이터와 비슷하게
-   논문 1,200자·웹 1,000자), 최종 State JSON 크기와 체크포인트 누적 크기를 잰다.
-2) 이전 실제 실행의 State(outputs/legacy_rag/final_state.json)에서 evidence 필드가 현재 저장 방식으로
-   얼마가 되는지 계산한다.
+outputs/legacy_rag/final_state.json이 있으면 그 evidence를 현재 저장 방식으로 줄인 크기도 함께 낸다.
 
     python scripts/measure_state_size.py [--scenario normal|rework]
 """
@@ -39,7 +36,7 @@ def measure_fake(scenario: str) -> dict:
         llm = FakeLLM() if scenario == "normal" else FakeLLM(insufficient={"market": 1}, one_sided={"stakeholder": 1})
         trace_id = new_trace_id()
 
-        async def _run():  # 운영(app.py)과 같은 비동기 경로·체크포인터로 잰다
+        async def _run():  # app.py와 같은 비동기 체크포인터 경로
             async with AsyncSqliteSaver.from_conn_string(f"{tmp}/ckpt.sqlite") as saver:
                 graph = build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=saver)
                 return await graph.ainvoke(initial_state("q", trace_id), config=run_config(trace_id))

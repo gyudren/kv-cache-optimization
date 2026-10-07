@@ -1,11 +1,4 @@
-"""충분성 = 필수 결함 없음: 구조적 결함 종류마다 그 관점만 다시 부르고, LLM 자기 보고만으로는 다시 부르지 않는다.
-
-결함은 모두 Fake 도구·LLM이 만든다(운영 코드에 실패 주입 없음).
-- tech        : 필수 질문(작동 원리) RAG 검색이 관련 청크를 못 찾음 → 원문 근거 없음
-- market      : ITME 인용 출처 1개 → Supervisor 결정적 검사(고유 출처 < 2)
-- stakeholder : 웹 검색이 같은 URL 1건만 돌려줌 → 에이전트는 성립을 보고하지만 고유 출처 < 2
-- domain      : D1 판정에 인용 없음
-"""
+"""구조적 결함이 있는 관점만 다시 부르고, LLM 자기 보고만으로는 다시 부르지 않는지 테스트."""
 from __future__ import annotations
 
 import pytest
@@ -24,7 +17,7 @@ def _log(state: dict) -> list[dict]:
     return [d for d in read_decisions(state["trace_id"]) if d["node"] == "supervisor"]
 
 
-# 관점 → (Fake 구성, 재작업 사유에 들어가야 할 필수 결함). Fake는 상태를 가지므로 테스트마다 새로 만든다.
+# 관점: (Fake 생성 함수, 재작업 사유에 나와야 할 결함). Fake는 상태가 있어 매번 새로 만든다.
 DEFECTS = {
     "tech": (lambda: {"rag": FakeRAG(no_evidence={MECHANISM_QUESTIONS["mla"]: 1})},
              "tech/mla: 필수 질문(작동 원리)의 원문 근거 없음"),
@@ -52,7 +45,7 @@ def test_structural_defect_reruns_only_that_perspective(run_graph, target):
 
 
 def test_supervisor_rechecks_sources_even_when_agent_reports_no_defect(run_graph):
-    """웹이 출처 1개만 돌려주면 에이전트 결과는 성립(필수 결함 없음)해도 Supervisor가 고유 출처를 다시 세어 재조사한다."""
+    """에이전트가 결함 없다고 해도 Supervisor가 고유 출처를 다시 센다."""
     web = FakeWeb(single_source_calls={"stakeholder": STAKEHOLDER_CALLS_PER_RUN})
     llm = FakeLLM()
     seen: list[dict] = []
@@ -65,7 +58,7 @@ def test_supervisor_rechecks_sources_even_when_agent_reports_no_defect(run_graph
 
     llm._stakeholder = spy
     state = run_graph(llm, web=web)
-    assert [s["cited"] for s in seen if s["run"] == 1] == [1, 1]   # 1회차: 기술별 인용 1개(결과는 성립)
+    assert [s["cited"] for s in seen if s["run"] == 1] == [1, 1]   # 1회차는 기술별 인용 1개
     assert [d["decision"] for d in _log(state)[:2]] == [FIRST, "dispatch:stakeholder"]
     assert len(state["perspectives"]["stakeholder"]["source_units"]["mla"]) >= 2  # 2회차 출처로 다시 판정
 

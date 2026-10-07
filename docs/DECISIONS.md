@@ -1,76 +1,45 @@
-# 설계 결정 기록 (Supervisor 개선)
+# 설계 결정 노트
 
-형식: "`<항목>`: <대안>으로 하면 <문제>이므로, <선택>을 선정했다." 코드 위치는 괄호로 적는다.
+Supervisor 패턴으로 옮기면서 정한 것과 그 이유를 적는다. 항목 끝의 백틱은 코드 위치다.
 
 ## 패턴·라우팅
 
-- `오케스트레이션 패턴`: 기존 Distributed(단계별 master 게이트 체인)로 하면 실행 순서가 엣지에 묶여 근거가 부족한 관점만 골라 다시 부를 수 없으므로, 단일 Supervisor가 State를 보고 다음 노드를 고르는 Supervisor 패턴을 선정했다. (`supervisor/`, `graph.py`)
-- `Supervisor 판단 방식(규칙 vs LLM)`: Supervisor를 LLM 라우터로 하면 같은 State에서도 실행마다 다음 노드가 바뀌어 재현·테스트가 불가능하고 매 진입마다 LLM 호출 비용과 지연이 붙으므로, 라우팅 입력이 모두 구조화된 제어 필드(충분도·노드 상태·재시도 횟수·평가 결과)라는 점을 이용해 결정적 규칙 함수 `policy.decide`를 선정했다(내용 판단은 각 에이전트와 LLM Judge가 맡는다). (`supervisor/policy.py`, `docs/SUPERVISOR_POLICY.md`)
-- `라우팅 지점`: 게이트 노드마다 conditional edge를 두면 라우팅 규칙이 그래프 여러 곳에 흩어져 순서가 다시 하드코딩되므로, `add_conditional_edges("supervisor", route)` 하나만 두고 결정은 순수 함수 `policy.decide`에 모았다. (`graph.py`, `supervisor/policy.py`)
-- `결정과 라우터 분리`: 라우터 함수 안에서 판단하면 결정 사유를 State·로그에 남길 수 없으므로, supervisor 노드가 결정을 `next_agents`·`last_decision`에 쓰고 라우터는 `next_agents`만 읽게 했다. (`supervisor/router.py`)
-- `관점 실행 순서`: 기술 조사를 먼저 고정하면 시장·이해관계자·도메인 에이전트가 기술 조사 결과를 입력으로 쓰지 않는데도(데이터 의존성 없음) 대기만 늘어나므로, 미수집 4관점을 State에서 골라 한 번에 fan-out하도록 했다(할당은 한 번에, 실행은 아래 `에이전트 실행 동시성`대로 순차). (`supervisor/policy.py::_perspective_step`)
-- `할당 방식`: 정적 병렬 엣지로 하면 항상 같은 묶음만 실행되어 부족한 관점 1개만 다시 보낼 수 없으므로, 실행 대상 수가 State에 따라 바뀌는 `Send` 동적 fan-out을 선정했다. (`supervisor/router.py::route`)
-- `재작업 범위`: 부족 시 전 관점을 다시 돌리면 충분한 관점의 LLM·웹 호출이 낭비되고 결과가 흔들리므로, 필수 결함이 있거나 고유 출처가 부족한 관점만 다시 부르고 필수 결함은 사유(`missing`)로, Agent가 확인하지 못한 세부 항목은 기술별 검색 힌트(`queries_by_tech`)로 넘겼다. (`supervisor/policy.py::_sufficiency_feedback`)
-- `충분성 계산 범위`: 여러 시도의 evidence를 누적해 고유 출처를 세면 매 시도 출처 1개만 찾아도 두 시도를 합쳐 "충분"이 되어 재조사가 무의미해지므로, 노드 경계(guard)에서 이번 시도의 기술별 출처(`source_units`)를 결과에 기록하고 Supervisor·편향 규칙은 최신 시도만 센다. (`supervisor/guard.py`, `evaluation/quality.py::evidence_shortfalls`)
-- `재검색 힌트 구조`: 부족 사유 문장(예: "market/mla: 고유 출처 1개(<2)")을 그대로 검색어로 넘기면 검색 결과가 없고 두 기술 질의에 섞여 다른 기술 이름이 들어가므로, 재작업 지시를 사유(`missing`)와 기술별 검색 힌트(`queries_by_tech`)로 분리하고 힌트는 구조화 데이터(관점·기술·부족 유형)에서 실제로 부족한 기술에만 만든다. (`supervisor/policy.py::_rework`, `tools/__init__.py::scoped_feedback`)
-- `원문 저장소 부재`: 저장소가 없을 때 축약 발췌로 조용히 대체하면 Judge가 잘린 근거로 Groundedness를 통과시킬 수 있으므로, 축약 항목을 표시해 Judge 프롬프트·`eval_result`·`validation.json`에 경고로 남기고 `--report-only`는 원문이 없으면 즉시 실패시켰다(이슈로 막으면 보고서 재작성으로는 고칠 수 없는 원인으로 루프만 소모하므로 경고로 둔다). (`evidence_store.py::hydrate`, `app.py::report_only`)
-- `recursion_limit 출처`: `run_config`가 config의 `MAX_STEPS`로 상한을 정하면 다른 Policy(예: max_steps=30)를 쓴 그래프가 `GraphRecursionError`로 죽으므로, `build_graph`가 실제로 쓰는 Policy의 `max_steps`로 계산해 그래프 기본 설정에 넣었다. (`config.py::recursion_limit_for`, `graph.py`)
-- `충분성 판단 기준(필수 vs 선택)`: Agent가 적은 미확인 항목을 모두 부족으로 보면 하이퍼파라미터·CAGR 방법론·GPU 종류처럼 판정과 무관한 빈칸 때문에 실제 실행 2회 모두 4관점이 매번 "부족"으로 판정되어 재시도 한도를 다 쓰고서야 넘어갔으므로(사실상 고정 스텝), 판정을 막는 필수 결함(검색 결과·인용 없음, 기준 판정 불가, TRL 미기재, 필수 질문 근거 없음, D1~D7 불완전)과 Supervisor의 고유 출처 검사만 재조사 사유로 쓰고 LLM의 자기 판단(`llm_sufficient`)과 세부 미확인 항목(`missing_optional`)은 보고서 한계점에만 남겼다. (`agents/*.py`, `supervisor/policy.py::classify`)
-- `재작업 지시 전달`: 이전에 충분했던 RAG 답을 그대로 재사용하면 재작업 지시가 있어도 같은 근거만 돌아오므로, 지시(missing·재검색 힌트)의 지문을 캐시 키에 넣어 지시가 겨냥한 질문(기술명·D-코드 기준)만 다시 검색하고 지시를 RAG 질의 계획과 에이전트 프롬프트(`SUPERVISOR REWORK REQUEST`)에 넣었다. (`rag/workflow.py::answer_with_cache`, `tools/__init__.py::rework_note`)
-- `Send 페이로드`: `Send(name, state)`로 State 전체를 넘기면 체크포인트의 대기 작업마다 evidence·보고서가 fan-out 수만큼 복제되므로, 관점 에이전트가 읽는 필드(`trace_id·retry_counts·feedback·user_query·step_count`)만 넘겼다. (`supervisor/router.py::SEND_KEYS`)
-- `스레드 컨텍스트`: 에이전트 안의 질문 병렬 처리를 일반 `ThreadPoolExecutor`로 하면 contextvars가 끊겨 LLM·웹 호출이 LangSmith에서 그래프 run 밖의 고아 run이 되므로, `ContextThreadPoolExecutor`로 실행 설정·부모 run을 워커 스레드에 복사했다(테스트로 trace_id 전파 확인). (`agents/technology.py`, `agents/domain.py`)
-- `비동기 실행`: 동기 `stream`과 스레드 풀로 하면 `Send`로 받은 관점이 스레드마다 바로 실행되어 동시 실행 수와 메모리를 한곳에서 통제하기 어렵고 블로킹 호출이 실행 흐름을 붙잡으므로, 작업 노드를 `async def`로 바꾸고 `astream`·`AsyncSqliteSaver`로 실행했다. 동기 SDK 호출(OpenAI·Tavily·임베딩)은 `asyncio.to_thread`로 넘기며(contextvars가 복사되어 LangSmith 부모 run 유지), 동시 실행 수는 이벤트 루프의 semaphore(`max_concurrency`)가 정한다. (`supervisor/guard.py`, `app.py::execute`)
-- `에이전트 실행 동시성`: 4관점을 동시에 돌리면 관점마다 근거 원문·프롬프트·RAG 질문 12개가 함께 메모리에 올라 최대 메모리가 관점 수만큼 커지고(OOM 위험), 같은 MPS 임베딩 모델을 여러 스레드가 동시에 불러 Metal abort로 실제 실행이 2회 중단됐으므로, Supervisor의 할당(`Send` fan-out)은 그대로 두고 실행만 `max_concurrency=AGENT_CONCURRENCY`(기본 1)로 하나씩 순차 처리했다(환경변수로 조정, 테스트로 겹침 0과 상한을 풀면 겹친다는 것을 함께 확인). (`config.py`, `observability.py::run_config`, `tests/test_async_execution.py`)
-- `질의 임베딩 직렬화`: 에이전트 안의 RAG 질문 병렬 처리에서 질의 임베딩을 동시에 부르면 macOS MPS가 스레드 간 동시 encode를 지원하지 않아 프로세스가 abort되므로(락을 빼면 exit 134로 재현), 짧은 질의 임베딩만 락으로 직렬화하고 LLM 호출은 병렬로 남겼다. (`rag/retrieve.py`)
-- `문서 임베딩 저장`: 실행마다 청크 359개를 다시 임베딩하면 시작에 40~60초가 걸리고 같은 계산을 반복하므로, 모델 ID·청크(chunk_id·본문)로 만든 지문을 키로 정규화 벡터를 `data/cache/index/{지문}.npy`에 최초 1회 저장하고 이후에는 읽기만 한다. 청크·모델이 바뀌면 지문이 달라져 자동으로 다시 임베딩하고, 임시 파일에 쓴 뒤 교체해 반쯤 쓴 캐시를 읽지 않는다. FAISS Flat·BM25는 저장된 벡터와 청크로 즉시 다시 만든다. (`rag/index.py::load_or_embed`)
-- `종합 단계 추가 근거 요청`: 종합이 요청한 관점을 무시하고 공백으로만 남기면 회복 가능한 근거 부족까지 포기하게 되므로, `needs_source_agents`의 관점만 재시도 한도 안에서 다시 부르고 한도를 넘으면 근거 공백으로 기록했다. (`supervisor/policy.py::_synthesis_step`)
-- `하위 노드 무효화`: 관점을 다시 조사한 뒤 이전 종합·보고서를 그대로 쓰면 보고서가 새 근거를 반영하지 않으므로, 관점 재할당 시 `node_status`의 synthesis·report·quality_evaluator를 pending으로 되돌렸다. (`supervisor/policy.py::invalidate_downstream`)
-- `기술별 조사 질문`: 기술 조사 질문을 두 기술에 공통으로 두면 모델 구조 기술인 MLA에도 "메모리 계층 메커니즘"을 묻게 되어 매 시도 '설명 없음'이 근거 부족으로 보고되므로, 공통 질문 5개와 기술별 작동 원리 질문(MLA: 저랭크 잠재 KV 압축, ITME: CXL 계층 배치·프리페치) 1개로 나누고 판정에 꼭 필요한 질문(작동 원리·정량 결과·성숙도 근거)만 필수로 정했다. (`agents/technology.py`)
-- `TRL 7~9 판정 근거`: MLA를 DeepSeek-V2 원 아키텍처와 별개의 "계열"로 보면 DeepSeek API로 서비스되는 MLA 기반 모델(V2/V3/R1)과 서빙 프레임워크의 MLA 커널이 MLA 자체의 운영 근거에서 빠져 보고서가 원문의 "actually deployed"와 충돌하는 "상용 운영 미확인"을 쓰므로, MLA 기반 모델의 상용 서비스는 MLA 자체의 운영 채택으로 보고(ITME의 CXL 제품 일반은 계열 근거로만 유지) 미확인 사항은 "독립 재현·외부 고객 채택"처럼 실제로 빠진 것으로 좁혀 쓰게 했다. TRL 숫자 구간은 척도 정의 웹 출처를 함께 수집해 인용하고 근거 수준을 말로도 적는다. (`agents/technology.py`, `agents/report.py`)
-- `품질 평가 원인 귀속`: Groundedness·중립성 미달을 항상 보고서 재작성으로 보내면 4.1 TRL 표처럼 코드가 에이전트 판정을 그대로 옮긴 부분의 결함은 재작성해도 같은 판정으로 다시 채워져 고쳐지지 않으므로(실제 실행에서 재작성 2회 후 미검증 종료), Judge가 원인 에이전트를 지목하게 하고 경로를 항목이 아니라 원인(`target_agents`)으로 정했다: 관점이면 재조사, report면 재작성. (`evaluation/quality.py::combine`, `supervisor/policy.py::_report_and_eval_step`)
-- `후속 재조사 한도 분리`: 종합·평가 요청을 충분성 재조사와 같은 한도로 세면 충분성 재조사가 한도를 먼저 다 써서 종합 요청 4건이 공백 4줄로만 남고 평가 미달 → 관점 재조사 경로는 실행될 수 없으므로, 관점별 후속 재조사 한도(`FOLLOWUP_LIMITS`=1)를 따로 두고 `excluded` 관점도 다시 조사할 수 있게 했다. (`config.py`, `supervisor/policy.py::_Builder.followup`)
-- `출처 단위`: 논문을 (문서, 페이지)로 세면 논문 1편만으로 '고유 출처 2개'를 통과하므로 문서 단위로 셌다. 도메인 평가는 설계상 기술별 원문 1편만 쓰므로 이 규칙 대신 단일 문헌 근거의 '적합'을 '조건부'로 낮춰 단일 출처 위험을 판정에 드러냈다. (`evidence_store.py::source_unit`, `agents/domain.py::downgrade_single_document`)
-- `이해관계자 출처 등급`: 포럼·Hacker News·개인 블로그를 기업·시장 반응과 같은 무게로 쓰면 개인 의견이 경쟁 진영·투자 업계 판정이 되므로, 도메인으로 `개인·커뮤니티 글`을 먼저 판별해 개발자 반응의 보조 근거로만 쓰고 경쟁 진영·투자 업계 판정은 그런 글만 있으면 보류하게 했다(SNS는 검색에서 제외). (`tools/web_search.py`, `agents/stakeholder.py`)
-- `설계 문서 [D] 사용 범위`: [D]를 어디서나 인용으로 인정하면 허용 문서 풀(논문 4편·웹) 밖의 내부 문서가 기술 사실의 근거가 되고 수치 문장 검사도 우회되므로, [D]는 1·2장의 설계 조건(도메인·선정 사유·비선정 후보·KV cache 규모 가정·평가 기준)에만 쓰게 하고 그 밖에서 [D]만 붙은 문장은 규칙 위반으로 처리했다. (`evaluation/quality.py::check_groundedness`)
-- `중립성 규칙`: 단어 하나("추천", "1위", "도입해야")로 잡으면 "단일 추천을 제시하지 않는다"·"HBM 시장 1위 [W3]"·전제조건 문장을 오탐하고 문장 어디든 부정어가 있으면 면제하던 방식은 "MLA가 ITME보다 우수하지만 …않았다"를 놓쳤으므로, 두 평가 대상 간 비교·추천·지시 표현만 잡고 같은 절 안의 바로 뒤 부정만 면제했다. (`evaluation/quality.py::neutrality_issues`)
-- `이전 시도 근거 정리`: 재시도 근거를 계속 이어 붙이면 지금은 쓰지 않는 이전 시도 근거까지 보고서 카탈로그·편향 검사에 남으므로, 에이전트가 다시 실행되면 그 에이전트의 이전 근거를 이번 결과로 교체했다(충분했던 RAG 답은 캐시에서 다시 실려 온다). (`state.py::merge_evidence`)
-- `7장 근거 공백 표기`: Supervisor 기록 문장을 그대로 옮기면 "재조사 한도 소진" 같은 내부 로그가 반복되므로, 관점별로 묶고 중복과 처리 이력 문구를 지워 "무엇을 확인하지 못했는가"만 적었다(원문은 `validation.json`의 `gaps`에 남는다). (`agents/report.py::readable_gaps`)
+- 오케스트레이션 — 단계별 게이트 체인은 실행 순서가 엣지에 묶여 부족한 관점만 다시 부를 수 없으므로, 단일 Supervisor가 State를 보고 다음 노드를 고른다. `graph.py`, `supervisor/`
+- Supervisor 판단 방식 — LLM 라우터는 같은 State에서도 결과가 달라져 재현·테스트가 안 되고 매 진입마다 호출 비용이 붙으므로, 라우팅 입력이 모두 구조화 필드인 점을 살려 결정적 규칙 함수로 둔다. `supervisor/policy.py::decide`
+- 라우팅 지점 — conditional edge는 `supervisor` 하나뿐이고, 결정 사유를 남기기 위해 supervisor 노드가 `next_agents`·`last_decision`을 쓰고 라우터는 `next_agents`만 읽는다. `graph.py`, `supervisor/router.py`
+- 할당 방식 — 정적 병렬 엣지는 항상 같은 묶음만 돌리므로, 미수집·부족 관점만 골라 `Send`로 동적 fan-out하고 페이로드는 관점 에이전트가 읽는 필드로 제한한다. `supervisor/router.py::route`
+- 충분성 기준 — 세부 미확인 항목까지 부족으로 보면 매번 재시도 한도를 다 쓰므로, 판정을 막는 필수 결함(`missing`)과 고유 출처 수만 재조사 사유로 쓰고 `missing_optional`은 보고서 한계점에만 남긴다. `supervisor/policy.py::classify`
+- 출처 집계 범위 — 시도별 출처를 누적하면 매 시도 1개씩만 찾아도 통과하므로, guard가 기록한 최신 시도의 `source_units`만 센다. `supervisor/guard.py`, `evaluation/quality.py::evidence_shortfalls`
+- 재작업 지시 — 부족 사유 문장은 검색어로 쓸 수 없으므로 사유(`missing`)와 기술별 검색 힌트(`queries_by_tech`)로 나누고, 지시의 지문을 RAG 캐시 키에 넣어 겨냥한 질문만 다시 검색한다. `supervisor/policy.py::_rework`, `rag/workflow.py::answer_with_cache`
+- 평가 노드 호출 — `report → quality_evaluator` 고정 엣지는 빈 보고서까지 평가하므로, 보고서도 Supervisor로 돌아오고 본문이 있을 때만 `evaluate`로 평가 노드를 부른다. `supervisor/policy.py::_report_and_eval_step`
 
-## State Schema (DEV_PLAN §5 7항목)
+## State
 
-- `제어 vs 페이로드 분리`: 한 딕셔너리에 섞으면 라우팅 조건이 결과 본문 구조에 의존해 프롬프트를 바꿀 때 라우팅이 깨지므로, Supervisor는 제어 필드(`perspective_status, node_status, retry_counts, eval_result, step_count`)와 결과의 `sufficient/missing`만 읽도록 분리했다. (`state.py::GraphState`)
-- `관측성 위치`: 로그를 State의 `operator.add` 리스트에 쌓으면 체크포인트마다 전체 이력이 복제되어 커지므로, 결정 로그 본문은 `outputs/decisions_{trace_id}.jsonl`과 LangSmith에 두고 State에는 직전 결정 1건(`last_decision`)만 남겼다. (`observability.py`)
-- `지속성 비용`: 원문 RAG 캐시와 Evidence 발췌 원문을 State에 넣으면 이전 실행 기준 `final_state.json` 848KB(evidence만 491KB)가 체크포인트마다 다시 저장되므로, RAG 캐시는 `data/cache/{trace_id}/rag_{agent}.json`, 발췌 원문은 `evidence_{agent}.json` 디스크 저장소에 두고 State에는 160자 축약본·`excerpt_ref`·`cache_keys`만 남겼다(실측: 이전 실행 evidence 491,320B → 179,972B, Fake 재작업 실행 체크포인트 21개 누적 3,968,002B → 1,495,279B; 300자일 때는 227,639B / 1,840,080B). 보고서·평가는 `hydrate()`로 원문을 쓴다. (`evidence_store.py`, `rag/cache.py`, `scripts/measure_state_size.py`)
-- `상관 키`: 키를 따로 쓰면 트레이스·State·로그를 사람이 손으로 맞춰야 하므로, uuid4 `trace_id` 하나를 LangGraph `thread_id`·LangSmith metadata·결정 로그 파일명에 함께 썼다. (`observability.py::run_config`)
-- `재개/복구`: 메모리 체크포인터(`MemorySaver`)는 프로세스가 죽으면 사라져 15분짜리 실행을 처음부터 다시 해야 하고, Postgres 체크포인터는 단일 사용자 CLI에 DB 서버 운영을 요구하므로, 파일 하나로 끝나는 SQLite 체크포인터(비동기 실행이라 `AsyncSqliteSaver`, thread_id=trace_id)와 `node_status`·`last_error`·`retry_counts`로 마지막 체크포인트부터 `--resume`하게 했다. (`app.py::open_checkpointer`)
-- `동시 처리`: reducer 없이 `Send`로 함께 할당된 노드가 같은 superstep에서 같은 키에 쓰면(순차 실행이어도 쓰기는 superstep 끝에 함께 반영된다) `InvalidUpdateError`가 나거나 마지막 값만 남으므로, `perspectives·node_status·retry_counts·last_error·feedback`은 키 단위 dict merge, `evidence`는 dedup-append, `gaps`는 순서 유지 중복 제거 reducer로 정했다. (`state.py`)
-- `종료 보장`: `recursion_limit`만 두면 상한에 걸릴 때 예외로 죽어 보고서가 남지 않으므로, Supervisor가 `step_count > MAX_STEPS`를 먼저 감지해 조사를 멈추고 근거 공백을 명시한 뒤 종합→보고서→평가까지 마치고 정상 종료하게 했다(재시도 상한·`recursion_limit`은 2·3차 그물). (`supervisor/policy.py::decide`, `config.py`)
-- `재시도 상한 값`: 관점 재시도를 0~1회로 하면 질의 재작성 한 번으로 회복되는 일시적 근거 부족도 공백으로 끝나고 3회 이상이면 같은 공개 자료를 반복 검색해 비용(관점당 LLM 호출 수십 회)만 늘므로, 관점 2회·보고서 재작성 2회·종합 1회(표현 보완만)·평가 실행 실패 1회로 정했다(이전 실제 실행 로그에서도 tech 재작성 2회·관점 재할당 2회가 발생해 2회가 실사용 범위). (`config.py::RETRY_LIMITS`)
-- `MAX_STEPS = 20`: 10 이하로 하면 Fake 고장 주입 시나리오의 최대 관측치(Judge 4항목 상시 미달 17회, 판정 한쪽 고정 15회)조차 마치기 전에 마무리 모드로 끊기고, 이론적 최악(관점 재조사가 평가 단계에서 하나씩 소진되어 30회 이상)까지 허용하면 실제 실행(진입당 수 분)이 1시간을 넘으므로, 정상 경로(5회)와 관측 최악(17회)은 끝까지 가고 그 이상은 근거 공백을 명시하는 마무리 모드로 끊도록 20으로 정했다. (`config.py`)
-- `FINALIZE_STEPS = 5`: 상한 도달 후 마무리는 종합→보고서→평가→종료 4회인데 4로 딱 맞추면 재개 직후 재진입 한 번에도 보고서 없이 하드 종료되므로, 여유 1을 더해 5로 정했다(마무리 중 실패는 재시도하지 않아 4회를 넘지 않는다). (`config.py`)
+- 제어·페이로드 분리 — 라우팅이 결과 본문 구조에 의존하지 않도록, Supervisor는 제어 필드와 결과의 `sufficient`·`missing` 같은 신호만 읽는다. `state.py::GraphState`
+- reducer — `Send`로 함께 할당된 노드가 같은 superstep에 같은 키를 쓰면 충돌하므로, dict 필드는 키 단위로 병합하고 `evidence`는 같은 에이전트의 이전 근거를 지운 뒤 중복 없이 이어 붙인다(`gaps`도 중복 제거). `state.py`
+- 근거 공백 — 관점·기술·종류·내용을 가진 구조화 dict로 두어 보고서 7장과 편향·커버리지 규칙이 같은 데이터를 읽는다. `state.py::Gap`
+- State 크기 — 결정 로그 본문은 `outputs/decisions_{trace_id}.jsonl`, RAG 캐시와 발췌 원문은 `data/cache/{trace_id}/`에 두고 State에는 `last_decision`과 160자 축약본만 남겨 체크포인트가 커지지 않게 한다. `observability.py`, `evidence_store.py`
+- 상관 키 — uuid4 `trace_id` 하나를 LangGraph `thread_id`·LangSmith metadata·결정 로그 파일명에 함께 써서 손으로 맞출 일을 없앤다. `observability.py::run_config`
+- 재개 — 메모리 체크포인터는 프로세스가 죽으면 사라지고 Postgres는 CLI에 과하므로, 파일 하나로 끝나는 `AsyncSqliteSaver`에 저장하고 `--resume`으로 이어 간다. `app.py::open_checkpointer`
 
 ## 실패 처리·품질 평가
 
-- `평가 기반 재조사 질의`: 편향·커버리지 미달 사유 문장을 그대로 재검색 질의로 넘기면 검색 결과가 나오지 않으므로, 사유는 `missing`으로 전달하고 질의는 반대 방향(우려/긍정)·독립 출처를 찾는 힌트로 바꿨다(규칙 사유가 없는 Judge 단독 미달도 일반 힌트만 사용). (`supervisor/policy.py::_eval_feedback`)
-- `에이전트 예외 처리`: 예외를 그대로 올리면 그래프 전체가 죽어 보고서가 남지 않으므로, 래퍼가 예외를 `node_status=failed`·`last_error`로 바꾸고 Supervisor가 한도 안에서 재시도, 넘으면 제외 후 근거 공백으로 기록하게 했다. (`supervisor/guard.py`)
-- `품질 평가 방식`: 형식 검사만 하면 근거가 주장을 뒷받침하는지 볼 수 없고 LLM Judge만 쓰면 실행마다 판정이 바뀌므로, 규칙 검사를 하드 게이트·LLM Judge(`EvalVerdict`)를 내용 게이트로 쓰는 Hybrid를 선정하고 규칙 실패는 Judge가 뒤집지 못하게 했다. (`evaluation/quality.py::combine`)
-- `미달 원인별 경로`: 미달이면 항상 보고서만 다시 쓰면 근거 자체가 편향·누락된 경우 같은 결함이 반복되므로, 편향 통제·관점 커버리지 미달은 원인 관점 재조사, Groundedness·중립성 미달은 보고서 재작성으로 나눴다. (`supervisor/policy.py::_report_and_eval_step`)
-- `평가 노드 위치`: `report → quality_evaluator` 고정 엣지로 하면 보고서 에이전트가 Supervisor를 거치지 않고 다른 노드로 넘기게 되고 실패한 보고서까지 평가(빈 보고서에 Judge 호출)되므로, 보고서를 포함한 모든 작업 노드가 Supervisor로만 돌아오고 Supervisor가 "보고서 정상 완료 + 평가 미실행"일 때만 `evaluate`로 평가 노드를 부르게 했다(마지막 보고서 이후 평가 없이 `end:passed`가 불가능함을 테스트로 강제). (`graph.py`, `supervisor/policy.py::_report_and_eval_step`)
-- `근거 공백 인정`: 재조사 한도를 넘긴 편향·커버리지 미달을 끝까지 실패로 두면 공개 근거가 실제로 없는 경우에도 보고서가 영원히 미검증이 되므로, Supervisor가 `관점/기술:` 공백으로 기록한 기술(또는 관점을 실제로 제외한 경우의 `관점:` 공백)에 한해 "결과·근거 없음"만 면제하고, 절 구조(판정 표·서술·기술명)는 공백이 있어도 항상 요구했다. (`evaluation/quality.py::_acknowledged`, `agents/report.py::gap_section`)
-- `편향 임계값`: 고유 출처 하한을 1로 하면 단일 기사·단일 페이지로 판정이 확정되고 3 이상이면 공개 자료가 적은 ITME 같은 신기술에서 거의 항상 공백이 되므로 `MIN_DISTINCT_SOURCES=2`, 단일 발행처 비중 상한은 50%면 출처 2개 중 같은 발행처 1개(50%)는 통과하면서 3개 중 2개(67%)부터 걸리는 경계가 모호하고 70% 이상이면 한 매체 편중을 놓치므로 `MAX_SINGLE_SOURCE_SHARE=0.6`(3개 중 2개 이상 같은 발행처면 재조사)으로 정했다. (`config.py`)
-- `편향 규칙의 방향성`: 도메인 `조건부`를 우려로 세면 조건부 적합 판정만 있는 기술이 한쪽 근거뿐이라고 오판되므로, `조건부`는 `혼재`와 같이 긍정·우려 양쪽을 담은 판정으로 보았다. (`evaluation/quality.py`)
-- `중립성 규칙`: 금지어만 찾으면 "순위나 추천을 제시하지 않는다" 같은 면책 문장이 걸려 재작성이 낭비되므로, 같은 문장에 부정·면책 표현이 있으면 제외했다(이전 실행 보고서로 오탐 0건 확인). (`evaluation/quality.py::check_neutrality`)
-- `수치 문장 인용 규칙`: 모든 숫자를 검사하면 TRL 등급·날짜·코드가 만든 증거 균형표까지 걸리므로, 단위가 붙은 수치(%, 배, GB, ms, 토큰 등)가 있는 문장·표 행만 인용을 요구하고 설계 표·산식([D])은 제외했다. (`evaluation/quality.py::check_groundedness`)
-- `종료 상태`: 성공/실패 두 값으로 하면 "평가는 통과했지만 근거 공백이 있다"와 "평가 미통과"가 구분되지 않으므로, `completed`·`completed_with_gaps`·`unverified` 세 값으로 나눴다. (`supervisor/policy.py::_Builder.end`)
+- 에이전트 예외 — 예외가 그래프 밖으로 나가면 보고서가 남지 않으므로, 래퍼가 `node_status=failed`·`last_error`로 바꾸고 Supervisor가 한도 안에서 재시도한다. `supervisor/guard.py`
+- 평가 방식 — 형식 검사만으로는 근거가 주장을 뒷받침하는지 볼 수 없고 Judge만 쓰면 판정이 흔들리므로, 규칙 검사를 하드 게이트로 두고 LLM Judge는 규칙 실패를 뒤집지 못하게 한다. `evaluation/quality.py::combine`
+- 미달 경로 — 코드가 에이전트 판정을 옮긴 표는 보고서를 다시 써도 같은 값으로 채워지므로, 항목이 아니라 원인(`target_agents`)으로 나눠 관점이면 재조사하고 `report`면 재작성한다. `supervisor/policy.py::_report_and_eval_step`
+- 후속 재조사 한도 — 종합·평가 요청을 충분성 재조사와 같은 한도로 세면 그 전에 한도가 바닥나 재조사 경로가 실행되지 않으므로, `FOLLOWUP_LIMITS`를 따로 두고 `excluded` 관점도 대상에 넣는다. `config.py`, `state.py::followup_counts`
+- 재시도 상한 — 0~1회면 일시적 부족도 공백이 되고 3회 이상이면 같은 자료만 반복 검색하므로, 관점 2회·후속 1회·종합 1회·보고서 2회·평가 노드 1회로 둔다. `config.py::RETRY_LIMITS`
+- 단계 상한 — `recursion_limit`만 두면 예외로 죽어 보고서가 없으므로, `MAX_STEPS`를 넘으면 조사를 멈추고 공백을 기록한 뒤 종합·보고서·평가까지 마치고 종료한다. `supervisor/policy.py::decide`
+- 출처 단위 — 논문을 (문서, 페이지)로 세면 논문 한 편이 '고유 출처 2개'가 되므로 문서 단위로 세고, 기술당 원문 1편이 설계인 도메인 평가는 이 규칙 대신 단일 문헌 '적합'을 '조건부'로 낮춘다. `evidence_store.py::source_unit`, `agents/domain.py::downgrade_single_document`
+- 편향 임계값 — 고유 출처 1개면 단일 기사로 판정이 굳고 3개 이상이면 자료가 적은 ITME가 늘 공백이 되므로 `MIN_DISTINCT_SOURCES=2`, 단일 발행처 비중은 3개 중 2개부터 걸리는 `0.6`으로 둔다. `config.py`
+- [D] 사용 범위 — 설계 문서를 어디서나 인용으로 인정하면 허용 문서 풀 밖 자료가 기술 사실의 근거가 되므로, SUMMARY·1·2장의 설계 조건에만 허용하고 그 밖의 [D] 단독 인용은 규칙 위반이다. `evaluation/quality.py::check_groundedness`
+- 중립성 규칙 — 단어 하나로 잡으면 면책 문장을 오탐하고 문장 어디든 부정어만 있으면 면제하면 앞 절의 우열을 놓치므로, 두 기술 간 비교·추천·지시 표현만 잡고 같은 절의 바로 뒤 부정만 면제한다. `evaluation/quality.py::neutrality_issues`
+- 근거 공백 인정 — 한도를 넘긴 공백까지 실패로 두면 공개 근거가 없는 경우 보고서가 영원히 미검증이므로, Supervisor가 기록한 관점·기술에 한해 '결과 없음'만 면제하고 절 구조는 항상 요구한다. `evaluation/quality.py::_acknowledged`
 
-## 제출물·운영
+## 실행·저장
 
-- `보고서 10p 검사`: 글자 수로 페이지를 추정하면 표·소제목 비중에 따라 오차가 크므로, 내보내기와 같은 reportlab 조판으로 메모리 렌더링해 실제 페이지 수를 셌다. (`reporting/export.py::report_page_count`)
-- `조판 미검사 처리`: 한글 폰트가 없을 때 페이지 검사를 조용히 건너뛰면 10p 초과 보고서가 "검증 통과"로 제출될 수 있으므로, 검사 불가를 `validate_report` 이슈로 기록하고 오프라인 테스트에서만 `ALLOW_UNCHECKED_PDF=1`로 경고로 낮췄다. (`reporting/sections.py`)
-- `페이지 여유`: 상한 10p에 딱 맞추면 실제 실행마다 분량이 조금만 늘어도 재작성 루프만 소모하므로, 본문 조판(9.0pt/13.2pt, 상하 여백 20mm)과 보고서 프롬프트의 필드별 분량 예산으로 목표 9p를 두고 9p 초과는 경고로 남겼다(이전 실행 보고서 10p → 9p). (`reporting/export.py`, `agents/report.py`)
-- `미사용 프롬프트`: LLM을 쓰지 않는 Supervisor용 `01_master_agent.md`와 대체된 `08_result_validator.md`를 프롬프트 레지스트리에 남기면 실제로 LLM 라우터가 있는 것처럼 오해되므로, 01은 `docs/SUPERVISOR_POLICY.md` 규칙 명세로 옮기고 08은 삭제했다. (`prompts.py`)
-- `이전 실행물 분리`: 이전 master 구조 실행물(`final_state·validation·run_logs`)을 `outputs/`에 그대로 두면 새 Supervisor 실행 증빙으로 오인되므로, `outputs/legacy_rag/`로 옮기고 `RAG-Output_*` 제출물만 제자리에 두었다. (`outputs/legacy_rag/`)
-- `LangSmith 연결`: 그래프 노드만 트레이스하면 노드 안의 LLM 호출 비용·지연을 볼 수 없으므로, 환경변수 트레이싱에 더해 OpenAI 클라이언트를 `wrap_openai`로 감싸 같은 run 아래에 남겼다. (`llm.py::_traced`)
-- `그래프 이미지`: `draw_mermaid_png`만 쓰면 mermaid.ink에 접근할 수 없는 환경에서 이미지가 생성되지 않으므로, 실패 시 컴파일 그래프의 실제 노드·엣지를 Pillow로 그리고 Mermaid 원문도 함께 저장했다. (`scripts/export_graph.py`)
-- `--report-only`: 별도 루프 코드로 보고서만 다시 돌리면 그래프와 재시도 규칙이 갈라지므로, 같은 Supervisor 그래프에 관점 재조사 한도 0인 Policy를 넣어 재사용했다. (`app.py::report_only`)
-- `오프라인 테스트`: 실제 API로 흐름을 검증하면 키가 필요하고 실행마다 결과가 달라 재현이 안 되므로, 스키마 종류로 에이전트를 구분해 실행 회차별로 부족·편향·예외·중단을 주입하는 Fake LLM·Web·RAG를 만들었다. (`tests/fakes.py`)
+- 비동기 실행 — 작업 노드는 `async def`이고 동기 SDK 호출은 `asyncio.to_thread`로 넘기며, 에이전트 안의 질문 병렬 처리는 contextvars를 복사하는 `ContextThreadPoolExecutor`를 써서 LLM·웹 호출이 LangSmith 그래프 run의 자식으로 남게 한다. `supervisor/guard.py`, `agents/technology.py`
+- 실행 동시성 — 4관점을 동시에 돌리면 메모리가 관점 수만큼 커지고 MPS 임베딩 모델 경합으로 프로세스가 abort되므로, 할당은 한 번에 하되 실행은 `AGENT_CONCURRENCY`(기본 1)로 하나씩 하고 질의 임베딩은 락으로 직렬화한다. `observability.py::run_config`, `rag/retrieve.py`
+- 문서 임베딩 캐시 — 실행마다 전체 청크를 다시 임베딩하면 시작에 수십 초가 걸리므로, 모델 ID와 청크로 만든 지문을 키로 `data/cache/index/`에 한 번 저장하고 청크나 모델이 바뀌면 자동으로 다시 만든다. `rag/index.py::load_or_embed`
+- 페이지 검사 — 글자 수 추정은 표 비중에 따라 오차가 크므로 내보내기와 같은 reportlab 조판으로 실제 페이지를 세고, 목표 9p 초과는 경고, 상한 10p 초과는 이슈로 남긴다. `reporting/export.py::report_page_count`
+- 오프라인 테스트 — 실제 API로는 키가 필요하고 재현이 안 되므로, 회차별로 부족·편향·예외를 주입하는 Fake LLM·Web·RAG로 흐름을 검증한다. `tests/fakes.py`

@@ -1,4 +1,4 @@
-"""품질 평가 규칙, 보고서 규격(E13), 모듈 분리(E1), CLI 진입점 검증."""
+"""품질 평가 규칙, 보고서 규격, 모듈 분리, CLI 진입점 테스트."""
 from __future__ import annotations
 import importlib.util
 import json
@@ -38,7 +38,7 @@ def test_bias_rule_flags_single_source_and_one_sided_verdicts(run_graph):
     result = check_bias({**state, "evidence": skewed})
     assert result["passed"] is False and result["targets"] == ["market"]
     assert any("단일 발행처" in i for i in result["issues"])
-    # Supervisor가 공백으로 기록한 관점·기술은 '근거 부족 명시'로 인정한다
+    # 공백으로 기록된 관점·기술은 통과로 본다
     assert check_bias({**state, "evidence": skewed, "gaps": [make_gap("market", "insufficient", "재조사 한도 소진", "mla")]})["passed"] is True
 
 
@@ -167,6 +167,6 @@ def test_whole_perspective_gap_exempts_bias_only_when_excluded(run_graph):
               "source_units": {**state["perspectives"]["market"]["source_units"], "mla": []}}
     base = {**state, "evidence": skewed, "perspectives": {**state["perspectives"], "market": market},
             "gaps": [make_gap("market", "followup_exhausted", "종합 단계에서 추가 근거 요청")]}
-    assert check_bias(base)["passed"] is False  # 관점이 제외되지 않았으면 관점 단위 공백으로 면제하지 않음
+    assert check_bias(base)["passed"] is False  # 제외된 관점이 아니면 면제하지 않는다
     excluded = {**base, "perspective_status": {**state["perspective_status"], "market": "excluded"}}
     assert check_bias(excluded)["passed"] is True

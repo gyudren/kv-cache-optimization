@@ -1,7 +1,6 @@
 """Markdown + Korean-capable PDF export; no bundled/user-shared fonts.
 
-보고서 본문은 Markdown으로 생성되므로 PDF에서도 표·소제목·목록·굵게를 해석해 렌더링한다
-(설계 E의 대조표·신호표·상충표·증거 균형표가 파이프 문자열로 찍히지 않도록).
+PDF에서도 Markdown 표·소제목·목록·굵게를 해석해 렌더링한다.
 """
 from __future__ import annotations
 from datetime import date
@@ -39,7 +38,7 @@ _FONT_CANDIDATES = [
     ("/usr/share/fonts/truetype/unfonts-core/UnDotum.ttf", 0,
      "/usr/share/fonts/truetype/unfonts-core/UnDotumBold.ttf", 0),
     ("/Library/Fonts/Arial Unicode.ttf", 0, None, 0),
-    # 한글 글리프를 포함한 범용 CJK 폰트(나눔·은 폰트가 없는 리눅스 컨테이너용 마지막 후보)
+    # 나눔·은 폰트가 없는 리눅스 컨테이너용 CJK 폰트
     ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0, None, 0),
 ]
 _FONTS: tuple[str, str] | None = None
@@ -102,7 +101,7 @@ def _styles() -> dict[str, ParagraphStyle]:
 
 
 def _inline(text: str) -> str:
-    """Markdown 인라인(**굵게**, `코드`)을 reportlab 마크업으로 바꾼다. 나머지는 이스케이프."""
+    """Markdown 인라인 서식(굵게·기울임·코드)을 reportlab 마크업으로 바꾼다."""
     out = escape(text.strip(), quote=False)
     out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
     out = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", out)
@@ -147,7 +146,7 @@ def _table(rows: list[list[str]], styles: dict) -> Table:
 
 
 def markdown_flowables(text: str, styles: dict | None = None) -> list:
-    """보고서 Markdown 일부를 flowable 목록으로 바꾼다(표·소제목·목록·문단)."""
+    """보고서 Markdown을 reportlab flowable 목록으로 바꾼다."""
     styles = styles or _styles()
     story: list = []
     paragraph: list[str] = []
@@ -199,7 +198,7 @@ def markdown_flowables(text: str, styles: dict | None = None) -> list:
 
 
 def summary_fits_half_page(summary: str) -> bool:
-    """Same typography and page metrics as export_report, for report-gate retry."""
+    """Whether SUMMARY fits half a page with export_report's typography."""
     height = 0.0
     for flowable in markdown_flowables(summary):
         _, h = flowable.wrap(PAGE_WIDTH, A4[1])
@@ -240,10 +239,7 @@ def _build_pdf(report_md: str, target) -> int:
 
 
 def report_page_count(report_md: str) -> int | None:
-    """export_report와 같은 조판으로 메모리에 렌더링해 PDF 페이지 수를 센다(10p 상한 검사용).
-
-    한글 폰트가 없어 PDF를 만들 수 없는 환경이면 None(검사 불가)을 돌려준다.
-    """
+    """export_report와 같은 조판으로 메모리에 렌더링해 페이지 수를 센다. 한글 폰트가 없으면 None."""
     from io import BytesIO
     try:
         korean_fonts()
@@ -261,8 +257,7 @@ def export_report(report_md: str, output_dir: str, stem: str) -> dict:
     header = f"# {REPORT_TITLE}\n\n{REPORT_SUBTITLE}\n\n{REPORT_AUTHORS} · {date.today().isoformat()}\n\n"
     md_path.write_text(header + report_md, encoding="utf-8")
     summary = report_md.split("## SUMMARY\n", 1)[1].split("\n## 1. 분석 배경", 1)[0].strip()
-    # 물리적 1/2페이지·10페이지 제한은 품질 평가 노드(validate_report)가 판정해 재작성을 요구한다.
-    # 한도 소진 후에도 초과하면 validation.json에 이슈로 남기고 PDF는 그대로 만든다.
+    # 분량 초과 판정은 validate_report가 한다. 여기서는 초과해도 PDF를 그대로 만든다.
     fits = summary_fits_half_page(summary)
     pages = _build_pdf(report_md, str(pdf_path))
     return {"md": str(md_path), "pdf": str(pdf_path), "pages": pages, "summary_fits_half_page": fits}

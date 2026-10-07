@@ -1,15 +1,7 @@
-"""품질 평가 노드 (DEV_PLAN §6, Hybrid = 규칙 검사 하드 게이트 + LLM Judge 내용 게이트).
+"""품질 평가 노드: 규칙 검사(하드 게이트)와 LLM Judge로 4항목을 판정한다.
 
-| 항목 | 규칙 검사(결정적) | LLM Judge | 미달 시 경로 |
-|---|---|---|---|
-| groundedness | validate_report(목차·인용·REFERENCE·10p) + 수치 문장 인용 필수([D]는 SUMMARY·1·2장 설계 전제에만) | 발췌가 주장을 뒷받침하는가 | 보고서 재작성 (결함이 에이전트 판정에서 왔으면 그 관점 재조사) |
-| neutrality | 두 기술 간 비교 우열·추천·지시 표현 탐지(바로 뒤가 부정이면 제외) | 암묵적 우열 판정 | 보고서 재작성 (에이전트 판정에서 왔으면 그 관점 재조사) |
-| bias_control | 기술·관점별 고유 출처 ≥2, 웹 단일 발행처 비중 상한, 긍정·우려 양방향 근거 | 한쪽 근거 편중 | 원인 관점 재조사 |
-| coverage | 4.1~4.4 서술·판정표 존재, 두 기술 모두 기재, 관점 결과 존재 | 4관점 실질 서술 | 원인 관점 재조사 |
-
-규칙 검사 실패는 LLM이 뒤집을 수 없다(항목 통과 = 규칙 통과 AND Judge 통과).
-Supervisor가 재조사 상한을 넘겨 근거 공백(gaps)으로 기록한 관점·기술의 편향·커버리지 미달은
-"근거 부족을 명시한 상태"로 보고 규칙상 인정한다(공백을 숨기지 않고 드러내는 것이 목표이므로).
+항목 통과는 규칙 통과 AND Judge 통과이며, 규칙 실패는 Judge가 뒤집을 수 없다.
+Supervisor가 근거 공백(gaps)으로 기록한 관점·기술은 편향·커버리지 규칙에서 인정한다.
 """
 from __future__ import annotations
 import re
@@ -25,36 +17,31 @@ from ..schemas import EvalVerdict
 from ..state import deduplicate_evidence, perspective
 
 CRITERIA = ("groundedness", "neutrality", "bias_control", "coverage")
-# 항목별 기본 경로(원인 미특정 시): 보고서 표현 문제는 재작성, 근거 수집 문제는 원인 관점 재조사.
-# 실제 경로는 항목이 아니라 원인(target_agents)이 정한다: 관점이면 재조사, report면 재작성.
+# 항목별 기본 경로. 실제 경로는 원인(target_agents)이 정한다: 관점이면 재조사, report면 재작성.
 REWRITE_CRITERIA = ("groundedness", "neutrality")
 REINVESTIGATE_CRITERIA = ("bias_control", "coverage")
-# 코드가 에이전트 결과를 그대로 옮기는 보고서 부분(Judge가 원인 에이전트를 지목할 때 참고)
+# 코드가 에이전트 결과를 그대로 옮기는 보고서 부분. Judge가 원인 에이전트를 지목할 때 쓴다.
 AGENT_SOURCED_SECTIONS = {"4.1 TRL 표": "tech", "4.2 시장성 판정표": "market",
                           "4.3 이해관계자 판정표": "stakeholder", "4.4 D1-D7 판정표": "domain"}
 TECHS = ("mla", "itme")
 SECTION_PERSPECTIVE = {"4.1": "tech", "4.2": "market", "4.3": "stakeholder", "4.4": "domain"}
 
-# 중립성 규칙: 두 평가 대상 사이의 우열·추천·지시만 잡는다. 단어 하나("추천", "1위", "도입해야")로 잡으면
-# "단일 추천을 제시하지 않는다", "HBM 시장 1위 [W3]", "CXL 스위치를 도입해야 한다(전제조건)" 같은 정상 문장을 오탐하고,
-# 문장 어디에든 부정어가 있으면 면제하던 방식은 "MLA가 ITME보다 우수하지만 비용은 확인되지 않았다"를 놓쳤다.
+# 중립성 규칙: 단어 하나가 아니라 두 평가 대상 사이의 우열·추천·지시 표현만 잡는다.
 _TECH = r"(MLA|ITME|SW|HW|소프트웨어|하드웨어)"
 COMPARATIVE = re.compile(rf"{_TECH}\S*\s*보다\s*[^.。|]{{0,20}}?((더\s*)?(우수|우월|뛰어나|낫|효율적|유리|앞서|성숙|적합|빠르))")
 ENDORSEMENT = re.compile(r"(추천한다|추천됨|권장한다|권고한다|승자|우승|압도적|최선의\s*선택|최고의\s*(기술|선택)|능가|우위에\s*있|우위를\s*점)")
 TECH_DIRECTIVE = re.compile(r"((MLA|ITME)\S*\s*(을|를)?\s*(우선\s*)?(채택|도입|선택)(해야|하라|할\s*것을))")
-# 표현 바로 뒤(25자 안, 같은 절)의 부정·유보("우수하다고 단정할 수 없다", "승자를 정하지 않는다")만 면제한다.
-# "우수하지만 비용은 확인되지 않았다"처럼 뒤 절의 부정은 앞 절의 우열 판정을 지우지 않는다.
+# 같은 절 안에서 표현 바로 뒤에 오는 부정·유보만 면제한다. 뒤 절의 부정은 앞 절의 우열 판정을 지우지 않는다.
 NEARBY_NEGATION = re.compile(r"^[^.。|]{0,25}?(않|아니|없|어렵|판단하지|가리지|정하지)")
 CLAUSE_BREAK = re.compile(r"(지만|는데|으나|이나|반면|그러나|,|;)")
-# 단위가 붙은 수치(성능·용량·비율). TRL 같은 등급 숫자나 날짜는 대상이 아니다.
+# 단위가 붙은 수치만 본다. TRL 등급이나 날짜는 대상이 아니다.
 QUANTITY = re.compile(r"\d[\d,.]*\s*(%|배|×|GB|GiB|TB|TiB|MB|ms|μs|us\b|tokens?\b|토큰|tok/s|req/s|x\b)")
 EVIDENCE_CITATION = re.compile(r"\[\d+,\s*p\.\d+\]|\[W\d+\]")
-# 팀 설계 문서 [D]를 쓸 수 있는 장: 배경·선정의 설계 조건과, 그 설계 전제를 요약에서 다시 말하는 SUMMARY.
-# 기술 사실의 근거로는 쓰지 않는다(3장 이후에서 [D]만 붙은 문장·수치는 규칙 위반).
+# 팀 설계 문서 [D]를 인용할 수 있는 장. [D]는 기술 사실의 근거로 쓰지 않는다.
 DESIGN_CHAPTERS = ("SUMMARY", "1", "2")
 POSITIVE = {"긍정", "적합"}
 CONCERN = {"우려", "제약"}
-MIXED = {"혼재", "조건부"}  # 조건부 = 조건이 붙은 적합 → 긍정·우려 양쪽 근거를 함께 담은 판정
+MIXED = {"혼재", "조건부"}  # 조건부는 긍정·우려 근거를 함께 담은 판정으로 본다
 VERDICT_FIELDS = {
     "market": ("market_size_growth_verdict", "adoption_verdict", "ecosystem_verdict", "verdict"),
     "stakeholder": ("competitors_verdict", "developers_adopters_verdict", "investors_verdict", "verdict"),
@@ -84,7 +71,7 @@ def _sentences(text: str) -> list[str]:
         if not line or line.startswith("#") or re.fullmatch(r"\|?[\s:|-]+\|?", line):
             continue
         if line.startswith("|"):
-            out.append(line)  # 표는 행 단위로 본다(행 안에 인용이 있어야 한다)
+            out.append(line)  # 표는 행 단위로 본다
         else:
             out.extend(s for s in re.split(r"(?<=[.!?。])\s+", line) if s.strip())
     return out
@@ -93,8 +80,7 @@ def _sentences(text: str) -> list[str]:
 def _acknowledged(state: dict, name: str, tech: str) -> bool:
     """Supervisor가 이 관점·기술을 근거 공백으로 기록했는가.
 
-    `관점/기술:` 공백은 그 기술만 인정한다. `관점:` 공백은 Supervisor가 그 관점을 실제로 제외(excluded)한
-    경우에만 두 기술 모두에 인정한다. 공백은 "결과·근거 없음"만 면제하고 보고서 절 구조는 면제하지 않는다.
+    기술을 지정한 공백은 그 기술만, 기술 없는 공백은 관점이 excluded일 때만 두 기술 모두 인정한다.
     """
     gaps = [gap for gap in state.get("gaps", []) if gap["perspective"] == name]
     if any(gap["technology"] == tech for gap in gaps):
@@ -103,17 +89,16 @@ def _acknowledged(state: dict, name: str, tech: str) -> bool:
     return excluded and any(gap["technology"] is None for gap in gaps)
 
 
-# 고유 출처 수 규칙을 적용하는 관점. 도메인 평가는 설계상 각 기술의 원문 1편만 근거로 쓰므로(문서 단위로 세면
-# 항상 1개) 이 규칙 대신 '단일 문헌 근거의 적합 → 조건부' 하향으로 단일 출처 위험을 판정에 드러낸다(agents/domain.py).
+# 고유 출처 수 규칙을 적용하는 관점. domain은 기술별 원문 1편만 쓰므로 빠지고,
+# 단일 출처 위험은 agents/domain.py에서 판정을 조건부로 낮춰 드러낸다.
 SOURCE_RULE_PERSPECTIVES = ("tech", "market", "stakeholder")
 
 
 def evidence_shortfalls(state: dict, name: str) -> list[dict]:
-    """관점·기술별 고유 출처 수 결정적 검사(Supervisor 충분성 검증과 편향 규칙이 함께 쓴다).
+    """관점·기술별 고유 출처 수 검사. Supervisor 충분성 검증과 편향 규칙이 같이 쓴다.
 
-    최신 시도의 출처(`perspectives[name].source_units`, 노드 경계에서 기록)만 센다. 이전 시도의 출처를
-    누적하면 매 시도 1개씩만 찾아도 합쳐서 2개가 되어 통과하므로 누적하지 않는다. source_units가 없는
-    이전 형식 State에서만 누적 evidence로 센다.
+    시도마다 누적하면 1개씩만 찾아도 통과하므로 최신 시도의 source_units만 센다.
+    source_units가 없는 이전 형식 State에서만 누적 evidence로 센다.
     """
     if name not in SOURCE_RULE_PERSPECTIVES:
         return []
@@ -133,9 +118,7 @@ def evidence_shortfalls(state: dict, name: str) -> list[dict]:
     return out
 
 
-# ---- 규칙 검사 -----------------------------------------------------------------------------
-# 규칙 결과의 items는 {agent, technology, text}. agent가 None이면 보고서 서술 문제다.
-# issues는 같은 내용을 사람이 읽는 문자열로 펼친 것(validation.json·재작성 지시용).
+# 규칙 결과의 item은 {agent, technology, text}이고, agent가 None이면 보고서 서술 문제다.
 def _item(agent: str | None, technology: str | None, text: str) -> dict:
     return {"agent": agent, "technology": technology, "text": text}
 
@@ -155,7 +138,7 @@ def _result(items: list[dict]) -> dict:
 
 
 def check_groundedness(state: dict) -> dict:
-    from ..agents.report import KV_SCALE_FORMULA, KV_SCALE_TABLE  # 코드가 넣는 설계 표·산식(출처 [D])
+    from ..agents.report import KV_SCALE_FORMULA, KV_SCALE_TABLE  # 코드가 넣는 [D] 설계 표·산식
     report = state.get("report", "")
     validation = validate_report(report, state.get("evidence", []))
     issues = list(validation["issues"])
@@ -166,12 +149,10 @@ def check_groundedness(state: dict) -> dict:
             if sentence in static:
                 continue
             if not design_ok and "[D]" in sentence and not EVIDENCE_CITATION.search(sentence):
-                # 설계 문서는 조사 근거가 아니다. SUMMARY·1·2장 밖에서 [D]만 붙은 문장은 사실 근거 없이 서술한 것이다.
                 issues.append(f"설계 문서 [D]만 인용(SUMMARY·1·2장 설계 조건 밖): {sentence[:120]}")
                 continue
             if not QUANTITY.search(sentence):
                 continue
-            # [D](팀 설계 문서)는 SUMMARY·1·2장의 설계 전제에만 근거가 된다. 다른 장의 수치를 [D]로 막으면 조사 근거 검사를 우회한다.
             cited = EVIDENCE_CITATION.search(sentence) or (design_ok and "[D]" in sentence)
             if not cited:
                 issues.append(f"수치 문장에 인용 없음{'([D]는 SUMMARY·1·2장 설계 전제에만 허용)' if '[D]' in sentence else ''}: {sentence[:120]}")
@@ -201,7 +182,7 @@ def _verdicts(state: dict, name: str, tech: str) -> list[str]:
     if name == "domain":
         return [item["verdict"] for item in perspective(state, "domain").get("items", [])
                 if item.get("technology") == tech and item.get("verdict") != "근거 부족"]
-    return []  # 기술 조사(TRL)는 긍정/우려 판정이 아니라 등급이다
+    return []  # TRL은 긍정/우려 판정이 아니라 등급이다
 
 
 def check_bias(state: dict) -> dict:
@@ -262,7 +243,7 @@ def check_coverage(state: dict) -> dict:
             problems.append("서술 없음")
         for tech, label in (("mla", "MLA"), ("itme", "ITME")):
             if label not in text:
-                problems.append(f"{label} 미기재")  # 근거 공백이어도 절 안에 기술명과 '근거 부족'은 적어야 한다
+                problems.append(f"{label} 미기재")  # 근거 공백이어도 절에 기술명은 있어야 한다
             if not _has_result(state, name, tech) and not _acknowledged(state, name, tech):
                 problems.append(f"{label} 관점 결과 없음")
         if problems:
@@ -282,12 +263,10 @@ def rule_checks(state: dict) -> dict[str, dict]:
     return {name: check(state) for name, check in RULES.items()}
 
 
-# ---- LLM Judge ------------------------------------------------------------------------------
 def cited_snippets(state: dict) -> list[dict]:
-    """Judge에게 보고서가 실제 인용한 근거만 원문과 함께 넘긴다.
+    """보고서가 실제 인용한 근거만 원문과 함께 Judge에 넘긴다.
 
-    전체 카탈로그를 길이 제한으로 자르면 뒤쪽 인용([W…], 뒷페이지)이 잘려 나가
-    "제공된 근거에 없는 인용"이라는 오판이 반복된다. 인용된 항목만 넘기면 모두 들어간다.
+    전체 카탈로그를 넘기면 길이 제한에 뒤쪽 인용이 잘려 '근거에 없는 인용'으로 오판된다.
     """
     body = _body(state.get("report", ""))
     used = set(PAPER_CITATION.findall(body)) | {f"W{n}" for n in WEB_CITATION.findall(body)}
@@ -326,20 +305,20 @@ def judge(state: dict, rules: dict[str, dict], llm: Any, snippets: list[dict] | 
 
 
 def combine(rules: dict[str, dict], verdict: EvalVerdict) -> dict:
-    """항목별 최종 판정. 통과 = 규칙 통과 AND Judge 통과. 미달 원인 에이전트를 함께 기록한다."""
+    """항목별 최종 판정(규칙 AND Judge)과 미달 원인 에이전트를 만든다."""
     criteria = {}
     for name in CRITERIA:
         rule = rules[name]
         llm_part = getattr(verdict, name)
         targets = list(rule["targets"])
         if not llm_part.passed:
-            # Judge가 지목한 원인을 그대로 따른다. 4.1 TRL 표처럼 코드가 에이전트 판정을 옮긴 부분의 결함은
-            # 보고서를 다시 써도 고쳐지지 않으므로(표는 다시 같은 판정으로 채워진다) 그 관점을 재조사한다.
+            # Judge가 지목한 원인을 따른다. 코드가 옮긴 판정표의 결함은 보고서를 다시 써도 그대로라
+            # 해당 관점을 재조사해야 한다.
             if llm_part.target_agent in (*PERSPECTIVES, "report"):
                 if llm_part.target_agent not in targets:
                     targets.append(llm_part.target_agent)
             elif not targets:
-                targets = ["report"]  # 원인을 특정하지 못하면 보고서 서술 보완으로 처리
+                targets = ["report"]
         score = max(1, min(5, int(llm_part.score)))
         passed = rule["passed"] and llm_part.passed
         criteria[name] = {
@@ -359,7 +338,7 @@ def quality_evaluator_node(state: dict, llm: Any) -> dict:
     result = combine(rules, judge(state, rules, llm, snippets))
     result["report_attempt"] = state.get("retry_counts", {}).get("report", 0)
     truncated = sum(1 for s in snippets if s.get("excerpt_truncated"))
-    # 원문 저장소가 없어 축약 발췌로만 판정했으면 결과에 명시한다(조용한 대체 금지).
+    # 원문 없이 축약 발췌로만 판정한 건수를 결과에 남긴다.
     result["evidence_store"] = {"cited": len(snippets), "cited_missing_full_text": truncated}
     result["warnings"] = ([f"인용 근거 {truncated}/{len(snippets)}건의 원문이 저장소에 없어 축약 발췌로만 평가됨"]
                           if truncated else [])

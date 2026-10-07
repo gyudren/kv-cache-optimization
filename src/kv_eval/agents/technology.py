@@ -1,9 +1,6 @@
-"""Technical research: 6 paper questions per selected technology (common 5 + technology-specific mechanism) plus 1 HW baseline.
+"""기술 조사 Agent: 기술별 논문 질문 6개와 HW 베이스라인 질문 1개로 TRL을 판정한다.
 
-TRL 판정 근거는 설계 C-1에 따라 두 갈래를 모두 쓴다.
-- 논문 원문(RAG): 구현·검증 수준 (TRL 1~6 판단)
-- 구현/통합 및 상용화 발표(웹 검색): 제품 출시·상용 서비스 적용 (TRL 7~9 판단)
-논문만으로는 "제품 출시·상용 서비스 적용" 근거를 얻을 수 없어 TRL 7~9를 판정할 수 없다.
+논문(RAG)으로는 TRL 1~6까지만 판단할 수 있어, 7~9의 근거인 제품 출시·상용화 발표는 웹에서 따로 찾는다(설계 C-1).
 """
 from __future__ import annotations
 from hashlib import sha256
@@ -17,8 +14,7 @@ from ..rag import cache as rag_cache
 from ..rag.workflow import answer_with_cache
 from ..state import attempt_of
 
-# 기술 공통 질문 + 기술별 작동 원리 질문. MLA는 모델 구조(어텐션) 기술이라 "메모리 계층" 질문을 묻지 않는다
-# (공통 질문으로 두면 MLA 답변이 매번 '메모리 계층 설명 없음'을 근거 부족으로 보고해 재조사만 소진했다).
+# 작동 원리 질문은 기술별로 둔다. MLA는 어텐션 구조 기술이라 메모리 계층을 물으면 근거 부족만 나온다.
 COMMON_QUESTIONS = [
     "What problem and scope does the proposed KV cache approach address?",
     "What implementation and experimental setup is documented?",
@@ -31,13 +27,12 @@ MECHANISM_QUESTIONS = {
     "itme": "How does the CXL hybrid memory hierarchy place, tier and prefetch model weights and KV cache across HBM, host DRAM, CXL memory and NVMe?",
 }
 TECH_QUESTIONS = {tech: [COMMON_QUESTIONS[0], MECHANISM_QUESTIONS[tech], *COMMON_QUESTIONS[1:]] for tech in MECHANISM_QUESTIONS}
-# 판정에 꼭 필요한 질문(작동 원리·정량 결과·성숙도 근거). 이 질문의 검색이 근거를 하나도 못 찾으면 필수 결함이다.
-# 나머지 질문의 빈칸과 LLM이 적은 세부 미확인 항목(하이퍼파라미터·코드 등)은 선택 항목으로 보고서 한계점에만 남긴다.
+# 근거를 하나도 못 찾으면 필수 결함으로 보는 질문. 나머지 질문의 빈칸은 선택 항목으로 한계점에만 남긴다.
 REQUIRED_QUESTIONS = {tech: {MECHANISM_QUESTIONS[tech]: "작동 원리", COMMON_QUESTIONS[2]: "정량 성능 결과",
                               COMMON_QUESTIONS[4]: "구현·검증·성숙도 근거"} for tech in MECHANISM_QUESTIONS}
 BASELINE_QUESTION = "How do InfiniGen and CXL-PNM differ from ITME in memory expansion mechanism, measured trade-offs, and stated limitations?"
 
-# TRL 7~9(제품 출시·상용 서비스 적용) 판정에 필요한 공개 발표를 찾기 위한 질의
+# TRL 7~9 판정용 상용화 발표 검색어
 TRL_WEB_QUERIES = {
     "mla": ["DeepSeek-V2 API launch pricing deepseek-chat model release",
             "DeepSeek-V3 multi-head latent attention production inference deployment",
@@ -48,7 +43,7 @@ TRL_WEB_QUERIES = {
              "CXL memory module tiered memory LLM inference commercial deployment announcement"],
 }
 TECH_LABEL = {"mla": "DeepSeek-V2 MLA", "itme": "ITME"}
-# 보고서가 TRL 숫자 구간(1~3/4~6/7~9)을 쓸 때 인용할 척도 정의 출처. 기술 근거가 아니라 평가 척도의 근거다.
+# 보고서가 TRL 구간을 쓸 때 인용할 척도 정의 출처(기술 근거가 아님).
 TRL_SCALE_QUERY = "NASA technology readiness level TRL 1-9 definitions scale"
 TRL_SCALE_SOURCES = 2
 TRL_SCALE_CLAIM = "TRL 단계 정의(평가 척도)"
@@ -65,7 +60,7 @@ def _trl_scale_evidence(web: Any, attempt: int) -> list[dict]:
 
 
 def _trl_web_evidence(web: Any, tech: str, attempt: int) -> tuple[list[dict], list[str]]:
-    """TRL 7~9 판정용 웹 근거를 모은다(설계 C-1의 '구현/통합 및 상용화 발표')."""
+    """TRL 7~9 판정용 구현·통합·상용화 발표를 웹에서 모은다."""
     found: list[dict] = []
     for query in TRL_WEB_QUERIES[tech]:
         found.extend(web.search_market(query))
@@ -85,13 +80,12 @@ def _trl_web_evidence(web: Any, tech: str, attempt: int) -> tuple[list[dict], li
 def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     findings: dict = {}
     evidence: list[dict] = []
-    missing: list[str] = []    # 필수 결함: Supervisor 재조사 대상
-    optional: list[str] = []   # 선택 항목: 보고서 한계점에만 기록
+    # missing은 Supervisor 재조사 대상, optional은 보고서 한계점에만 남는다.
+    missing: list[str] = []
+    optional: list[str] = []
     attempt = attempt_of(state, "tech")
     feedback = state.get("feedback", {}).get("tech", {})
-    # 질문끼리 독립이므로 병렬로 검색·답변한다(순서는 아래에서 원래대로 복원).
-    # ContextThreadPoolExecutor는 contextvars(LangGraph 실행 설정·LangSmith 부모 run)를 워커 스레드로 복사해
-    # 스레드 안의 LLM·웹 호출이 그래프 run 아래 자식 run(같은 trace_id)으로 남게 한다.
+    # 워커 스레드의 호출도 같은 LangSmith trace에 남도록 ContextThreadPoolExecutor를 쓴다.
     tasks = [(tech, question) for tech in ("mla", "itme") for question in TECH_QUESTIONS[tech]]
     cache = rag_cache.load(state["trace_id"], "tech")
     with ContextThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
@@ -117,7 +111,6 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
             for item in response["evidence"]:
                 evidence.append({**item, "agent": "tech", "attempt": attempt})
         findings[tech] = {"answers": answers}
-        # 논문(RAG)만으로는 확인할 수 없는 상용화·통합 근거를 웹에서 따로 모은다.
         web_evidence, web_missing = web_results[tech]
         evidence.extend(web_evidence)
         missing.extend(web_missing)

@@ -1,4 +1,4 @@
-"""D-16·D-17: Supervisor 충분성 검사는 최신 시도 출처만 세고, 재검색 질의는 부족한 기술에만 구조화된 힌트로 붙는다."""
+"""충분성 검사는 최신 시도 출처만 세고, 재검색 질의는 부족한 기술에만 붙는지 테스트."""
 from __future__ import annotations
 import re
 
@@ -19,7 +19,7 @@ def _retry_queries(web):
 def test_one_source_per_attempt_never_accumulates_to_sufficient(run_graph):
     web, llm = FakeWeb(), FakeLLM(cite_limit={"market": {"mla": 1, "itme": 1}})
     state = run_graph(llm, web=web)
-    # 매 시도 출처 1개 → 누적하면 2회차에 통과하지만, 최신 시도 기준이라 한도까지 재조사 후 제외된다
+    # 누적하면 2회차에 통과하겠지만 최신 시도만 세므로 끝내 제외된다
     assert llm.runs["market"] == 1 + RETRY_LIMITS["market"]
     assert state["perspective_status"]["market"] == "excluded"
     assert any(g["perspective"] == "market" and "고유 출처 1개" in g["detail"] for g in state["gaps"])

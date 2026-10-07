@@ -1,15 +1,7 @@
-"""에이전트 실패 처리 래퍼(비동기 노드).
+"""작업 노드 래퍼. 예외가 실행 전체를 멈추지 않도록 node_status=failed, last_error로 바꾼다.
 
-성공한 노드의 evidence는 여기서 원문을 evidence_store로 옮긴다.
-
-예외가 그래프 밖으로 나가면 실행 전체가 죽고 보고서가 남지 않는다. 래퍼가 예외를 잡아
-node_status[name]=failed, last_error[name]=요약으로 바꾸면 Supervisor가 재시도 한도 안에서
-다시 보내거나, 한도를 넘으면 제외하고 근거 공백으로 기록한다.
-
-작업 노드는 `async def`다. 에이전트 본문(OpenAI·Tavily·임베딩 호출)은 블로킹 I/O라 `asyncio.to_thread`로
-워커 스레드에 넘겨 이벤트 루프를 막지 않는다. to_thread는 contextvars(LangGraph 실행 설정·LangSmith 부모 run)를
-복사하므로 에이전트 안의 LLM·웹 호출도 그래프 run의 자식으로 기록된다. 동시에 몇 개를 돌릴지는
-run_config의 max_concurrency(AGENT_CONCURRENCY, 기본 1 = 순차)가 정한다.
+에이전트 본문은 블로킹 I/O라 asyncio.to_thread로 돌린다. to_thread가 contextvars를 복사하므로
+에이전트 안의 LLM·웹 호출도 그래프 run의 자식으로 기록된다.
 """
 from __future__ import annotations
 import asyncio
@@ -29,12 +21,12 @@ def guarded(name: str, fn: Callable[[dict], dict]) -> Callable[[dict], Awaitable
             return {"node_status": {name: "failed"},
                     "last_error": {name: f"{type(exc).__name__}: {exc}"[:300]}}
         if name in PERSPECTIVES and name in (update.get("perspectives") or {}):
-            # 충분성은 "이번 시도"가 수집한 출처로만 판단한다(이전 시도 evidence가 누적돼 통과되지 않게).
+            # 이전 시도 근거로 충분성이 통과되지 않도록 이번 시도의 출처만 센다.
             result = {**update["perspectives"][name],
                       "source_units": evidence_store.source_units(update.get("evidence") or [])}
             update = {**update, "perspectives": {**update["perspectives"], name: result}}
         if update.get("evidence") and state.get("trace_id"):
-            # 노드 경계에서 발췌 원문을 디스크로 옮기고 State에는 축약본·참조만 넘긴다(체크포인트 크기 제한).
+            # 체크포인트가 커지지 않게 발췌 원문은 디스크로 옮기고 State에는 축약본과 참조만 남긴다.
             update = {**update, "evidence": evidence_store.offload(state["trace_id"], name, update["evidence"])}
         return {**update, "node_status": {name: "done"}, "last_error": {name: ""}}
 

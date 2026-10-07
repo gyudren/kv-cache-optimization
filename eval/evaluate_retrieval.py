@@ -1,20 +1,9 @@
-"""운영 검색기(FAISS + BM25 → RRF)의 검색 품질을 LLM 생성과 분리해 평가한다.
+"""운영 검색기(FAISS + BM25, RRF 결합)의 검색 품질을 LLM 생성과 떼어 평가한다.
 
-app.py가 실제로 쓰는 것과 동일한 경로(전처리 청크 → Qwen3 임베딩 → FAISS/BM25 → RRF)를
-그대로 사용하므로, 여기서 나온 수치가 곧 파이프라인의 검색 성능이다.
+app.py와 같은 경로(전처리 청크, Qwen3 임베딩, FAISS/BM25, RRF)를 쓴다. 케이스는
+eval/retrieval_cases.json에 있고, concept/table/formula 케이스는 기대 페이지·필수 용어까지,
+coverage 케이스는 정답 문서 순위만 본다. acceptance 기준을 모두 넘어야 passed=True다.
 
-평가 케이스: eval/retrieval_cases.json
-- concept/table/formula : 기대 페이지·필수 용어까지 확인하는 정밀 케이스
-- coverage              : 문서당 20개씩, 정답 문서가 상위에 오는지 확인하는 커버리지 케이스
-
-지표
-- Hit@K : 상위 K개 안에 정답 문서(expected_doc_ids)의 청크가 있으면 1
-- MRR   : 정답 문서가 처음 등장한 순위의 역수 평균
-- page_hit           : 기대 페이지(expected_pages)가 상위 K개에 포함된 비율
-- required_term_cov  : 필수 용어(required_terms)가 검색된 본문에 등장한 비율
-합격 기준(acceptance)을 모두 만족해야 passed=True 가 된다.
-
-Usage:
     python -m eval.evaluate_retrieval [--top-k 5] [--show-hits]
 """
 from __future__ import annotations
@@ -37,7 +26,7 @@ PRECISE_CATEGORIES = ("concept", "table", "formula")
 
 
 def _technology_filter(expected_doc_ids: list[str]) -> str:
-    """케이스의 정답 문서에 맞는 기술 필터(운영에서 Agent가 지정하는 값과 동일)."""
+    """정답 문서에 맞는 기술 필터. 운영에서 Agent가 넘기는 값과 같다."""
     if expected_doc_ids == ["deepseek_v2_mla"]:
         return "mla"
     if expected_doc_ids == ["itme"]:
@@ -46,11 +35,10 @@ def _technology_filter(expected_doc_ids: list[str]) -> str:
 
 
 def _search_all_documents(retriever: HybridRetriever, query: str, top_k: int) -> list:
-    """문서 4편 전체를 하나의 순위로 검색한다(순위 품질 측정용).
+    """문서 4편 전체를 한 번에 검색해 순위 품질을 잰다.
 
-    정답 문서로 필터를 정해놓고 Hit@1을 재면 단일 문서 케이스는 오답이 나올 수 없어
-    지표가 항상 1.00이 된다. 또한 필터별로 따로 검색해 합치면 RRF 점수가 각 부분집합
-    안에서만 계산돼 서로 비교할 수 없으므로, 반드시 한 번의 검색으로 측정한다.
+    정답 문서로 필터를 걸면 단일 문서 케이스의 Hit@1이 항상 1이 되고, 필터별로 나눠
+    검색하면 RRF 점수를 서로 비교할 수 없다.
     """
     return retriever.hybrid_search(query, "all", top_k)
 
@@ -71,10 +59,10 @@ def evaluate(top_k: int = RETRIEVAL_K, show_hits: bool = False) -> dict:
 
     for case in cases:
         expected_docs = set(case["expected_doc_ids"])
-        # (1) 순위 품질: 문서 필터 없이 4편 전체에서 정답 문서를 찾아내는가
+        # 순위 품질: 필터 없이 전체 문서에서 정답 문서 순위를 본다
         ranked = _search_all_documents(retriever, case["query"], top_k)
         rank = next((i + 1 for i, h in enumerate(ranked) if h.doc_id in expected_docs), None)
-        # (2) 정밀도: 운영과 동일한 기술 필터 안에서 기대 페이지·필수 용어를 잡아내는가
+        # 정밀도: 운영과 같은 기술 필터로 기대 페이지·필수 용어를 확인한다
         hits = retriever.hybrid_search(case["query"], _technology_filter(case["expected_doc_ids"]), top_k)
 
         expected_pages = set(case.get("expected_pages", []))
@@ -83,7 +71,7 @@ def evaluate(top_k: int = RETRIEVAL_K, show_hits: bool = False) -> dict:
         terms = case.get("required_terms", [])
         retrieved_text = " ".join(h.text for h in hits if h.doc_id in expected_docs).lower()
         term_cov = (sum(t.lower() in retrieved_text for t in terms) / len(terms)) if terms else None
-        # 정밀 케이스에서 정답 문서가 아닌 청크가 1위를 차지하면 노이즈로 센다(필터 없는 결과 기준).
+        # 필터 없는 결과에서 1위가 정답 문서가 아니면 노이즈로 센다.
         noise = bool(ranked) and ranked[0].doc_id not in expected_docs
 
         record = {
@@ -94,7 +82,7 @@ def evaluate(top_k: int = RETRIEVAL_K, show_hits: bool = False) -> dict:
             "hits": [{"rank": i + 1, "chunk_id": h.chunk_id, "doc_id": h.doc_id,
                       "citation": f"[{h.citation_number}, p.{h.page}]", "score": round(h.score, 5),
                       "snippet": h.text[:200].replace("\n", " ")} for i, h in enumerate(hits)],
-            "human_feedback": None,  # 사람이 검토 후 "ok"/"bad"/메모를 직접 채우는 칸
+            "human_feedback": None,  # 사람이 검토 후 채우는 칸
         }
         results.append(record)
         per_category[case["category"]].append(record)

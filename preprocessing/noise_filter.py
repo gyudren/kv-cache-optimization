@@ -1,12 +1,7 @@
-"""참고문헌(References) 구간 색인 제외.
+"""참고문헌 구간을 색인 대상에서 뺀다. 페이지 예산 계산은 budget.py에서 따로 한다.
 
-설계 산출물 B-3): 참고문헌 구간은 색인 대상에서 제외하되, 페이지 예산(≤200p) 계산에는
-보수적으로 포함한다. 이 모듈은 "제외 대상 페이지"만 판별하며, 예산 계산은
-preprocessing.budget 에서 문서 전체 페이지 수 기준으로 별도 수행한다.
-
-References 제목은 페이지 맨 앞이 아니라(2단 레이아웃에서 본문이 끝나자마자 같은 페이지
-하단에 등장하는 경우 등) 페이지 중간/끝에 나올 수도 있어, 페이지 전체 줄을 검사하고
-제목이 있는 페이지는 그 줄 이전 본문만 남기고 잘라낸다(페이지 전체를 통째로 버리지 않음).
+References 제목은 2단 레이아웃에서 페이지 중간이나 끝에 나오기도 해서, 제목이 있는
+페이지는 제목 앞 본문만 남긴다.
 """
 
 import re
@@ -20,13 +15,9 @@ REFERENCE_HEADING_RE = re.compile(
 
 
 def find_reference_start_page(pages: list[Page], manual_start_page: int | None = None) -> int | None:
-    """References 절 제목이 있는 페이지 번호를 찾는다.
+    """References 제목 줄이 있는 페이지 번호를 찾는다.
 
-    manual_start_page가 지정되면(manifest.json의 reference_start_page) 그 값을 그대로 사용하고,
-    없으면 각 페이지 전체 줄에서 "References" 류의 제목(그 줄에 다른 내용 없이 제목만 있는 경우)을
-    자동 탐지한다. 해당 페이지의 제목 이전 내용은 본문으로 유지하고, 이후 페이지는 모두
-    참고문헌 구간으로 간주한다(참고문헌 뒤에 부록이 있는 경우는 manifest에서
-    reference_start_page를 직접 지정해 처리).
+    manual_start_page(manifest.json의 reference_start_page)가 있으면 그 값을 쓴다.
     """
     if manual_start_page is not None:
         return manual_start_page
@@ -39,10 +30,9 @@ def find_reference_start_page(pages: list[Page], manual_start_page: int | None =
 
 
 def _text_before_reference_heading(text: str) -> str | None:
-    """References 제목 줄 앞부분만 남긴다(해당 페이지의 실제 본문은 계속 색인 대상).
+    """References 제목 줄 앞 텍스트를 돌려준다.
 
-    제목 줄을 찾지 못하면 None을 반환한다(수동 지정된 경계 페이지 등 - 이 경우 페이지
-    전체를 참고문헌 구간으로 간주해 통째로 제외한다).
+    제목 줄이 없으면(수동 지정한 경계 페이지 등) None이고, 그 페이지는 통째로 제외된다.
     """
     lines = text.splitlines()
     for index, line in enumerate(lines):
@@ -56,15 +46,11 @@ def drop_reference_pages(
     reference_start_page: int | None,
     reference_end_page: int | None = None,
 ) -> tuple[list[Page], list[Page]]:
-    """색인 대상 본문 페이지와 제외된 참고문헌 페이지를 분리한다.
+    """색인할 본문 페이지와 제외한 참고문헌 페이지를 나눈다.
 
-    제목이 있는 경계 페이지는 제목 이전 본문만 남겨 body_pages에 포함시키고,
-    excluded_pages에는 원본(제목 포함) 페이지를 감사용으로 기록한다.
-
-    reference_end_page가 지정되면 그 페이지까지만 참고문헌 구간으로 보고 이후 페이지는
-    다시 본문으로 색인한다. 참고문헌 뒤에 부록이 오는 논문(예: DeepSeek-V2는 References
-    뒤 Appendix A~G에 MLA 전체 수식·어텐션 ablation이 있음)에서 부록이 통째로 버려지는
-    것을 막기 위한 값으로, manifest.json에 직접 지정한다.
+    경계 페이지는 제목 앞 본문만 body_pages에 넣고, 원본은 excluded_pages에 남긴다.
+    reference_end_page 뒤 페이지는 다시 본문으로 본다. 참고문헌 뒤에 부록이 오는
+    논문(예: DeepSeek-V2)을 위해 manifest.json에서 지정한다.
     """
     if reference_start_page is None:
         return list(pages), []

@@ -1,4 +1,4 @@
-"""Synthesis consumes existing perspectives and deduplicated evidence: NO search."""
+"""종합 Agent: 신규 검색 없이 기존 관점 결과와 중복 제거된 Evidence만 쓴다."""
 from __future__ import annotations
 from typing import Any
 from ..evaluation.quality import gap_lines
@@ -10,7 +10,7 @@ from ..schemas import SynthesisAssessment
 
 def synthesis_node(state: dict, llm: Any) -> dict:
     evidence = deduplicate_evidence(state["evidence"])
-    # Keep citation mapping and summaries, avoid inventing research.
+    # 인용 매핑에 필요한 필드와 claim만 넘긴다.
     src = [{k: ev.get(k) for k in ("source_id", "claim", "doc_id", "page", "url", "technology")}
            for ev in evidence]
     assessment = llm.generate_structured(

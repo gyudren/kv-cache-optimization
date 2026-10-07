@@ -1,4 +1,4 @@
-"""Market evaluation: Web search only, no local RAG injection."""
+"""시장성 평가: 로컬 RAG 없이 웹 검색 결과만 근거로 쓴다."""
 from __future__ import annotations
 from typing import Any
 from ..prompts import prompt_template
@@ -8,8 +8,7 @@ from ..schemas import MarketAssessment
 from ..tools import retry_queries, rework_note
 from ..state import attempt_of
 
-# 기준별(M1 시장 규모·성장, M2 상용화·채택, M3 생태계 지지) 검색어. (query, topic)
-# M1은 설계 C-2대로 "기술이 속한 시장"을 본다. M3의 공식 문서·릴리스 노트는 뉴스가 아니라 general로 찾는다.
+# 기준별(M1 시장 규모·성장, M2 상용화·채택, M3 생태계 지지) 검색어와 topic
 MARKET_QUERIES = {
     "mla": [
         ("LLM inference serving optimization market size growth forecast", "news"),
@@ -28,7 +27,7 @@ MARKET_QUERIES = {
 }
 
 
-# 기준별 판정 필드. 하나라도 근거로 판정했으면 관점 결과가 성립한다(나머지 기준의 공백은 표에 '근거 부족'으로 남는다).
+# 이 중 하나라도 판정했으면 관점 결과가 성립한다. 나머지는 표에 '근거 부족'으로 남는다.
 CRITERION_VERDICTS = ("market_size_growth_verdict", "adoption_verdict", "ecosystem_verdict")
 
 
@@ -37,14 +36,15 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
     feedback = state.get("feedback", {}).get("market", {})
     results: dict = {}
     evidence: list[dict] = []
-    missing: list[str] = []    # 필수 결함(출처·인용·판정 없음): Supervisor 재조사 대상
-    optional: list[str] = []   # LLM이 적은 세부 미확인 항목(CAGR 방법론 등): 보고서 한계점에만 기록
+    # missing은 Supervisor 재조사 대상, optional은 보고서 한계점에만 남는다.
+    missing: list[str] = []
+    optional: list[str] = []
     for tech, name in (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME CXL hybrid memory")):
         found = []
         queries = MARKET_QUERIES[tech] + [(q, "news") for q in retry_queries(name, feedback, tech=tech)]
         for query, topic in queries:
             found.extend(web.search_market(query, topic))
-        # Distinct URL, stable citation IDs; web excerpt is the only supporting text.
+        # URL로 중복을 없애고, source_id는 URL 해시라 재실행해도 같다.
         sources = {entry["url"]: entry for entry in found}
         raw = [{**r, "source_id": f"web:{tech}:{sha256(r['url'].encode()).hexdigest()[:14]}"} for r in sources.values()]
         valid_ids = {r["source_id"] for r in raw}
