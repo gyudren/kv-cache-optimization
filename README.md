@@ -84,22 +84,24 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)·하드웨어(ITME
 | 제어 | `gaps` (근거 공백) | 순서 유지 중복 제거 append |
 | 페이로드 | `perspectives{tech, market, stakeholder, domain}` | 키 단위 dict merge |
 | 페이로드 | `synthesis`, `report` | 단일 작성자 |
-| 페이로드 | `evidence` | dedup-append, 발췌 300자 축약 + `excerpt_ref`(원문은 디스크 저장소) |
+| 페이로드 | `evidence` | dedup-append, 발췌 160자 축약 + `excerpt_ref`(원문은 디스크 저장소) |
 | 페이로드 | `cache_keys` (RAG 캐시 위치, 원문은 디스크) | 키 단위 dict merge |
 
 설계 항목별 선정 이유 (전체 결정 기록: `docs/DECISIONS.md`)
 
 1. **제어 vs 페이로드 분리** : 한 딕셔너리에 섞으면 라우팅 조건이 결과 본문 구조에 의존해 프롬프트를 바꿀 때 라우팅이 깨지므로, Supervisor가 제어 필드와 결과의 `sufficient/missing`만 읽도록 분리했다.
 2. **관측성 위치** : 로그를 State의 `operator.add` 리스트에 쌓으면 체크포인트마다 전체 이력이 복제되어 커지므로, 결정 로그 본문은 `outputs/decisions_{trace_id}.jsonl`과 LangSmith에 두고 State에는 직전 결정(`last_decision`)만 남겼다.
-3. **지속성 비용** : 원문 RAG 캐시와 Evidence 발췌 원문을 State에 넣으면 이전 실행 기준 `final_state.json` 848KB(evidence만 491KB)가 체크포인트마다 다시 저장되므로, RAG 캐시와 발췌 원문은 `data/cache/{trace_id}/` 디스크 저장소에 두고 State에는 300자 축약본·`excerpt_ref`·`cache_keys`만 남겼다(보고서·평가는 원문을 `hydrate()`로 사용). `Send`에도 State 전체가 아니라 에이전트가 읽는 제어 필드만 넘긴다.
+3. **지속성 비용** : 원문 RAG 캐시와 Evidence 발췌 원문을 State에 넣으면 이전 실행 기준 `final_state.json` 848KB(evidence만 491KB)가 체크포인트마다 다시 저장되므로, RAG 캐시와 발췌 원문은 `data/cache/{trace_id}/` 디스크 저장소에 두고 State에는 160자 축약본·`excerpt_ref`·`cache_keys`만 남겼다(보고서·평가는 원문을 `hydrate()`로 사용). `Send`에도 State 전체가 아니라 에이전트가 읽는 제어 필드만 넘긴다.
 
-   | 실측 (`python scripts/measure_state_size.py`) | 변경 전 | 변경 후 |
-   |---|---|---|
-   | 이전 실제 실행 evidence 320건 (State 안 바이트) | 491,320B | 227,639B |
-   | Fake 정상 실행: 최종 State / 체크포인트 11개 누적 | 155,001B / 1,171,039B | 85,062B / 605,880B |
-   | Fake 재작업 실행: 최종 State / 체크포인트 21개 누적 | 234,825B / 3,968,002B | 125,510B / 1,856,254B |
+   | 실측 (`python scripts/measure_state_size.py`) | 원문 State 보관¹ | 300자 축약² | 160자 축약 (현재) |
+   |---|---|---|---|
+   | 이전 실제 실행 evidence 320건 (State 안 바이트) | 491,320B | 227,639B | 179,972B |
+   | Fake 정상 실행: 최종 State / 체크포인트 11개 누적 | 155,001B / 1,171,039B | 87,323B / 621,183B | 73,665B / 511,321B |
+   | Fake 재작업 실행: 최종 State / 체크포인트 21개 누적 | 234,825B / 3,968,002B | 124,318B / 1,840,080B | 102,880B / 1,495,279B |
 
-   (Fake 발췌 길이는 실데이터 수준인 논문 1,200자·웹 1,000자. 디스크 저장소는 정상 실행 기준 169,019B)
+   ¹ 저장소 도입 전 코드(1ef5675)에서 측정. ² 현재 코드에서 `STATE_EXCERPT_CHARS=300`으로 측정. (Fake 발췌 길이는 실데이터 수준인 논문 1,200자·웹 1,000자. 디스크 저장소는 정상 실행 169,019B, 재작업 실행 225,351B. 체크포인트 누적이 State보다 큰 이유는 SqliteSaver가 superstep마다 State 전체를 다시 저장하기 때문이며, 실제 실행의 체크포인트 크기는 로컬 실행 후 같은 스크립트 방식으로 갱신한다.)
+
+   **원문 저장소가 없을 때** : `data/cache/`는 git에 포함되지 않는다. 원문이 없는 Evidence는 축약 발췌로 대체하되 조용히 넘기지 않는다. 항목에 `excerpt_truncated`를 표시하고, 품질 평가 Judge 프롬프트에 축약 경고를 넣으며, `eval_result.evidence_store`와 `validation.json`의 `evidence_store`·`warnings`에 개수를 남긴다. 새로 clone한 저장소에서 `--report-only`를 실행하면 원문이 없으므로 즉시 실패하고 전체 실행(`python app.py`)을 안내한다.
 4. **상관** : 키를 따로 쓰면 트레이스·State·로그를 사람이 손으로 맞춰야 하므로, uuid4 `trace_id` 하나를 LangGraph `thread_id`·LangSmith metadata·결정 로그 파일명에 함께 썼다.
 5. **재개/복구** : 메모리 체크포인터는 프로세스가 죽으면 사라져 15분짜리 실행을 처음부터 다시 해야 하고 Postgres 체크포인터는 단일 사용자 CLI에 DB 서버를 요구하므로, 파일 하나인 `SqliteSaver`와 `node_status{pending/running/done/failed/skipped}`·`last_error`·`retry_counts`로 실패 지점부터 `--resume`하게 했다.
 6. **동시 처리** : reducer 없이 `Send`로 병렬 실행하면 같은 키에 동시에 쓸 때 `InvalidUpdateError`가 나거나 마지막 값만 남으므로, 필드별 병합 규칙(dict merge, dedup-append)을 명시했다.
@@ -143,7 +145,7 @@ flowchart TD
 
 ## 설계 결정 (선정 이유)
 
-전체 목록(43건)은 `docs/DECISIONS.md`. 평가에 직접 관련된 결정은 아래와 같다.
+전체 목록은 `docs/DECISIONS.md`. 평가에 직접 관련된 결정은 아래와 같다.
 
 - **Supervisor 판단 방식** : Supervisor를 LLM 라우터로 하면 같은 State에서도 실행마다 다음 노드가 바뀌어 재현·테스트가 불가능하고 매 진입마다 LLM 비용·지연이 붙으므로, 라우팅 입력이 모두 구조화된 제어 필드라는 점을 이용해 결정적 규칙 함수(`policy.decide`)를 선정했다(내용 판단은 각 에이전트와 LLM Judge가 맡는다).
 - **평가 노드 위치** : `report → quality_evaluator` 고정 엣지로 하면 보고서 에이전트가 Supervisor를 거치지 않고 다른 노드로 넘기고 실패한 보고서까지 평가되므로, 모든 작업 노드가 Supervisor로만 돌아오고 Supervisor가 "보고서 정상 완료 + 평가 미실행"일 때만 `evaluate`로 평가 노드를 부르게 했다(마지막 보고서 이후 평가 없는 `end:passed` 불가를 테스트로 강제).
@@ -151,9 +153,10 @@ flowchart TD
 - **체크포인터** : `MemorySaver`는 프로세스가 죽으면 사라지고 Postgres는 단일 사용자 CLI에 DB 서버 운영을 요구하므로, 파일 하나로 재개되는 `SqliteSaver`(thread_id=trace_id)를 선정했다.
 - **재시도 상한 (관점 2 / 보고서 2 / 종합 1 / 평가 실행 1)** : 0~1회면 질의 재작성 한 번으로 회복되는 일시적 근거 부족도 공백으로 끝나고 3회 이상이면 같은 공개 자료를 반복 검색해 비용만 늘므로, 이전 실제 실행에서 관찰된 재작업 범위(tech 재작성 2회·관점 재할당 2회)에 맞춰 2회를 기본으로 했다(종합은 표현 보완만이라 1회).
 - **`MAX_STEPS = 20`** : 10 이하면 Fake 고장 주입 시나리오의 최대 관측치(Judge 상시 미달 17회)조차 마치기 전에 끊기고 이론적 최악(30회 이상)까지 허용하면 실제 실행이 1시간을 넘으므로, 정상 경로(5회)와 관측 최악(17회)은 끝까지 가고 그 이상은 근거 공백을 명시하는 마무리 모드로 끊도록 20으로 정했다.
-- **`FINALIZE_STEPS = 5`** : 마무리(종합→보고서→평가→종료)는 4회인데 4로 딱 맞추면 재개 직후 재진입 한 번에도 보고서 없이 하드 종료되므로, 여유 1을 더해 5로 정했다(`recursion_limit` = (20+5)×2+10 = 60).
+- **`FINALIZE_STEPS = 5`** : 마무리(종합→보고서→평가→종료)는 4회인데 4로 딱 맞추면 재개 직후 재진입 한 번에도 보고서 없이 하드 종료되므로, 여유 1을 더해 5로 정했다. `recursion_limit`은 그래프가 실제로 쓰는 Policy에서 (max_steps+5)×2+10으로 계산한다(기본 60, 단일 출처).
 - **편향 임계값 (`MIN_DISTINCT_SOURCES=2`, `MAX_SINGLE_SOURCE_SHARE=0.6`)** : 고유 출처 하한 1이면 단일 기사·단일 페이지로 판정이 확정되고 3 이상이면 공개 자료가 적은 ITME에서 거의 항상 공백이 되므로 2로, 단일 발행처 비중 상한은 70% 이상이면 한 매체 편중을 놓치고 50%면 출처 2개 중 1개 같은 발행처까지 경계에 걸리므로 0.6(3개 중 2개 이상 같은 발행처면 재조사)으로 정했다.
-- **충분성 판단 주체** : 에이전트의 자기 보고(`sufficient`)만 믿으면 출처 1개로도 "충분"이 통과해 편향이 보고서 단계에서야 드러나므로, Supervisor가 관점·기술별 고유 출처 수를 결정적으로 다시 검사한다.
+- **충분성 판단 주체** : 에이전트의 자기 보고(`sufficient`)만 믿으면 출처 1개로도 "충분"이 통과해 편향이 보고서 단계에서야 드러나므로, Supervisor가 관점·기술별 고유 출처 수를 결정적으로 다시 검사한다. 누적 출처로 세면 매 시도 1개씩만 찾아도 두 시도를 합쳐 통과하므로 **최신 시도의 출처만** 센다.
+- **재검색 힌트** : 부족 사유 문장을 그대로 검색어로 쓰면 결과가 나오지 않고 다른 기술 이름까지 섞이므로, 재작업 지시를 사유(`missing`)와 기술별 검색 힌트(`queries_by_tech`)로 나눠 실제로 부족한 기술에만 구조화된 힌트를 붙인다.
 
 ## Data Preprocessing
 

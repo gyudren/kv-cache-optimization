@@ -1,5 +1,7 @@
 # Multi-Agent Orchestration 개선 개발 계획서
 
+> 2026-10-07 개정: report→supervisor 경로, QA D-03 반영 — PM 승인
+
 - 작성: TF팀 PM · 작성일 2026-10-07 · 작업 브랜치 `feat/multi-agent-supervisor` (`main`의 RAG 산출물과 분리)
 - 기준 문서: Notion「Multi-Agent Orchestration」 가이드 A~D, 제출물 3종, 토글「(참고) 평가 항목」
 - 대상 저장소: `gyudren/kv-cache-optimization` @ `main` (1896b1c, "[산출물 최종] (#10)")
