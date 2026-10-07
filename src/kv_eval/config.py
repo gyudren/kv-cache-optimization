@@ -28,6 +28,10 @@ RAG_REWRITES = 2
 MAX_PARALLEL_QUESTIONS = int(os.getenv("MAX_PARALLEL_QUESTIONS", "12"))
 # 4관점(기술 성숙도·시장성·이해관계자·도메인). Supervisor가 State를 보고 이 중 필요한 것만 고른다.
 PERSPECTIVES = ("tech", "market", "stakeholder", "domain")
+# 한 superstep에서 동시에 실행할 작업 노드 수(LangGraph max_concurrency). Supervisor는 부족한 관점을
+# Send로 한 번에 할당하지만, 실행은 기본 1개씩 순차로 한다. 관점마다 근거 원문·프롬프트·임베딩 호출이 함께
+# 메모리에 올라오므로 동시에 돌리면 최대 메모리가 관점 수만큼 커지고(OOM), MPS 임베딩 경합도 생긴다.
+AGENT_CONCURRENCY = max(1, int(os.getenv("AGENT_CONCURRENCY", "1")))
 # 재작업 상한(안전장치). 근거 충분성·품질 평가 통과가 1차 종료 조건이고, 상한은 무한 루프만 막는다.
 RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2,
                 "quality_evaluator": 1}

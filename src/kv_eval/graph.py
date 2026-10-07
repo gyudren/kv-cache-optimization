@@ -5,6 +5,9 @@
                        → synthesis / report / quality_evaluator / END
     모든 작업 노드(4관점·종합·보고서·품질 평가) → supervisor (작업 노드끼리 잇는 엣지 없음)
     품질 평가는 보고서가 정상 완료된 뒤 Supervisor의 evaluate 결정으로만 실행된다.
+
+작업 노드는 비동기(async)다. 실행은 `ainvoke`/`astream`으로 하고, Send로 함께 할당된 관점은
+run_config의 max_concurrency(AGENT_CONCURRENCY, 기본 1)만큼만 동시에 돈다(기본: 하나씩 순차).
 """
 from __future__ import annotations
 from functools import partial

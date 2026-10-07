@@ -6,8 +6,13 @@ MLA 질의의 상위 k에 ITME 수치가 섞여 들어가지 않는다.
 """
 from __future__ import annotations
 from dataclasses import dataclass
+import threading
 from ..config import RRF_CONSTANT, RETRIEVAL_K
 from .index import RetrievalStore, tokenize
+
+# Send fan-out(tech·domain)과 RAG 병렬 질문이 같은 임베딩 모델을 동시에 부른다. macOS MPS(Metal)는
+# 스레드 간 동시 encode를 지원하지 않아 프로세스가 abort되므로, 짧은 질의 임베딩만 직렬화한다.
+_ENCODE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -64,9 +69,10 @@ class HybridRetriever:
 
         # Qwen3-Embedding은 검색 질의에 instruction을 붙여 임베딩하도록 학습돼 있다
         # (설계 B-4가 이 모델을 고른 근거). 문서는 instruction 없이 임베딩한다.
-        query_embedding = np.asarray(
-            self.store.model.encode([query], prompt_name="query"), dtype="float32"
-        )
+        with _ENCODE_LOCK:
+            query_embedding = np.asarray(
+                self.store.model.encode([query], prompt_name="query"), dtype="float32"
+            )
         faiss.normalize_L2(query_embedding)
         # 허용된 문서만 점수를 매긴다(제외된 기술이 top-k 자리를 차지하지 못하게).
         dense_scores = self.store.vectors[subset] @ query_embedding[0]

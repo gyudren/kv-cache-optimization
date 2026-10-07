@@ -1,0 +1,31 @@
+[trace] trace_id=61afa03b-2492-480d-930e-0ba7aecbca42 · LangSmith ON (project=kv-cache-supervisor)
+[     0s] 청크 359개 적재 · 색인 생성 중(FAISS + BM25)...
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/310 [00:00<?, ?it/s]Loading weights: 100%|██████████| 310/310 [00:00<00:00, 25434.44it/s]
+[    37s] 색인 완료 · 그래프 실행 시작
+[    37s] supervisor#1 → dispatch:tech,market,stakeholder,domain (tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집)
+[    62s] stakeholder done
+[    63s] market done
+[    90s] domain done
+[    93s] tech done
+[    93s] supervisor#2 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 1/2 (별도의 메모리 계층 구조 및 그 운영 방식에 관한 정보; 구현 코드, 소프트웨어/하드웨어 구성, 학습 데이터, 옵티마이저, 학습률·배치 크기·학습 단계 등의 구체적 구현 및 학습 실험 설정은 제공된 발췌문에 없다.)
+[   134s] stakeholder done
+[   144s] market done
+[   145s] domain done
+[   151s] tech done
+[   151s] supervisor#3 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 2/2 (제공된 인용문에는 ‘memory hierarchy(메모리 계층)’라는 별도의 메커니즘이나 계층별 배치·이동 정책에 대한 설명이 없습니다.; 제공된 인용문에는 구현 코드, 프레임워크/라이브러리 버전, 하드웨어 구성,)
+[   194s] market done
+[   209s] domain done
+[   218s] tech done
+[   232s] stakeholder done
+[   232s] supervisor#4 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
+[   261s] synthesis done
+[   261s] supervisor#5 → report (종합 완료 → 보고서 작성)
+[   290s] report done
+[   290s] supervisor#6 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
+[   298s] quality_evaluator done
+[   298s] supervisor#7 → rewrite:report (품질 평가 미달(groundedness,bias_control) → 보고서 재작성: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, )
+[   336s] report done
+[   336s] supervisor#8 → evaluate (보고서 완료(시도 1) → 품질 평가 4항목 판정)
+[   348s] quality_evaluator done
+[   348s] supervisor#9 → rewrite:report (품질 평가 미달(groundedness,bias_control) → 보고서 재작성: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, )

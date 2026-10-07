@@ -1,22 +1,28 @@
-"""에이전트 실패 처리 래퍼.
+"""에이전트 실패 처리 래퍼(비동기 노드).
 
 성공한 노드의 evidence는 여기서 원문을 evidence_store로 옮긴다.
 
 예외가 그래프 밖으로 나가면 실행 전체가 죽고 보고서가 남지 않는다. 래퍼가 예외를 잡아
 node_status[name]=failed, last_error[name]=요약으로 바꾸면 Supervisor가 재시도 한도 안에서
 다시 보내거나, 한도를 넘으면 제외하고 근거 공백으로 기록한다.
+
+작업 노드는 `async def`다. 에이전트 본문(OpenAI·Tavily·임베딩 호출)은 블로킹 I/O라 `asyncio.to_thread`로
+워커 스레드에 넘겨 이벤트 루프를 막지 않는다. to_thread는 contextvars(LangGraph 실행 설정·LangSmith 부모 run)를
+복사하므로 에이전트 안의 LLM·웹 호출도 그래프 run의 자식으로 기록된다. 동시에 몇 개를 돌릴지는
+run_config의 max_concurrency(AGENT_CONCURRENCY, 기본 1 = 순차)가 정한다.
 """
 from __future__ import annotations
-from typing import Callable
+import asyncio
+from typing import Awaitable, Callable
 from langgraph.errors import GraphBubbleUp
 from .. import evidence_store
 from ..config import PERSPECTIVES
 
 
-def guarded(name: str, fn: Callable[[dict], dict]) -> Callable[[dict], dict]:
-    def node(state: dict) -> dict:
+def guarded(name: str, fn: Callable[[dict], dict]) -> Callable[[dict], Awaitable[dict]]:
+    async def node(state: dict) -> dict:
         try:
-            update = fn(state) or {}
+            update = (await asyncio.to_thread(fn, state)) or {}
         except GraphBubbleUp:
             raise  # interrupt 등 LangGraph 제어 신호는 그대로 올린다
         except Exception as exc:  # noqa: BLE001 - 에이전트 실패를 State로 바꾸는 경계

@@ -2,7 +2,8 @@
 
 그래프에는 `add_conditional_edges("supervisor", route, ...)` 하나만 있다. supervisor 노드가
 policy.decide로 다음 노드를 정해 State(next_agents)에 쓰고, route는 그 값만 읽어 경로를 만든다.
-관점 에이전트는 `Send`로 동적 fan-out하므로 근거가 부족한 관점 1개만 다시 보낼 수도, 4개를 동시에 보낼 수도 있다.
+관점 에이전트는 `Send`로 동적 fan-out하므로 근거가 부족한 관점 1개만 다시 보낼 수도, 4개를 한 번에 보낼 수도 있다.
+할당은 한 번에 하지만 실행은 run_config의 max_concurrency(기본 1)에 따라 하나씩 순차로 한다(메모리 상한).
 """
 from __future__ import annotations
 from langgraph.graph import END

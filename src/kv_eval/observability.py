@@ -13,7 +13,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from .config import LANGSMITH_RUN_NAME, LANGSMITH_TAGS
+from .config import AGENT_CONCURRENCY, LANGSMITH_RUN_NAME, LANGSMITH_TAGS
 
 
 def new_trace_id() -> str:
@@ -51,9 +51,11 @@ def run_config(trace_id: str) -> dict:
 
     recursion_limit은 여기서 정하지 않는다. build_graph가 그 그래프의 Policy.max_steps로 계산해
     그래프 기본 설정에 넣으므로 Policy와 상한이 어긋날 수 없다(단일 출처).
+    max_concurrency는 Send로 함께 할당된 관점 에이전트를 한 번에 몇 개 실행할지 정한다(기본 1 = 순차).
     """
     return {
         "configurable": {"thread_id": trace_id},
+        "max_concurrency": AGENT_CONCURRENCY,
         "run_name": LANGSMITH_RUN_NAME,
         "tags": list(LANGSMITH_TAGS),
         "metadata": {"trace_id": trace_id, "project": os.getenv("LANGSMITH_PROJECT", "")},
