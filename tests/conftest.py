@@ -16,6 +16,12 @@ def isolated_outputs(tmp_path, monkeypatch):
     monkeypatch.setenv("RAG_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MANIFEST_PATH", str(ROOT / "data" / "manifest.json"))
     monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
+    from kv_eval.reporting.export import korean_fonts
+    try:
+        korean_fonts()
+    except RuntimeError:
+        # 한글 폰트가 없는 CI에서는 조판 검사만 경고로 낮춰 흐름 테스트를 돌린다(운영 기본값은 이슈).
+        monkeypatch.setenv("ALLOW_UNCHECKED_PDF", "1")
     return tmp_path
 
 

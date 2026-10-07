@@ -137,7 +137,7 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
         korean_fonts()
         renderable = True
     except RuntimeError:
-        # 한글 폰트가 없는 환경에서는 물리 조판 검사(1/2페이지·10페이지)를 할 수 없다. 이슈가 아니라 미검사로 남긴다.
+        # 한글 폰트가 없으면 물리 조판 검사(1/2페이지·10페이지)를 할 수 없다. 조용히 넘기지 않고 이슈로 드러낸다.
         renderable = False
     if renderable and "## SUMMARY\n" in report and "\n## 1. 분석 배경" in report:
         summary = report.split("## SUMMARY\n", 1)[1].split("\n## 1. 분석 배경", 1)[0].strip()
@@ -159,5 +159,10 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
         issues.append("실제 사용한 근거가 REFERENCE에 누락")
     if not refs and "근거 부족" not in report:
         issues.append("검증 가능한 출처 및 근거 부족 표기 모두 없음")
-    return {"passed": not issues, "issues": issues, "used_references": refs,
-            "pdf_pages": pages, "page_check": "checked" if pages is not None else "skipped(no Korean font)"}
+    warnings = []
+    if not renderable:
+        message = f"PDF 조판 검사 불가(한글 TrueType 폰트 없음): {MAX_REPORT_PAGES}p 상한·SUMMARY 1/2p 미검증"
+        # 오프라인 테스트처럼 조판과 무관한 검증만 할 때는 ALLOW_UNCHECKED_PDF=1로 경고로 낮출 수 있다.
+        (warnings if os.getenv("ALLOW_UNCHECKED_PDF") == "1" else issues).append(message)
+    return {"passed": not issues, "issues": issues, "warnings": warnings, "used_references": refs,
+            "pdf_pages": pages, "page_check": "checked" if pages is not None else "unchecked(no Korean font)"}

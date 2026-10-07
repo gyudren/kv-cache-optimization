@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 from ..config import FINALIZE_STEPS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS
-from ..evaluation.quality import REINVESTIGATE_CRITERIA, REWRITE_CRITERIA
+from ..evaluation.quality import REINVESTIGATE_CRITERIA, REWRITE_CRITERIA, evidence_shortfalls
 from ..state import perspective
 
 END_NODE = "__end__"
@@ -49,7 +49,10 @@ def classify(state: dict, name: str) -> str:
         return "failed"
     if status != "done":
         return "pending"  # 미실행(또는 중단 후 재개로 running이 남은 경우)
-    return "sufficient" if perspective(state, name).get("sufficient") else "insufficient"
+    # 에이전트의 자기 보고(sufficient)만 믿지 않고 Supervisor가 출처 수를 결정적으로 다시 확인한다.
+    if not perspective(state, name).get("sufficient") or evidence_shortfalls(state, name):
+        return "insufficient"
+    return "sufficient"
 
 
 def _feedback(missing: list[str], *, search: bool = True) -> dict:
@@ -132,7 +135,7 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
             to_run.append(name)
             reasons.append(f"{name}: 미수집")
             continue
-        missing = perspective(state, name).get("missing", [])
+        missing = [*evidence_shortfalls(state, name), *perspective(state, name).get("missing", [])]
         error = (state.get("last_error") or {}).get(name, "")
         if not finalize and b.can_retry(name):
             if status == "failed":

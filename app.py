@@ -94,14 +94,19 @@ def run(query: str = DEFAULT_QUERY, resume: str | None = None) -> dict:
     print(f"[trace] trace_id={trace_id} · LangSmith "
           + (f"ON (project={os.getenv('LANGSMITH_PROJECT', 'default')})" if langsmith_enabled() else "OFF"), flush=True)
     checkpointer = open_checkpointer(checkpoint_path(settings.output_dir))
+    if resume:
+        # 색인(수 분)을 만들기 전에 체크포인트부터 확인한다. 상태 조회에는 런타임이 필요 없다.
+        snapshot = build_graph(None, None, None, checkpointer=checkpointer).get_state(run_config(trace_id))
+        if not snapshot.values:
+            raise ValueError(f"체크포인트에 trace_id={trace_id} 실행이 없습니다")
+        if not snapshot.next:
+            print("[resume] 이미 종료된 실행입니다. 결과만 다시 내보냅니다.", flush=True)
+            return save_and_finalize(snapshot.values, settings.output_dir)
     rag, web, llm = build_runtime(settings, started_at)
     graph = build_graph(rag, web, llm, checkpointer=checkpointer)
     if resume:
-        snapshot = graph.get_state(run_config(trace_id))
-        if not snapshot.values:
-            raise ValueError(f"체크포인트에 trace_id={trace_id} 실행이 없습니다")
         # 입력 None = 마지막 체크포인트부터 이어서 실행(완료된 노드는 다시 실행하지 않음)
-        state = execute(graph, trace_id, None, started_at) if snapshot.next else snapshot.values
+        state = execute(graph, trace_id, None, started_at)
     else:
         state = execute(graph, trace_id, initial_state(query, trace_id), started_at)
     return save_and_finalize(state, settings.output_dir)
@@ -136,7 +141,8 @@ def finalize(state: dict, output_dir: Path) -> dict:
     report = state.get("report", "")
     eval_result = state.get("eval_result") or {}
     decisions = read_decisions(trace_id) if trace_id else []
-    (output_dir / "run_logs.json").write_text(json.dumps(decisions, ensure_ascii=False, indent=2), encoding="utf-8")
+    if decisions:  # 결정 로그가 없는 실행(이전 형식 State 내보내기 등)은 기존 run_logs.json을 덮어쓰지 않는다
+        (output_dir / "run_logs.json").write_text(json.dumps(decisions, ensure_ascii=False, indent=2), encoding="utf-8")
     if not report.strip():
         validation = {"passed": False, "issues": ["보고서 미생성"], "gaps": state.get("gaps", []), "trace_id": trace_id}
         (output_dir / "validation.json").write_text(json.dumps(validation, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -180,14 +186,18 @@ def report_only() -> dict:
     같은 Supervisor 그래프를 쓰되 관점 재조사 한도를 0으로 둔다(새 검색 없음). 평가가 관점 재조사를
     요구하면 근거 공백으로 기록하고 보고서 재작성으로 처리한다.
     """
+    from kv_eval import evidence_store
     from kv_eval.llm import StructuredLLM
     settings = Settings.from_env()
     if not settings.openai_key:
         raise RuntimeError("OPENAI_API_KEY is required")
+    configure_tracing()  # LLM 클라이언트(wrap_openai 여부)를 만들기 전에 트레이싱 설정을 확정한다
     previous = _load_final_state(settings.output_dir)
     trace_id = new_trace_id()
     seed = {key: previous.get(key) for key in ("perspectives", "synthesis", "evidence", "gaps", "cache_keys")
             if previous.get(key) is not None}
+    # 이전 형식 State의 원문 발췌도 저장소로 옮겨 State에는 축약본만 넣는다(보고서는 hydrate로 원문 사용).
+    seed["evidence"] = evidence_store.offload(trace_id, "seed", seed.get("evidence", []))
     seed["perspective_status"] = {name: "sufficient" if (previous["perspectives"].get(name) or {}).get("sufficient")
                                   else "excluded" for name in PERSPECTIVES}
     seed["node_status"] = {**{name: "done" for name in (*PERSPECTIVES, "synthesis")},
@@ -195,7 +205,6 @@ def report_only() -> dict:
     policy = Policy(retry_limits={**RETRY_LIMITS, **{name: 0 for name in PERSPECTIVES}, "synthesis": 0})
     graph = build_graph(None, None, StructuredLLM(settings.openai_key),
                         checkpointer=open_checkpointer(checkpoint_path(settings.output_dir)), policy=policy)
-    configure_tracing()
     print(f"[trace] trace_id={trace_id} (report-only)", flush=True)
     state = execute(graph, trace_id, initial_state(previous.get("user_query", DEFAULT_QUERY), trace_id, seed), time.time())
     return save_and_finalize(state, settings.output_dir)
@@ -207,8 +216,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     mode.add_argument("--resume", metavar="TRACE_ID", help="체크포인트에서 해당 trace_id 실행을 이어서 진행")
     mode.add_argument("--report-only", action="store_true", help="직전 결과로 보고서·품질 평가 루프만 재실행")
     mode.add_argument("--export-only", action="store_true", help="LLM 호출 없이 검증·내보내기만 재실행")
-    parser.add_argument("--query", default=DEFAULT_QUERY, help="평가 요청 문장")
-    return parser.parse_args(argv)
+    parser.add_argument("--query", default=None, help="평가 요청 문장(새 실행에만 적용)")
+    args = parser.parse_args(argv)
+    if args.query is not None and (args.resume or args.report_only or args.export_only):
+        parser.error("--query는 새 실행에만 쓸 수 있습니다(재개·재내보내기는 저장된 요청을 그대로 사용)")
+    args.query = args.query or DEFAULT_QUERY
+    return args
 
 
 if __name__ == "__main__":

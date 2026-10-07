@@ -17,6 +17,7 @@ from collections import Counter
 from datetime import date
 from typing import Any
 from ..config import MAX_SINGLE_SOURCE_SHARE, MIN_DISTINCT_SOURCES, PERSPECTIVES
+from ..evidence_store import hydrate
 from ..observability import log_decision
 from ..prompts import prompt_template
 from ..reporting.sections import (PAPER_CITATION, WEB_CITATION, citeable_evidence, validate_report)
@@ -62,10 +63,28 @@ def _sentences(text: str) -> list[str]:
     return out
 
 
-def _acknowledged(gaps: list[str], name: str, tech: str | None = None) -> bool:
-    """Supervisor가 이 관점(·기술)을 근거 공백으로 기록했는가."""
-    prefixes = (f"{name}:",) + ((f"{name}/{tech}:",) if tech else ())
-    return any(gap.startswith(prefixes) for gap in gaps)
+def _acknowledged(state: dict, name: str, tech: str) -> bool:
+    """Supervisor가 이 관점·기술을 근거 공백으로 기록했는가.
+
+    `관점/기술:` 공백은 그 기술만 인정한다. `관점:` 공백은 Supervisor가 그 관점을 실제로 제외(excluded)한
+    경우에만 두 기술 모두에 인정한다. 공백은 "결과·근거 없음"만 면제하고 보고서 절 구조는 면제하지 않는다.
+    """
+    gaps = state.get("gaps", [])
+    if any(gap.startswith(f"{name}/{tech}:") for gap in gaps):
+        return True
+    excluded = (state.get("perspective_status") or {}).get(name) == "excluded"
+    return excluded and any(gap.startswith(f"{name}:") for gap in gaps)
+
+
+def evidence_shortfalls(state: dict, name: str) -> list[str]:
+    """관점·기술별 고유 출처 수 결정적 검사(Supervisor 충분성 검증과 편향 규칙이 함께 쓴다)."""
+    evidence = deduplicate_evidence(state.get("evidence", []))
+    out = []
+    for tech in TECHS:
+        distinct = {_source_unit(ev) for ev in evidence if ev.get("agent") == name and ev.get("technology") == tech}
+        if len(distinct) < MIN_DISTINCT_SOURCES:
+            out.append(f"{name}/{tech}: 고유 출처 {len(distinct)}개(<{MIN_DISTINCT_SOURCES})")
+    return out
 
 
 # ---- 규칙 검사 -----------------------------------------------------------------------------
@@ -111,11 +130,10 @@ def _verdicts(state: dict, name: str, tech: str) -> list[str]:
 
 def check_bias(state: dict) -> dict:
     evidence = deduplicate_evidence(state.get("evidence", []))
-    gaps = state.get("gaps", [])
     issues, targets = [], []
     for name in PERSPECTIVES:
         for tech in TECHS:
-            if _acknowledged(gaps, name, tech):
+            if _acknowledged(state, name, tech):
                 continue
             items = [ev for ev in evidence if ev.get("agent") == name and ev.get("technology") == tech]
             problems = []
@@ -157,7 +175,6 @@ def _has_result(state: dict, name: str, tech: str) -> bool:
 
 def check_coverage(state: dict) -> dict:
     report = state.get("report", "")
-    gaps = state.get("gaps", [])
     issues, targets = [], []
     for number, name in SECTION_PERSPECTIVE.items():
         text = _section(report, number)
@@ -169,13 +186,11 @@ def check_coverage(state: dict) -> dict:
         if len(narrative.strip()) < 40:
             problems.append("서술 없음")
         for tech, label in (("mla", "MLA"), ("itme", "ITME")):
-            if _acknowledged(gaps, name, tech):
-                continue
             if label not in text:
-                problems.append(f"{label} 미기재")
-            if not _has_result(state, name, tech):
+                problems.append(f"{label} 미기재")  # 근거 공백이어도 절 안에 기술명과 '근거 부족'은 적어야 한다
+            if not _has_result(state, name, tech) and not _acknowledged(state, name, tech):
                 problems.append(f"{label} 관점 결과 없음")
-        if problems and not _acknowledged(gaps, name):
+        if problems:
             issues.append(f"{name}: {number} 절 " + ", ".join(problems))
             targets.append(name)
     return {"passed": not issues, "issues": issues, "targets": targets}
@@ -199,7 +214,7 @@ def cited_snippets(state: dict) -> list[dict]:
     body = _body(state.get("report", ""))
     used = set(PAPER_CITATION.findall(body)) | {f"W{n}" for n in WEB_CITATION.findall(body)}
     out = []
-    for ev in citeable_evidence(state.get("evidence", [])):
+    for ev in citeable_evidence(hydrate(state.get("evidence", []))):
         cite = ev["citation"]
         key = cite.strip("[]")
         paper_key = tuple(x.strip().replace("p.", "") for x in key.split(",")) if "," in key else None

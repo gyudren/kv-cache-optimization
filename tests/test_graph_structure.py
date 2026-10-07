@@ -9,7 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
 from fakes import INF, FakeLLM, FakeRAG, FakeWeb, SimulatedCrash
-from kv_eval.config import EXCERPT_MAX_CHARS, LANGSMITH_TAGS, PERSPECTIVES, RETRY_LIMITS
+from kv_eval.config import STATE_EXCERPT_CHARS, LANGSMITH_TAGS, PERSPECTIVES, RETRY_LIMITS
 from kv_eval.graph import AGENT_NODES, WORKER_NODES, build_graph
 from kv_eval.observability import decision_log_path, new_trace_id, read_decisions, run_config
 from kv_eval.state import GraphState, initial_state, merge_dict, merge_evidence
@@ -40,7 +40,10 @@ def test_routing_is_decided_by_state_only():
     first = decide(base)
     assert first.targets == list(PERSPECTIVES)
     # 같은 State면 같은 결정, market만 부족하면 market만
-    state = {**base, "node_status": {**base["node_status"], **{p: "done" for p in PERSPECTIVES}},
+    evidence = [{"agent": p, "technology": t, "source_type": "web", "url": f"https://x/{p}/{t}/{i}", "claim": "c",
+                 "source_id": f"{p}{t}{i}"} for p in PERSPECTIVES for t in ("mla", "itme") for i in range(2)]
+    state = {**base, "evidence": evidence,
+             "node_status": {**base["node_status"], **{p: "done" for p in PERSPECTIVES}},
              "perspectives": {p: {"sufficient": p != "market", "missing": ["x"]} for p in PERSPECTIVES}}
     assert decide(state).targets == ["market"]
     assert decide(state).targets == ["market"]
@@ -53,10 +56,10 @@ def test_routing_is_decided_by_state_only():
 # ---- reducer 동시 쓰기 --------------------------------------------------------------------------
 def test_reducers_merge_and_dedup():
     assert merge_dict({"a": 1}, {"b": 2}) == {"a": 1, "b": 2}
-    long = {"source_id": "s1", "claim": "c", "page": 1, "excerpt": "x" * (EXCERPT_MAX_CHARS + 500)}
+    long = {"source_id": "s1", "claim": "c", "page": 1, "excerpt": "x" * (STATE_EXCERPT_CHARS + 500)}
     merged = merge_evidence([long], [dict(long), {"source_id": "s2", "claim": "c", "url": "u", "excerpt": "y"}])
     assert len(merged) == 2
-    assert len(merge_evidence([], [long])[0]["excerpt"]) == EXCERPT_MAX_CHARS
+    assert len(merge_evidence([], [long])[0]["excerpt"]) == STATE_EXCERPT_CHARS
 
 
 def test_parallel_send_writes_are_merged():
@@ -137,3 +140,17 @@ def test_decision_log_and_langsmith_config(run_graph):
     assert config["configurable"]["thread_id"] == config["metadata"]["trace_id"] == state["trace_id"]
     assert config["tags"] == LANGSMITH_TAGS and "pattern:supervisor" in config["tags"]
     assert config["run_name"]
+
+
+def test_supervisor_verifies_sufficiency_deterministically():
+    """에이전트가 sufficient=True라고 해도 고유 출처가 부족하면 Supervisor가 그 관점만 재조사시킨다."""
+    base = initial_state("q", "t-suff")
+    evidence = [{"agent": p, "technology": t, "source_type": "web", "url": f"https://x/{p}/{t}/{i}", "claim": "c",
+                 "source_id": f"{p}{t}{i}"} for p in PERSPECTIVES for t in ("mla", "itme") for i in range(2)]
+    evidence = [ev for ev in evidence if not (ev["agent"] == "market" and ev["technology"] == "itme" and ev["url"].endswith("/1"))]
+    state = {**base, "evidence": evidence,
+             "node_status": {**base["node_status"], **{p: "done" for p in PERSPECTIVES}},
+             "perspectives": {p: {"sufficient": True, "missing": []} for p in PERSPECTIVES}}
+    decision = decide(state)
+    assert decision.targets == ["market"]
+    assert any("market/itme: 고유 출처 1개" in m for m in decision.updates["feedback"]["market"]["missing"])
