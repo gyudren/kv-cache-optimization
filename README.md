@@ -1,40 +1,41 @@
 # Subject
 
-KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(ITME) 진영에서 하나씩 골라, 기술 성숙도(TRL)·시장성·이해관계자·도메인 적용성 4관점에서 근거 중심으로 평가하는 Supervisor 패턴 Multi-Agent 시스템.
+본 프로젝트는 KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA), 하드웨어(ITME) 두 진영에서 선정하여, 기술 성숙도(TRL)·시장·이해관계자·도메인 관점에서 평가하는 Supervisor 패턴 기반으로 설계/개발한 Multi-Agent 프로젝트임.
 
 ## Overview
 
-- Objective : 두 기술을 4관점에서 비교 평가한다. 우승 기술을 고르지 않고 관점별 장점·제약·근거 수준·도입 전 확인사항을 근거와 함께 제시한다.
-- Method : Multi-Agent(Supervisor) + Agentic RAG + 웹 검색
-- Tools : LangGraph(StateGraph, `Send`, `astream`, AsyncSqliteSaver), FAISS + BM25(RRF), Tavily, LangSmith, pdfplumber
-- **Pattern : Supervisor** — `supervisor` 노드 하나가 State를 읽고 `add_conditional_edges` 하나로 다음 노드를 고른다. 보고서·품질 평가 노드를 포함한 모든 작업 노드는 실행 후 Supervisor로만 돌아온다(작업 노드 간 직접 엣지 0개, `tests/test_graph_structure.py`에서 검사). Supervisor는 LLM이 아니라 결정적 규칙 함수다(`src/kv_eval/supervisor/policy.py`, 명세 `docs/SUPERVISOR_POLICY.md`).
-- **선정 이유** : 이 과제의 핵심은 "관점별 근거가 충분한지 판단하고 부족한 관점만 다시 조사한다"와 "품질 평가 미달 원인에 따라 다른 에이전트로 되돌린다"는 두 루프다. 단계 체인은 순서가 엣지에 묶여 특정 관점만 다시 부를 수 없다. Orchestrator-Workers는 오케스트레이터가 매번 작업을 새로 쪼개고 Synthesizer가 합치는 구조인데, 평가 틀이 4관점·D1~D7로 이미 정해진 이 과제에서는 분해가 실행마다 달라져 재현이 어렵고, "어느 관점이 부족한가"를 판정하는 루프는 따로 만들어야 한다. State 전체를 한 곳에서 보고 다음 노드를 정하는 Supervisor가 두 루프를 가장 직접 구현한다.
-- **동적 처리** : 실행 순서를 고정하지 않는다. Supervisor는 매 진입마다 `perspective_status`·`node_status`·`retry_counts`·`followup_counts`·`eval_result`·`step_count`만 보고 결정한다.
+- Objective : 두 기술을 기술 성숙도·시장성·이해관계자·도메인 적용성 4관점에서 비교 평가한다. 우승 기술을 고르지 않고 관점별 장점·제약·근거 수준·도입 전 확인사항을 근거와 함께 제시한다.
+- Pattern : **Supervisor** — 이 과제에는 "근거가 부족한 관점만 다시 조사한다"와 "품질 평가 미달 원인에 따라 다른 에이전트로 되돌린다"는 두 루프가 필요하다. 단계 체인은 순서가 엣지에 묶여 특정 관점만 다시 부를 수 없다. Orchestrator-Workers는 오케스트레이터가 매번 작업을 새로 쪼개고 Synthesizer가 합치는 구조라, 평가 틀이 4관점·D1~D7로 이미 정해진 이 과제에서는 분해가 실행마다 달라져 재현이 어렵고 "어느 관점이 부족한가"를 판정하는 루프를 따로 만들어야 한다. State 전체를 한 곳에서 보고 다음 노드를 정하는 Supervisor가 두 루프를 가장 직접 구현한다.
+  - 구현 : `supervisor` 노드 하나가 State를 읽고 `add_conditional_edges` 하나로 다음 노드를 고른다. 보고서·품질 평가 노드를 포함한 모든 작업 노드는 실행 후 Supervisor로만 돌아온다(작업 노드 간 직접 엣지 0개, `tests/test_graph_structure.py`에서 검사). Supervisor는 LLM이 아니라 결정적 규칙 함수다(`src/kv_eval/supervisor/policy.py`, 명세 `docs/SUPERVISOR_POLICY.md`).
+- 동적 처리 : 실행 순서를 고정하지 않는다. Supervisor는 매 진입마다 `perspective_status`·`node_status`·`retry_counts`·`followup_counts`·`eval_result`·`step_count`만 보고 다음 노드를 정한다. 고정 순서와 다른 점은 다음과 같다.
   - 미수집 관점을 `Send`로 한 번에 할당한다. 기술 조사 결과를 다른 관점이 입력으로 쓰지 않으므로 선행 순서가 없다. 실행은 `AGENT_CONCURRENCY`(기본 1)만큼만 동시에 돈다.
   - 판정을 막는 결함(검색 결과·인용 없음, 기준 판정 불가, TRL 미기재 등)이 있거나 기술별 고유 출처가 2개 미만인 관점만 다시 부른다. 에이전트가 적은 세부 미확인 항목은 재조사 사유가 아니라 보고서 한계점에 남는다. 재작업 지시(사유와 기술별 검색 힌트)는 RAG 질의 계획·캐시 키·에이전트 프롬프트에 반영된다.
   - 종합 에이전트가 특정 관점의 추가 근거를 요구하면 그 관점만 다시 조사한다(충분성 재조사와 별도의 후속 한도).
-  - 보고서가 정상 완료되면 Supervisor가 품질 평가 노드를 부른다. 미달 시 원인으로 경로를 나눈다: 원인이 관점 에이전트(편향·커버리지, 또는 에이전트 판정을 옮긴 표의 근거 결함)면 `reinvestigate:<관점>`, 보고서 서술이면 `rewrite:report`.
+  - 보고서가 정상 완료되면 Supervisor가 품질 평가 노드를 부른다. 미달 시 원인으로 경로를 나눈다. 원인이 관점 에이전트(편향·커버리지, 또는 에이전트 판정을 옮긴 표의 근거 결함)면 `reinvestigate:<관점>`, 보고서 서술이면 `rewrite:report`.
   - 에이전트 예외는 `node_status=failed`로 기록하고 재시도한다. 한도를 넘으면 제외하고 근거 공백으로 보고서에 적는다.
   - 종료 조건은 근거 충분성과 품질 평가 통과다. `MAX_STEPS`·재시도 한도·`recursion_limit`은 안전장치이며, 상한에 닿아도 근거 공백을 적은 보고서를 만들고 정상 종료한다.
   - 모든 결정은 사유와 함께 `outputs/decisions_{trace_id}.jsonl`과 LangSmith(metadata `trace_id`)에 남는다.
 
 ## Selected Technologies
 
-- SW : **DeepSeek-V2 MLA** (Multi-head Latent Attention, arXiv 2405.04434) — Key·Value를 저차원 잠재 벡터로 압축하도록 어텐션 구조를 재설계한 기술. 저자 보고 기준 KV cache 93.3% 감소. vLLM·SGLang 등 서빙 프레임워크가 MLA 백엔드를 지원하고 DeepSeek-V3·R1이 같은 구조를 쓴다.
-- HW : **ITME** (CXL-Hybrid 계층 메모리 확장, arXiv 2606.12556, SK hynix) — CXL 기반 DRAM-NVMe Hybrid Memory로 TB급 원격 메모리 계층을 구성하고, 가중치와 prefix KV cache의 예측 가능한 접근 패턴을 이용해 데이터를 미리 옮긴다.
+같은 KV cache 메모리 병목을 SW는 KV cache 크기를 줄여서, HW는 담을 메모리 용량을 늘려서 푼다. 기술은 조 토의 후 직접 선정했고, 비선정 후보와 사유는 보고서 2장 표 2에 있다.
+
+- SW : **DeepSeek-V2 MLA** (Multi-head Latent Attention, arXiv 2405.04434) — Key·Value를 저차원 잠재 벡터로 압축하도록 어텐션 구조를 재설계해 KV cache 자체를 줄인다(저자 보고 기준 93.3% 감소). 기존 모델에 사후 적용하기 어렵다는 한계가 있지만, DeepSeek-V3·R1이 같은 구조를 쓰고 vLLM·SGLang이 MLA 백엔드를 지원해 기술 성숙도·상용화·생태계·데이터센터 적용성 근거를 고르게 확인할 수 있어 선정했다. 사후 양자화 KIVI는 채택 근거가 연구·라이브러리 수준이고, TurboQuant는 공식 상용화 근거가 제한적이라 제외했다.
+- HW : **ITME** (CXL-Hybrid 계층 메모리 확장, arXiv 2606.12556, SK hynix) — CXL 기반 DRAM-NVMe Hybrid Memory로 TB급 원격 메모리 계층을 구성하고, 가중치와 prefix KV cache의 예측 가능한 접근 패턴을 이용해 데이터를 미리 옮긴다. HBM·호스트 DRAM 용량 한계를 넘어 장문맥·다중 턴 KV cache를 저장하고 폐기·재계산을 줄이는 '메모리 공간 확장' 접근을 가장 직접 보여 줘서 선정했다. InfiniGen은 호스트 메모리 오프로딩이라 SW 관리 성격이 강하고, CXL-PNM은 연산까지 메모리 쪽으로 옮기는 접근이라 비교용 베이스라인으로만 쓴다.
 - HW 베이스라인 : InfiniGen, CXL-PNM — ITME의 한계를 제3의 시각에서 교차 확인하는 용도로만 RAG에 넣는다.
 
 ## Features
 
-- PDF 자료 기반 정보 추출 : 논문 4편(96p) 페이지 단위 파싱, 인용 `[n, p.X]`
-- Agentic RAG : 질의 계획 → 하이브리드 검색 → 관련성 판정 → 관련 청크 2개 미만이면 질의 재작성(최대 2회) → 근거 기반 답변. 근거가 없으면 "근거 부족"
+- PDF 자료 기반 정보 추출 : 논문 4편(96p)을 페이지 단위로 파싱해 근거마다 `[n, p.X]`로 인용한다. 전처리 과정은 아래 [추가 사항](#추가-사항)에 있다.
+- 웹 자료 기반 정보 추출 : Tavily로 시장·이해관계자 근거와 TRL 7~9 상용화 근거(제품 출시·운영 서비스)를 모으고 `[Wn]`으로 인용한다. 개인 블로그·포럼 글은 개발자 반응의 보조 근거로만 쓴다.
+- Agentic RAG : 질의 계획 → 하이브리드 검색 → 관련성 판정 → 관련 청크 2개 미만이면 질의 재작성(최대 2회) → 근거 기반 답변. 근거가 없으면 "근거 부족"으로 답한다.
 - Supervisor 동적 라우팅 : 부족한 관점만 재조사, 평가 미달 원인별 재작업, 실패 fallback, 체크포인트 재개(`--resume`)
-- **확증 편향 방지 전략**
+- 확증 편향 방지 전략
   - HW 베이스라인 문서(InfiniGen, CXL-PNM)로 ITME의 한계를 교차 확인한다.
   - 두 기술을 같은 형식(쟁점 / 관점 A / 관점 B / 엇갈리는 이유)으로 병기한다. 신호표·판정표·증거 균형표는 LLM이 아니라 코드가 State의 판정값으로 만든다.
   - 종합 에이전트는 새로 검색하지 않고 검증된 Evidence만 쓴다.
-  - 편향 통제 규칙 : 기술·관점별 고유 출처 2개 이상(논문은 문서 단위), 웹 근거의 단일 발행처 비중 60% 이하, 판정이 긍정·우려 한쪽뿐이면 반대 방향 근거를 다시 찾는다. 원문 1편에만 기댄 도메인 '적합' 판정은 '조건부'로 낮춘다. 포럼·개인 블로그는 개발자 반응의 보조 근거로만 쓴다.
-- **보고서 품질 평가 (Hybrid)** : 보고서 다음에 독립 노드 `quality_evaluator`가 4항목을 각각 판정한다. 규칙 검사에서 실패한 항목은 LLM Judge가 통과로 뒤집지 못한다.
+  - 편향 통제 규칙 : 기술·관점별 고유 출처 2개 이상(논문은 문서 단위), 웹 근거의 단일 발행처 비중 60% 이하, 판정이 긍정·우려 한쪽뿐이면 반대 방향 근거를 다시 찾는다. 원문 1편에만 기댄 도메인 '적합' 판정은 '조건부'로 낮춘다.
+- 보고서 품질 평가 (Hybrid) : 보고서 다음에 독립 노드 `quality_evaluator`가 4항목을 각각 판정한다. 규칙 검사에서 실패한 항목은 LLM Judge가 통과로 뒤집지 못한다.
 
   | 항목 | 규칙 검사 | LLM Judge (`EvalVerdict`) | 미달 시 |
   |---|---|---|---|
@@ -47,35 +48,43 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(IT
 
 ## Tech Stack
 
-| Category | Details |
-|---|---|
-| Framework | LangGraph 1.x (StateGraph, `Send`, `add_conditional_edges`), Python 3.11+ |
-| Execution | 비동기 실행(`astream`). 작업 노드는 `async def`, 블로킹 SDK 호출은 `asyncio.to_thread`. 관점 에이전트는 `AGENT_CONCURRENCY`(기본 1)만큼 동시 실행 |
-| Checkpoint | langgraph-checkpoint-sqlite `AsyncSqliteSaver` (thread_id = trace_id) |
-| Observability | LangSmith (run `kv-eval-supervisor`, tag `pattern:supervisor`, metadata `trace_id`), 결정 로그 JSONL |
-| LLM / Generator | gpt-5.6-terra (OpenAI Responses API, Pydantic 구조화 출력) |
-| LLM / Judge | gpt-5.6-terra (품질 평가 `EvalVerdict`) |
-| Retrieval | FAISS(Dense) + BM25(Sparse), RRF 융합, 기술별 문서 필터 — 92케이스 **Hit@1 0.84 / Hit@3 0.99 / Hit@6 1.00 / MRR 0.92** (`outputs/retrieval_eval.json`) |
-| Embedding | Qwen3-Embedding-0.6B. 문서 임베딩은 처음 한 번만 계산해 `data/cache/index/`에 저장하고 재사용 |
-| Web Search | Tavily (시장·이해관계자 근거, TRL 7~9 상용화 근거) |
-| Test | pytest + Fake LLM·Web·RAG (API 키 없이 실행) |
+- Framework : LangGraph 1.x (StateGraph, `Send`, `add_conditional_edges`, `astream`), Python 3.11+
+- LLM/Generator : gpt-5.6-terra (OpenAI Responses API, Pydantic 구조화 출력)
+- LLM/Judge : gpt-5.6-terra (품질 평가 `EvalVerdict`)
+- Retrieval : FAISS(Dense) + BM25(Sparse), RRF 융합, 기술별 문서 필터 — 92케이스 기준 Hit Rate@1 0.84 / @3 0.99 / @6 1.00, MRR 0.92 (`outputs/retrieval_eval.json`)
+- Embedding : Qwen3-Embedding-0.6B (오픈소스). 문서 임베딩은 처음 한 번만 계산해 `data/cache/index/`에 저장하고 재사용한다.
+- Web Search : Tavily (시장·이해관계자 근거, TRL 7~9 상용화 근거)
+- Execution : 비동기 실행. 작업 노드는 `async def`, 블로킹 SDK 호출은 `asyncio.to_thread`. 관점 에이전트는 `AGENT_CONCURRENCY`(기본 1)만큼 동시 실행
+- Checkpoint : langgraph-checkpoint-sqlite `AsyncSqliteSaver` (thread_id = trace_id)
+- Observability : LangSmith (run `kv-eval-supervisor`, tag `pattern:supervisor`, metadata `trace_id`), 결정 로그 JSONL
+- Test : pytest + Fake LLM·Web·RAG (API 키 없이 실행)
 
 ## Agents
 
 조정 계층(`src/kv_eval/supervisor/`, `src/kv_eval/evaluation/`)과 하위 에이전트(`src/kv_eval/agents/`)를 분리했다. 하위 에이전트는 Supervisor를 import하지 않는다.
 
-- **Supervisor** : State 제어 필드로 다음 노드 결정(`policy.decide`), 결정 로그 기록, 재시도·제외·종료 판단
-- **Quality Evaluator** : 보고서 4항목 Hybrid 평가(규칙 + LLM Judge), 미달 원인 에이전트 지정
-- `tech` (RAG + 웹) : MLA·ITME 기술 개요·성능·한계, TRL 판정(논문 → 1~6, 상용화 웹 근거 → 7~9)
-- `market` (웹) : 시장 규모·성장, 상용화·채택, 생태계 지지(M1~M3, 긍정/우려/혼재)
-- `stakeholder` (웹) : 경쟁 진영·도입 기업/개발자·투자 업계의 귀속된 발언(S1~S3)
-- `domain` (RAG) : 데이터센터·클라우드 장문맥 서빙 D1~D7(적합/조건부/제약/근거 부족)
-- `synthesis` : 4관점의 일치·상충·근거 공백 정리. 새로 검색하지 않고, 추가 근거가 필요한 관점을 지목할 수 있다
-- `report` : SUMMARY~REFERENCE 보고서. 판정표·증거 균형표·근거 공백 절은 코드가 만든다
+- Supervisor : State 제어 필드로 다음 노드 결정(`policy.decide`), 결정 로그 기록, 재시도·제외·종료 판단
+- Quality Evaluator : 보고서 4항목 Hybrid 평가(규칙 + LLM Judge), 미달 원인 에이전트 지정
+- tech (RAG + 웹) : MLA·ITME 기술 개요·성능·한계, TRL 판정(논문 → 1~6, 상용화 웹 근거 → 7~9)
+- market (웹) : 시장 규모·성장, 상용화·채택, 생태계 지지(M1~M3, 긍정/우려/혼재)
+- stakeholder (웹) : 경쟁 진영·도입 기업/개발자·투자 업계의 귀속된 발언(S1~S3)
+- domain (RAG) : 데이터센터·클라우드 장문맥 서빙 D1~D7(적합/조건부/제약/근거 부족)
+- synthesis : 4관점의 일치·상충·근거 공백 정리. 새로 검색하지 않고, 추가 근거가 필요한 관점을 지목할 수 있다
+- report : SUMMARY~REFERENCE 보고서. 판정표·증거 균형표·근거 공백 절은 코드가 만든다
 
 ## State Schema
 
-`src/kv_eval/state.py`. 제어 필드와 페이로드를 나눈다.
+항목마다 다른 방식을 택했을 때 생기는 문제와, 그래서 고른 방식을 한 줄로 적는다.
+
+- 제어 vs 페이로드 분리 : Supervisor가 LLM이 쓴 결과 본문을 직접 해석하면 프롬프트나 출력 형식이 바뀔 때마다 라우팅이 깨진다. 그래서 제어 필드(`perspective_status`·`node_status`·`retry_counts`·`followup_counts`·`gaps`)와 페이로드(`perspectives`·`evidence`·`synthesis`·`report`)를 나누고, Supervisor는 제어 필드와 결과의 `sufficient`·`missing` 신호만 읽게 했다.
+- 관측성 위치 : 결정 이력을 State에 쌓으면 체크포인트마다 전체 이력이 복제된다. 그래서 이력은 `outputs/decisions_{trace_id}.jsonl`과 LangSmith에 두고, State에는 직전 결정(`last_decision`)만 남겼다.
+- 지속성 비용 : 근거 발췌 원문까지 State에 넣으면 evidence만 약 490 KB가 되고 체크포인트마다 그대로 복제된다. 그래서 원문과 RAG 캐시는 `data/cache/{trace_id}/`에 두고, State에는 160자 축약본과 참조(`excerpt_ref`)만 둬서 최종 State를 213 KB로 유지했다.
+- 상관 : LangGraph·LangSmith·결정 로그가 각자 다른 ID를 쓰면 한 실행의 기록을 손으로 맞춰야 한다. 그래서 uuid4 `trace_id` 하나를 `thread_id`·LangSmith metadata·결정 로그 파일명에 함께 썼다.
+- 재개/복구 : 메모리 체크포인터는 프로세스가 죽으면 사라지고, Postgres는 단일 사용자 CLI에 과하다. 그래서 파일 하나로 끝나는 `AsyncSqliteSaver`에 저장하고, `node_status`·`last_error`·`retry_counts`를 보고 마지막 체크포인트부터 `--resume`하게 했다.
+- 동시 처리 : reducer 없이 `Send`로 함께 할당된 노드가 같은 키에 쓰면 같은 superstep에서 충돌하고, 단순 덮어쓰기면 한쪽 결과가 사라진다(순차 실행이어도 반영 시점은 superstep 끝이다). 그래서 dict 필드는 키 단위 병합, `evidence`는 에이전트 단위 교체 + 중복 제거, `gaps`는 중복 제거 append로 필드마다 reducer를 정했다.
+- 종료 보장 : `recursion_limit`만 두면 상한에서 예외로 끝나 보고서가 남지 않는다. 그래서 `step_count`가 `MAX_STEPS`(20)를 넘으면 Supervisor가 조사를 멈추고 근거 공백을 적은 뒤 종합·보고서·평가까지 마치고 정상 종료하게 했다. 관점 재시도 2회, 후속 재조사 1회, 보고서 재작성 2회가 그 앞에서 루프를 끊고, `recursion_limit`은 마지막 안전장치다.
+
+**필드 구성** (`src/kv_eval/state.py`)
 
 | 구분 | 필드 | reducer |
 |---|---|---|
@@ -88,58 +97,34 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(IT
 | 페이로드 | `evidence` | 에이전트 단위 교체 + dedup, 발췌 160자 + `excerpt_ref` |
 | 페이로드 | `cache_keys` | 키 단위 dict merge |
 
-1. **제어 vs 페이로드 분리** : Supervisor는 제어 필드와 결과의 `sufficient`·`missing`만 읽는다. 라우팅이 결과 본문 구조에 묶이지 않아 프롬프트를 바꿔도 라우팅은 그대로다.
-2. **관측성 위치** : 결정 로그 본문은 `outputs/decisions_{trace_id}.jsonl`과 LangSmith에 두고, State에는 직전 결정(`last_decision`)만 둔다. State에 쌓으면 체크포인트마다 전체 이력이 복제된다.
-3. **지속성 비용** : RAG 캐시와 Evidence 발췌 원문은 `data/cache/{trace_id}/`에 두고 State에는 160자 축약본과 참조만 둔다. 보고서·평가는 원문을 `hydrate()`로 읽는다. `Send` 페이로드에도 에이전트가 읽는 제어 필드만 넘긴다. 에이전트를 다시 실행하면 이전 시도의 근거는 교체한다.
+**크기 실측** (실제 실행 1회, trace `77cb99ef`)
 
-   | 실측 (실제 실행 1회, trace `77cb99ef`) | 크기 |
-   |---|---|
-   | 최종 State (`final_state.json`) | 213 KB |
-   | 그중 `evidence` 119건 | 70 KB |
-   | 디스크 저장소 (`data/cache/{trace_id}/`, 원문·RAG 캐시) | 317 KB |
-   | 체크포인트 23개 누적 (`checkpoints.sqlite`) | 3.38 MB |
+| 대상 | 크기 |
+|---|---|
+| 최종 State (`final_state.json`) | 213 KB |
+| 그중 `evidence` 119건 | 70 KB |
+| 디스크 저장소 (`data/cache/{trace_id}/`, 원문·RAG 캐시) | 317 KB |
+| 체크포인트 23개 누적 (`checkpoints.sqlite`) | 3.38 MB |
 
-   원문을 State에 두면 evidence만 약 490 KB가 되고 체크포인트마다 그대로 복제된다. `python scripts/measure_state_size.py`로 Fake 실행 기준 크기를 다시 잴 수 있다. 원문 저장소가 없는 환경(새로 clone)에서는 축약 발췌만 남는데, 이때는 `excerpt_truncated`를 표시하고 Judge 프롬프트와 `validation.json`에 경고를 남긴다. `--report-only`는 원문이 없으면 즉시 실패한다.
-4. **상관** : uuid4 `trace_id` 하나를 LangGraph `thread_id`, LangSmith metadata, 결정 로그 파일명에 같이 쓴다. 세 저장소를 손으로 맞출 일이 없다.
-5. **재개/복구** : `AsyncSqliteSaver`(파일 하나)와 `node_status{pending/running/done/failed/skipped}`·`last_error`·`retry_counts`로 마지막 체크포인트부터 `--resume`한다. 메모리 체크포인터는 프로세스가 죽으면 사라지고, Postgres는 단일 사용자 CLI에 과하다.
-6. **동시 처리** : `Send`로 함께 할당된 노드의 쓰기는 superstep 끝에 같이 반영되므로, 순차 실행이어도 같은 키에 쓰는 필드에는 reducer가 필요하다. dict merge, 에이전트 단위 교체, 중복 제거 append를 필드별로 정했다.
-7. **종료 보장** : `step_count > MAX_STEPS`(20)이면 Supervisor가 조사를 멈추고 근거 공백을 적은 뒤 종합·보고서·평가까지 마치고 정상 종료한다. 관점 재시도 2회, 후속 재조사 1회, 보고서 재작성 2회, `recursion_limit`은 그 뒤의 안전장치다.
+`Send` 페이로드에도 에이전트가 읽는 제어 필드만 넘기고, 에이전트를 다시 실행하면 이전 시도의 근거는 교체한다. 보고서·평가는 원문을 `hydrate()`로 읽는다. 원문 저장소가 없는 환경(새로 clone)에서는 축약 발췌만 남으므로 `excerpt_truncated`를 표시하고 Judge 프롬프트와 `validation.json`에 경고를 남긴다. `--report-only`는 원문이 없으면 즉시 실패한다. `python scripts/measure_state_size.py`로 Fake 실행 기준 크기를 다시 잴 수 있다.
 
 ## Architecture
 
-![Compiled LangGraph](outputs/architecture.png)
+![Supervisor 라우팅 순서](docs/architecture.png)
 
-`outputs/architecture.png`는 `python scripts/export_graph.py`가 컴파일된 그래프에서 생성한다(Mermaid 원문 `outputs/architecture.mmd`). 점선은 Supervisor의 conditional edge, 실선은 고정 엣지다.
+Supervisor가 다음 노드를 정하는 순서다. 작업 노드는 실행 후 항상 Supervisor로 돌아오고, 되돌림 경로(주황·자주)도 모두 Supervisor의 결정이다.
 
-```mermaid
-flowchart TD
-    START([START]) --> SUP{"Supervisor<br/>State 기반 라우팅"}
-    SUP -. "미수집·결함·출처 부족 관점만 (Send)" .-> TECH["tech<br/>RAG + 웹"]
-    SUP -.-> MARKET["market<br/>웹"]
-    SUP -.-> STAKE["stakeholder<br/>웹"]
-    SUP -.-> DOMAIN["domain<br/>RAG"]
-    TECH --> SUP
-    MARKET --> SUP
-    STAKE --> SUP
-    DOMAIN --> SUP
-    SUP -. "4관점 결론 상태" .-> SYN["synthesis"]
-    SYN --> SUP
-    SUP -. "종합 완료 / rewrite:report" .-> REPORT["report"]
-    REPORT --> SUP
-    SUP -. "evaluate" .-> EVAL["quality_evaluator<br/>규칙 + LLM Judge"]
-    EVAL --> SUP
-    SUP -. "reinvestigate:<관점>" .-> MARKET
-    SUP -. "end:passed / 한도 도달" .-> END([END])
+1. `dispatch` : 미수집 관점을 `Send`로 한 번에 할당하고 하나씩 실행한다. 결과가 돌아오면 충분성을 판정해, 판정을 막는 결함이 있거나 출처가 부족한 관점만 다시 할당한다(관점당 2회).
+2. `synthesis` : 4관점이 모두 결론 상태(충분 또는 근거 공백 기록)일 때 부른다. 종합이 추가 근거를 요구하면 그 관점만 후속 재조사(관점당 1회)하고 다시 종합한다.
+3. `report` : 종합이 끝나면 보고서를 쓴다.
+4. `evaluate` : 보고서 본문이 있을 때만 `quality_evaluator`를 부른다.
+5. 통과면 `END`. 미달이면 원인이 관점 에이전트일 때 `reinvestigate:<관점>`(1로), 보고서 서술일 때 `rewrite:report`(3으로) 보낸다. 같은 원인이 반복되거나 한도를 다 쓰면 `unverified`로 끝낸다.
 
-    classDef sup fill:#e8ddff,stroke:#6842a6,stroke-width:2px;
-    classDef agent fill:#dff3ff,stroke:#20789d;
-    classDef gate fill:#fff2cc,stroke:#b8860b;
-    class SUP sup;
-    class TECH,MARKET,STAKE,DOMAIN,SYN,REPORT agent;
-    class EVAL gate;
-```
+그림은 `docs/architecture.svg`가 원본이다. 컴파일된 LangGraph 그래프는 `python scripts/export_graph.py`로 `outputs/architecture.png`에 그려지며, conditional edge가 `supervisor` 하나뿐이고 작업 노드끼리 연결된 엣지가 없다.
 
-실제 실행 경로 (`outputs/run_logs.json`, trace `77cb99ef`, 커밋 `9a6b5bf`, 11단계):
+### 실제 실행 경로
+
+`outputs/run_logs.json`, trace `77cb99ef`, 커밋 `9a6b5bf`, 11단계:
 
 (LangSmith metadata의 `revision_id`가 `9a6b5bf-dirty`인 것은 코드 변경이 아니라, 실행 시작 시 `tee`가 git이 추적하는 `outputs/run_console.log`를 덮어썼기 때문이다.)
 
@@ -159,45 +144,20 @@ flowchart TD
 
 종합이 4관점 중 market·stakeholder만 골라 다시 조사했고, 평가 미달은 원인 관점(market)을 지목했다. market은 후속 재조사 한도를 이미 썼기 때문에 Supervisor는 재조사 대신 4.2 표 아래에 판정 한계를 적게 하는 재작성으로 보냈고, 같은 원인으로 다시 미달하자 무한 재작성 없이 미검증으로 끝냈다. 남은 미달은 market이 MLA의 시장성 판정 3개를 모두 '긍정'으로 내리면서 반대 방향 근거를 찾지 않은 것(편향 통제 3점)으로, 7장 근거 공백에 그대로 적혀 있다. 부족한 관점만 재조사해 통과하는 경로는 `tests/test_scenarios.py`, `tests/test_review_fixes.py`가 Fake로 재현한다.
 
-## 설계 결정
+### 설계 결정
 
 전체 목록은 `docs/DECISIONS.md`에 있다. 평가 항목과 직접 관련된 것만 적는다.
 
-- **Supervisor는 규칙 함수** : 라우팅 입력이 모두 구조화된 제어 필드이므로 LLM 라우터가 필요 없다. 같은 State면 같은 결정이 나와 재현·테스트가 된다. 내용 판단은 각 에이전트와 LLM Judge가 맡는다.
-- **평가 노드도 Supervisor로 복귀** : `report → quality_evaluator` 고정 엣지를 두지 않는다. 보고서가 정상 완료됐을 때만 Supervisor가 평가를 부르므로 실패한 보고서는 평가하지 않는다.
-- **Hybrid 평가** : 형식 검사만으로는 근거가 주장을 뒷받침하는지 볼 수 없고, Judge만 쓰면 실행마다 판정이 흔들린다. 규칙은 하드 게이트, Judge는 내용 게이트다.
-- **원인 기준 재작업** : 평가 미달 경로를 항목이 아니라 원인(`target_agents`)으로 정한다. 코드가 에이전트 판정을 옮긴 표의 결함은 보고서를 다시 써도 같은 판정으로 채워지므로 그 관점을 재조사한다.
-- **충분성 기준** : 판정을 막는 결함과 고유 출처 수만 재조사 사유로 쓴다. 에이전트가 적는 세부 미확인 항목까지 부족으로 보면 모든 관점이 매번 재시도 한도까지 돌아 사실상 고정 스텝이 된다.
-- **후속 재조사 한도 분리** : 종합·평가가 지목한 관점은 충분성 재조사 한도와 별도로 한 번 더 조사할 수 있다. 같은 한도를 쓰면 평가 미달 → 관점 재조사 경로가 실행될 수 없다.
-- **출처 단위** : 논문은 문서 단위로 센다. 페이지 단위로 세면 논문 1편으로도 '고유 출처 2개'를 통과한다.
-- **설계 문서 `[D]`** : 1·2장의 설계 조건에만 쓴다. 기술 사실의 근거는 허용 논문과 웹 출처뿐이다.
-- **순차 실행** : 4관점을 동시에 돌리면 메모리 사용량이 관점 수만큼 커지고 MPS 임베딩 모델을 여러 스레드가 동시에 불러 중단된다. 할당은 한 번에 하고 실행만 하나씩 한다.
-- **재시도 한도** : 관점 2회, 후속 1회, 보고서 2회, 종합 1회. `MAX_STEPS`는 20으로, 정상 경로(5단계)와 재작업이 많은 경로(11~12단계)를 끝까지 보내고 그 이상은 마무리 모드로 끊는다.
-
-## Data Preprocessing
-
-파싱(pdfplumber 좌표 기반, 2단 레이아웃 읽기 순서 재정렬) → header/footer 제거 → 표 분리 → 참고문헌 구간만 제외(DeepSeek-V2 Appendix의 MLA 수식·ablation은 색인 유지) → 청킹(1,200자/겹침 200자, 문단 경계 보존) → 페이지 예산(≤200p) 검증. 결과는 `data/processed/chunks.jsonl`(359청크)과 `summary.json`.
-
-| 항목 | 설계서 | 실측 | 차이 원인 |
-|---|---|---|---|
-| 파싱 도구 | pypdf | pdfplumber | 2단 레이아웃·표 좌표 처리 |
-| 참고문헌 제외 | 11p | 14p | References 구간을 실제 탐지 |
-| 색인 페이지 | 85p | 84p | 위 탐지 결과 (총 96p ≤ 200p) |
-| 청크 수 | 333개 | 359개 | 큰 표를 행 단위로 분할 |
-
-깨진 수식 줄 정제는 92케이스 A/B 측정 결과 기본 OFF다(ON: Hit@1 0.86·필수 용어 커버리지 0.75 / OFF: Hit@1 0.84·커버리지 0.92).
-
-## Retrieval Evaluation
-
-LLM 생성 없이 검색기(FAISS + BM25 → RRF)만 평가한다. 정답 기준은 `doc_id`(정밀 케이스는 페이지·필수 용어 포함).
-
-```bash
-python -m eval.evaluate_retrieval              # 지표 + 합격 기준 판정
-python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과
-```
-
-- 평가 세트 `eval/retrieval_cases.json` 92케이스(정밀 12 + 문서별 coverage 80), 결과 `outputs/retrieval_eval.json`
-- Hit@1 0.84 · Hit@3 0.99 · Hit@6 1.00 · MRR 0.92 · 기대 페이지 적중률 0.92 · 노이즈율 0.00
+- Supervisor는 규칙 함수 : 라우팅 입력이 모두 구조화된 제어 필드이므로 LLM 라우터가 필요 없다. 같은 State면 같은 결정이 나와 재현·테스트가 된다. 내용 판단은 각 에이전트와 LLM Judge가 맡는다.
+- 평가 노드도 Supervisor로 복귀 : `report → quality_evaluator` 고정 엣지를 두지 않는다. 보고서가 정상 완료됐을 때만 Supervisor가 평가를 부르므로 실패한 보고서는 평가하지 않는다.
+- Hybrid 평가 : 형식 검사만으로는 근거가 주장을 뒷받침하는지 볼 수 없고, Judge만 쓰면 실행마다 판정이 흔들린다. 규칙은 하드 게이트, Judge는 내용 게이트다.
+- 원인 기준 재작업 : 평가 미달 경로를 항목이 아니라 원인(`target_agents`)으로 정한다. 코드가 에이전트 판정을 옮긴 표의 결함은 보고서를 다시 써도 같은 판정으로 채워지므로 그 관점을 재조사한다.
+- 충분성 기준 : 판정을 막는 결함과 고유 출처 수만 재조사 사유로 쓴다. 에이전트가 적는 세부 미확인 항목까지 부족으로 보면 모든 관점이 매번 재시도 한도까지 돌아 사실상 고정 스텝이 된다.
+- 후속 재조사 한도 분리 : 종합·평가가 지목한 관점은 충분성 재조사 한도와 별도로 한 번 더 조사할 수 있다. 같은 한도를 쓰면 평가 미달 → 관점 재조사 경로가 실행될 수 없다.
+- 출처 단위 : 논문은 문서 단위로 센다. 페이지 단위로 세면 논문 1편으로도 '고유 출처 2개'를 통과한다.
+- 설계 문서 `[D]` : 1·2장의 설계 조건에만 쓴다. 기술 사실의 근거는 허용 논문과 웹 출처뿐이다.
+- 순차 실행 : 4관점을 동시에 돌리면 메모리 사용량이 관점 수만큼 커지고 MPS 임베딩 모델을 여러 스레드가 동시에 불러 중단된다. 할당은 한 번에 하고 실행만 하나씩 한다.
+- 재시도 한도 : 관점 2회, 후속 1회, 보고서 2회, 종합 1회. `MAX_STEPS`는 20으로, 정상 경로(5단계)와 재작업이 많은 경로(11~12단계)를 끝까지 보내고 그 이상은 마무리 모드로 끊는다.
 
 ## Directory Structure
 
@@ -229,7 +189,7 @@ python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과
 ├── eval/                          # 검색 품질 평가 세트·하네스
 ├── tests/                         # Fake LLM·Web·RAG 시나리오 테스트
 ├── scripts/                       # export_graph.py · measure_state_size.py · validate_prompt_package.py · capture_checklist.md
-├── docs/                          # DECISIONS.md · SUPERVISOR_POLICY.md
+├── docs/                          # architecture.png·svg(라우팅 순서도) · DECISIONS.md · SUPERVISOR_POLICY.md
 └── outputs/                       # 보고서·validation·decisions_*.jsonl·run_logs.json, tracing/, architecture.png,
                                    #   이전 과제 제출물(RAG-Output_*), legacy_rag/
 ```
@@ -262,7 +222,7 @@ python app.py --export-only          # LLM 호출 없이 검증·Markdown/PDF �
 | `final_state.json` | 최종 State(원문 캐시 제외). `--export-only`·`--report-only`의 입력 |
 | `tracing/tracing-*.png` | LangSmith 트레이스 캡처 |
 | `checkpoints.sqlite` | LangGraph 체크포인트(`--resume`용, git 제외) |
-| `architecture.png` / `.mmd` | 컴파일 그래프 이미지 |
+| `architecture.png` / `.mmd` | 컴파일된 그래프 이미지 |
 | `RAG-Output_…`, `legacy_rag/` | 이전 과제(Agentic RAG) 제출물과 실행물 |
 
 종료 코드: 품질 평가 통과 `0`, 보고서는 생성됐으나 미검증 `2`, 실행 실패 `1`. 종료 상태는 `completed`(통과·공백 없음) / `completed_with_gaps`(통과·근거 공백 명시) / `unverified`(평가 미통과).
@@ -278,15 +238,36 @@ python -m pytest -q                       # 라우팅·재작업·평가 루프�
 python scripts/export_graph.py            # outputs/architecture.png 생성
 python scripts/validate_prompt_package.py # 프롬프트 패키지 정적 검증
 python scripts/measure_state_size.py      # State·체크포인트 크기 측정
+python -m eval.evaluate_retrieval         # 검색 품질 지표 + 합격 기준 판정 (--show-hits: 케이스별 결과)
 ```
+
+## 추가 사항
+
+### 데이터 전처리
+
+파싱(pdfplumber 좌표 기반, 2단 레이아웃 읽기 순서 재정렬) → header/footer 제거 → 표 분리 → 참고문헌 구간만 제외(DeepSeek-V2 Appendix의 MLA 수식·ablation은 색인 유지) → 청킹(1,200자/겹침 200자, 문단 경계 보존) → 페이지 예산(≤200p) 검증. 결과는 `data/processed/chunks.jsonl`(359청크)과 `summary.json`.
+
+| 항목 | 설계서 | 실측 | 차이 원인 |
+|---|---|---|---|
+| 파싱 도구 | pypdf | pdfplumber | 2단 레이아웃·표 좌표 처리 |
+| 참고문헌 제외 | 11p | 14p | References 구간을 실제 탐지 |
+| 색인 페이지 | 85p | 84p | 위 탐지 결과 (총 96p ≤ 200p) |
+| 청크 수 | 333개 | 359개 | 큰 표를 행 단위로 분할 |
+
+깨진 수식 줄 정제는 92케이스 A/B 측정 결과 기본 OFF다(ON: Hit@1 0.86·필수 용어 커버리지 0.75 / OFF: Hit@1 0.84·커버리지 0.92).
+
+### 검색 품질 평가
+
+LLM 생성 없이 검색기(FAISS + BM25 → RRF)만 평가한다. 정답 기준은 `doc_id`(정밀 케이스는 페이지·필수 용어 포함).
+
+- 평가 세트 `eval/retrieval_cases.json` 92케이스(정밀 12 + 문서별 coverage 80), 결과 `outputs/retrieval_eval.json`
+- Hit@1 0.84 · Hit@3 0.99 · Hit@6 1.00 · MRR 0.92 · 기대 페이지 적중률 0.92 · 노이즈율 0.00
 
 ## Contributors
 
-| 이름 | 수행 역할 |
-|---|---|
-| 김동욱(P280) | Supervisor 그래프·State Schema 설계 — 제어/페이로드 분리, reducer, 단일 conditional edge 라우팅(state.py, graph.py, supervisor/) |
-| 김민정(P282) | 데이터 전처리와 보고서 내보내기 — PDF 파싱·청킹 파이프라인(preprocessing/), 보고서 목차·인용 검증과 PDF 조판(reporting/) |
-| 김태동(P287) | 웹 검색 도구·실행 환경 — Tavily 검색(tools/), 비동기 실행·체크포인트 재개(app.py), LangSmith 트레이싱·캡처 |
-| 박규리(P289) | 검색 계층 — 임베딩·FAISS+BM25 색인, 임베딩 캐시, 검색 품질 평가 세트(rag/, eval/) |
-| 이재겸(P298) | 프롬프트·평가 설계 — 에이전트 프롬프트 패키지(prompts/), 품질 평가 Judge 프롬프트와 EvalVerdict 스키마 |
-| 임동건(P301) | 품질 평가 노드·테스트 — 규칙 검사 4종(evaluation/quality.py), Fake LLM·Web·RAG 시나리오 테스트(tests/) |
+- 김동욱(P280) : Supervisor 그래프·State Schema 설계, 제어/페이로드 분리·reducer, 단일 conditional edge 라우팅 (state.py, graph.py, supervisor/)
+- 김민정(P282) : 데이터 전처리, PDF 파싱·청킹 파이프라인 (preprocessing/), 보고서 목차·인용 검증과 PDF 조판 (reporting/)
+- 김태동(P287) : 웹 검색 도구 (tools/), 비동기 실행·체크포인트 재개 (app.py), LangSmith 트레이싱·캡처
+- 박규리(P289) : 검색 계층, 임베딩·FAISS+BM25 색인, 임베딩 캐시, 검색 품질 평가 세트 (rag/, eval/)
+- 이재겸(P298) : 프롬프트·평가 설계, 에이전트 프롬프트 패키지 (prompts/), 품질 평가 Judge 프롬프트와 EvalVerdict 스키마
+- 임동건(P301) : 품질 평가 노드, 규칙 검사 4종 (evaluation/quality.py), Fake LLM·Web·RAG 시나리오 테스트 (tests/)

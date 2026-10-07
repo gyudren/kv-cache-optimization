@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1370" viewBox="0 0 1200 1370">
+<defs>
+<marker id="p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b3a9b"/></marker>
+<marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#66707a"/></marker>
+<marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d4761c"/></marker>
+<marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b0397f"/></marker>
+</defs>
+<rect width="1200" height="1370" fill="#ffffff"/>
+<text x="40" y="52" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="28" font-weight="bold" fill="#1d232a" text-anchor="start">Supervisor 라우팅 순서</text>
+<text x="40" y="86" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="16" font-weight="normal" fill="#66707a" text-anchor="start">작업 노드는 실행 후 항상 Supervisor로 돌아오고, 다음 노드는 Supervisor가 State 제어 필드를 보고 정한다.</text>
+<rect x="310" y="120" width="320" height="1090" rx="22" fill="#f4effd" stroke="#5b3a9b" stroke-width="2"/>
+<text x="470" y="158" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="22" font-weight="bold" fill="#5b3a9b" text-anchor="middle">Supervisor</text>
+<text x="470" y="182" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="normal" fill="#66707a" text-anchor="middle">policy.decide · 결정적 규칙</text>
+<rect x="360" y="219.0" width="220" height="62" rx="31.0" fill="#ffffff" stroke="#5b3a9b" stroke-width="2.5"/>
+<circle cx="388" cy="250" r="15" fill="#5b3a9b"/>
+<text x="388" y="256" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#ffffff" text-anchor="middle">1</text>
+<text x="486" y="247" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#5b3a9b" text-anchor="middle">dispatch</text>
+<text x="486" y="269" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="13" font-weight="normal" fill="#66707a" text-anchor="middle">미수집·부족·지목 관점</text>
+<rect x="690" y="205" width="470" height="295" rx="14" fill="#e8f4fb" stroke="#1f6f94" stroke-width="2"/>
+<text x="710" y="238" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="19" font-weight="bold" fill="#1f6f94" text-anchor="start">관점 에이전트</text>
+<text x="710" y="262" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="normal" fill="#66707a" text-anchor="start">Send로 한 번에 할당, AGENT_CONCURRENCY=1로 하나씩 실행</text>
+<rect x="710" y="278" width="430" height="44" rx="10" fill="#ffffff" stroke="#1f6f94" stroke-width="1.5"/>
+<text x="728" y="306" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#1f6f94" text-anchor="start">tech</text>
+<text x="880" y="306" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">RAG + 웹 · 기술 성숙도(TRL)</text>
+<rect x="710" y="332" width="430" height="44" rx="10" fill="#ffffff" stroke="#1f6f94" stroke-width="1.5"/>
+<text x="728" y="360" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#1f6f94" text-anchor="start">market</text>
+<text x="880" y="360" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">웹 · 시장성 M1~M3</text>
+<rect x="710" y="386" width="430" height="44" rx="10" fill="#ffffff" stroke="#1f6f94" stroke-width="1.5"/>
+<text x="728" y="414" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#1f6f94" text-anchor="start">stakeholder</text>
+<text x="880" y="414" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">웹 · 이해관계자 S1~S3</text>
+<rect x="710" y="440" width="430" height="44" rx="10" fill="#ffffff" stroke="#1f6f94" stroke-width="1.5"/>
+<text x="728" y="468" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#1f6f94" text-anchor="start">domain</text>
+<text x="880" y="468" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">RAG · 도메인 적용성 D1~D7</text>
+<path d="M 580,250 L 688,250" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<text x="635.0" y="240" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="14" font-weight="bold" fill="#5b3a9b" text-anchor="middle">Send</text>
+<polygon points="360,465 382,430.0 558,430.0 580,465 558,500.0 382,500.0" fill="#fffaf0" stroke="#5b3a9b" stroke-width="2" stroke-dasharray="0"/>
+<text x="470" y="461" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="18" font-weight="bold" fill="#1d232a" text-anchor="middle">충분?</text>
+<text x="470" y="483" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="13" font-weight="normal" fill="#66707a" text-anchor="middle">필수 결함 · 고유 출처 수</text>
+<path d="M 690,465 L 582,465" fill="none" stroke="#66707a" stroke-width="2" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#g)"/>
+<path d="M 470,500 L 470,547" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<text x="482" y="529" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="bold" fill="#5b3a9b" text-anchor="start">충분 · 공백 기록</text>
+<rect x="360" y="549.0" width="220" height="62" rx="31.0" fill="#ffffff" stroke="#5b3a9b" stroke-width="2.5"/>
+<circle cx="388" cy="580" r="15" fill="#5b3a9b"/>
+<text x="388" y="586" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#ffffff" text-anchor="middle">2</text>
+<text x="486" y="577" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#5b3a9b" text-anchor="middle">synthesis</text>
+<text x="486" y="599" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="13" font-weight="normal" fill="#66707a" text-anchor="middle">4관점이 결론 상태</text>
+<rect x="690" y="548" width="470" height="170" rx="14" fill="#e8f4fb" stroke="#1f6f94" stroke-width="2"/>
+<text x="710" y="584" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#1f6f94" text-anchor="start">synthesis</text>
+<text x="710" y="614" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">4관점의 일치·상충·근거 공백 정리</text>
+<text x="710" y="640" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">새로 검색하지 않고 검증된 Evidence만 사용</text>
+<text x="710" y="666" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">추가 근거가 필요한 관점은 needs_source_agents로 지목</text>
+<path d="M 580,580 L 688,580" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<polygon points="360,700 382,665.0 558,665.0 580,700 558,735.0 382,735.0" fill="#fffaf0" stroke="#5b3a9b" stroke-width="2" stroke-dasharray="0"/>
+<text x="470" y="696" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="18" font-weight="bold" fill="#1d232a" text-anchor="middle">추가 근거?</text>
+<text x="470" y="718" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="13" font-weight="normal" fill="#66707a" text-anchor="middle">종합이 지목한 관점</text>
+<path d="M 690,700 L 582,700" fill="none" stroke="#66707a" stroke-width="2" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#g)"/>
+<path d="M 470,735 L 470,782" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<text x="482" y="764" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="bold" fill="#5b3a9b" text-anchor="start">없음</text>
+<rect x="360" y="784.0" width="220" height="62" rx="31.0" fill="#ffffff" stroke="#5b3a9b" stroke-width="2.5"/>
+<circle cx="388" cy="815" r="15" fill="#5b3a9b"/>
+<text x="388" y="821" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#ffffff" text-anchor="middle">3</text>
+<text x="486" y="812" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#5b3a9b" text-anchor="middle">report</text>
+<text x="486" y="834" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="13" font-weight="normal" fill="#66707a" text-anchor="middle">종합 완료 · 재작성</text>
+<rect x="690" y="785" width="470" height="120" rx="14" fill="#e8f4fb" stroke="#1f6f94" stroke-width="2"/>
+<text x="710" y="818" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#1f6f94" text-anchor="start">report</text>
+<text x="710" y="847" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">SUMMARY ~ REFERENCE 보고서 작성</text>
+<text x="710" y="873" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">판정표·근거 공백 절은 코드가 State로 생성</text>
+<path d="M 580,815 L 688,815" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<rect x="360" y="885.0" width="220" height="90" rx="31" fill="#ffffff" stroke="#5b3a9b" stroke-width="2.5"/>
+<circle cx="388" cy="930" r="15" fill="#5b3a9b"/>
+<text x="388" y="936" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#ffffff" text-anchor="middle">4</text>
+<text x="486" y="927" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#5b3a9b" text-anchor="middle">evaluate</text>
+<text x="486" y="949" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="13" font-weight="normal" fill="#66707a" text-anchor="middle">보고서 본문이 있을 때</text>
+<path d="M 690,895 L 582,895" fill="none" stroke="#66707a" stroke-width="2" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#g)"/>
+<rect x="690" y="920" width="470" height="140" rx="14" fill="#fff6dc" stroke="#a1740b" stroke-width="2"/>
+<text x="710" y="953" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#a1740b" text-anchor="start">quality_evaluator</text>
+<text x="710" y="982" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">규칙 검사 + LLM Judge로 4항목 판정</text>
+<text x="710" y="1008" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">미달이면 원인 에이전트 지목 (target_agents)</text>
+<path d="M 580,960 L 688,960" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<polygon points="360,1035 382,1000.0 558,1000.0 580,1035 558,1070.0 382,1070.0" fill="#fffaf0" stroke="#5b3a9b" stroke-width="2" stroke-dasharray="0"/>
+<text x="470" y="1031" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="18" font-weight="bold" fill="#1d232a" text-anchor="middle">통과?</text>
+<text x="470" y="1053" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="13" font-weight="normal" fill="#66707a" text-anchor="middle">4항목 · 미달 원인</text>
+<path d="M 690,1035 L 582,1035" fill="none" stroke="#66707a" stroke-width="2" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#g)"/>
+<path d="M 470,1070 L 470,1118" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<text x="482" y="1099" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="bold" fill="#5b3a9b" text-anchor="start">통과 · 중단</text>
+<rect x="360" y="1120.0" width="220" height="60" rx="30.0" fill="#ffffff" stroke="#5b3a9b" stroke-width="2.5"/>
+<circle cx="388" cy="1150" r="15" fill="#5b3a9b"/>
+<text x="388" y="1156" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="17" font-weight="bold" fill="#ffffff" text-anchor="middle">5</text>
+<text x="486" y="1157" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="19" font-weight="bold" fill="#5b3a9b" text-anchor="middle">END</text>
+<rect x="690" y="1112" width="470" height="76" rx="14" fill="#ffffff" stroke="#66707a" stroke-width="2" stroke-dasharray="5 5"/>
+<text x="710" y="1142" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">통과 → completed / completed_with_gaps</text>
+<text x="710" y="1170" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">같은 원인 반복 · 재작업 한도 소진 → unverified</text>
+<path d="M 580,1150 L 690,1150" fill="none" stroke="#66707a" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="3 4"/>
+<path d="M 360,465 L 140,465 L 140,268 L 358,268" fill="none" stroke="#d4761c" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#o)"/>
+<text x="152" y="438" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="bold" fill="#d4761c" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">부족한 관점만 재할당</text>
+<text x="152" y="456" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="normal" fill="#d4761c" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">관점당 ≤2회</text>
+<path d="M 360,700 L 90,700 L 90,250 L 358,250" fill="none" stroke="#d4761c" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#o)"/>
+<text x="102" y="673" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="bold" fill="#d4761c" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">지목된 관점만 후속 재조사</text>
+<text x="102" y="691" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="normal" fill="#d4761c" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">관점당 ≤1회</text>
+<path d="M 369,1021 L 140,1021 L 140,815 L 358,815" fill="none" stroke="#b0397f" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#m)"/>
+<text x="152" y="993" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="bold" fill="#b0397f" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">원인 = 보고서 서술</text>
+<text x="152" y="1011" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="14" font-weight="normal" fill="#b0397f" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">rewrite:report ≤2회</text>
+<path d="M 369,1049 L 40,1049 L 40,232 L 358,232" fill="none" stroke="#d4761c" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#o)"/>
+<text x="52" y="1073" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="bold" fill="#d4761c" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">원인 = 관점 에이전트</text>
+<text x="52" y="1092" font-family="Menlo,'SF Mono',Consolas,monospace" font-size="14" font-weight="normal" fill="#d4761c" text-anchor="start" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">reinvestigate:&lt;관점&gt; ≤1회</text>
+<path d="M 40,1250 L 92,1250" fill="none" stroke="#5b3a9b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#p)"/>
+<text x="104" y="1255" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">Supervisor가 다음 노드 호출 (conditional edge 1개)</text>
+<path d="M 640,1250 L 692,1250" fill="none" stroke="#66707a" stroke-width="2" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#g)"/>
+<text x="704" y="1255" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">실행 후 Supervisor로 복귀 (작업 노드 간 엣지 없음)</text>
+<path d="M 40,1284 L 92,1284" fill="none" stroke="#d4761c" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#o)"/>
+<text x="104" y="1289" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">관점 재조사 (충분성 · 종합 요청 · 평가 원인)</text>
+<path d="M 640,1284 L 692,1284" fill="none" stroke="#b0397f" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#m)"/>
+<text x="704" y="1289" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="15" font-weight="normal" fill="#1d232a" text-anchor="start">보고서 재작성 (평가 원인 = 보고서)</text>
+<text x="40" y="1327" font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif" font-size="14" font-weight="normal" fill="#66707a" text-anchor="start">노드 실행 실패는 retry:&lt;노드&gt;로 재시도한다. Supervisor 진입이 MAX_STEPS(20)를 넘으면 조사를 멈추고 종합·보고서·평가까지 마친 뒤 끝낸다.</text>
+</svg>
