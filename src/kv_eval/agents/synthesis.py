@@ -16,7 +16,7 @@ def synthesis_node(state: dict, llm: Any) -> dict:
     assessment = llm.generate_structured(
         prompt_template("synthesis") + "\n" + "Synthesize four views (technical TRL, market, stakeholder, domain). Use ONLY supplied evaluated results and verified citations. "
         "Present agreements and at least two EVIDENCED conflicts per technology if possible; if not, list gap rather than fabricate. "
-        "Describe trade-offs neutrally, no winner/recommendation. If sources must be revisited, return names in needs_source_agents. "
+        "Describe trade-offs neutrally, no winner/recommendation. Put a perspective in needs_source_agents only when a specific missing source blocks one of its verdicts, and name that gap in evidence_gaps. "
         "Set needs_revision for synthesis-only expression problems.\n"
         + repr({k: prompt_view(perspective(state, k)) for k in PERSPECTIVES})
         + "\nEvidence source IDs: " + repr(src)

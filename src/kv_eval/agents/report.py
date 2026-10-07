@@ -287,6 +287,8 @@ def render_report(state: dict, llm: Any) -> str:
         "an evidence balance table is appended by code. "
         "No ranking/endorsement. No invented deployment or quantitative results. "
         "Use the EXACT citation strings from the verified source catalog ([n, p.X] or [Wn]) after every supported fact. "
+        "Every sentence and every table row that contains a number (%, 배, GB, CAGR, tokens, ms) must carry its citation in that same "
+        "sentence or row; a table cell with a figure and no citation fails the check. "
         "Never cite non-catalog IDs. Keep design category labels unchanged. "
         "Write 근거 부족 only for a verdict or required fact that has no supporting source; elsewhere state what WAS confirmed and "
         "name an unconfirmed point once instead of repeating 근거 부족 in every sentence. Each agent's missing_optional lists details "

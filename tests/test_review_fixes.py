@@ -167,3 +167,10 @@ def test_validation_flags_internal_identifier_citations(run_graph):
     tampered = state["report"].replace("## 6. 시사점\n", "## 6. 시사점\nMLA는 운영 중이다 [deepseek_v2, p.16].\n", 1)
     issues = validate_report(tampered, state["evidence"])["issues"]
     assert any("내부 식별자 인용" in i for i in issues)
+
+
+def test_rules_skip_disclaimers_and_code_generated_gap_list(run_graph):
+    assert not neutrality_issues("평가는 하나의 우승 기술을 고르는 대신, 두 기술의 조건을 비교한다.")
+    state = run_graph(FakeLLM(needs_source=["market"], judge_fail={"bias_control": (2, "market")}))
+    assert "#### 근거 공백 (Supervisor 기록)" in state["report"]
+    assert not any("근거 공백" in i or "**시장성**" in i for i in check_groundedness(state)["issues"])

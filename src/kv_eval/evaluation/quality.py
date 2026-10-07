@@ -32,7 +32,7 @@ COMPARATIVE = re.compile(rf"{_TECH}\S*\s*보다\s*[^.。|]{{0,20}}?((더\s*)?(�
 ENDORSEMENT = re.compile(r"(추천한다|추천됨|권장한다|권고한다|승자|우승|압도적|최선의\s*선택|최고의\s*(기술|선택)|능가|우위에\s*있|우위를\s*점)")
 TECH_DIRECTIVE = re.compile(r"((MLA|ITME)\S*\s*(을|를)?\s*(우선\s*)?(채택|도입|선택)(해야|하라|할\s*것을))")
 # 같은 절 안에서 표현 바로 뒤에 오는 부정·유보만 면제한다. 뒤 절의 부정은 앞 절의 우열 판정을 지우지 않는다.
-NEARBY_NEGATION = re.compile(r"^[^.。|]{0,25}?(않|아니|없|어렵|판단하지|가리지|정하지)")
+NEARBY_NEGATION = re.compile(r"^[^.。|]{0,25}?(않|아니|없|어렵|판단하지|가리지|정하지|대신|말고|배제|지양)")
 CLAUSE_BREAK = re.compile(r"(지만|는데|으나|이나|반면|그러나|,|;)")
 # 단위가 붙은 수치만 본다. TRL 등급이나 날짜는 대상이 아니다.
 QUANTITY = re.compile(r"\d[\d,.]*\s*(%|배|×|GB|GiB|TB|TiB|MB|ms|μs|us\b|tokens?\b|토큰|tok/s|req/s|x\b)")
@@ -138,11 +138,12 @@ def _result(items: list[dict]) -> dict:
 
 
 def check_groundedness(state: dict) -> dict:
-    from ..agents.report import KV_SCALE_FORMULA, KV_SCALE_TABLE  # 코드가 넣는 [D] 설계 표·산식
+    from ..agents.report import KV_SCALE_FORMULA, KV_SCALE_TABLE, gap_section  # 코드가 넣는 표·산식·공백 목록
     report = state.get("report", "")
     validation = validate_report(report, state.get("evidence", []))
     issues = list(validation["issues"])
-    static = {line.strip() for line in KV_SCALE_TABLE.splitlines()} | set(_sentences(KV_SCALE_FORMULA))
+    static = ({line.strip() for line in KV_SCALE_TABLE.splitlines()} | set(_sentences(KV_SCALE_FORMULA))
+              | set(_sentences(gap_section(state))))
     for chapter, text in _chapters(_body(report)):
         design_ok = chapter in DESIGN_CHAPTERS
         for sentence in _sentences(text):
