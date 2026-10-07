@@ -1,6 +1,7 @@
 # Subject
 
-본 프로젝트는 KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA), 하드웨어(ITME) 두 진영에서 선정하여, 기술 성숙도(TRL)·시장·이해관계자·도메인 관점에서 평가하는 Supervisor 패턴 기반으로 설계/개발한 Multi-Agent 프로젝트임.
+이 프로젝트는 KV cache 최적화 기술인 DeepSeek-V2 MLA와 ITME를 비교하는
+Multi-Agent 평가 시스템이다.
 
 ## Overview
 
@@ -74,15 +75,48 @@
 
 ## State Schema
 
-항목마다 다른 방식을 택했을 때 생기는 문제와, 그래서 고른 방식을 한 줄로 적는다.
+State는 **Control**과 **Payload**로 나뉜다.
+Control은 Supervisor의 다음 작업 선택에 사용하고,
+Payload는 각 agent가 수집·생성한 결과를 담는다.
 
-- 제어 vs 페이로드 분리 : Supervisor가 LLM이 쓴 결과 본문을 직접 해석하면 프롬프트나 출력 형식이 바뀔 때마다 라우팅이 깨진다. 그래서 제어 필드(`perspective_status`·`node_status`·`retry_counts`·`followup_counts`·`gaps`)와 페이로드(`perspectives`·`evidence`·`synthesis`·`report`)를 나누고, Supervisor는 제어 필드와 결과의 `sufficient`·`missing` 신호만 읽게 했다.
-- 관측성 위치 : 결정 이력을 State에 쌓으면 체크포인트마다 전체 이력이 복제된다. 그래서 이력은 `outputs/decisions_{trace_id}.jsonl`과 LangSmith에 두고, State에는 직전 결정(`last_decision`)만 남겼다.
-- 지속성 비용 : 근거 발췌 원문까지 State에 넣으면 evidence만 약 490 KB가 되고 체크포인트마다 그대로 복제된다. 그래서 원문과 RAG 캐시는 `data/cache/{trace_id}/`에 두고, State에는 160자 축약본과 참조(`excerpt_ref`)만 둬서 최종 State를 213 KB로 유지했다.
-- 상관 : LangGraph·LangSmith·결정 로그가 각자 다른 ID를 쓰면 한 실행의 기록을 손으로 맞춰야 한다. 그래서 uuid4 `trace_id` 하나를 `thread_id`·LangSmith metadata·결정 로그 파일명에 함께 썼다.
-- 재개/복구 : 메모리 체크포인터는 프로세스가 죽으면 사라지고, Postgres는 단일 사용자 CLI에 과하다. 그래서 파일 하나로 끝나는 `AsyncSqliteSaver`에 저장하고, `node_status`·`last_error`·`retry_counts`를 보고 마지막 체크포인트부터 `--resume`하게 했다.
-- 동시 처리 : reducer 없이 `Send`로 함께 할당된 노드가 같은 키에 쓰면 같은 superstep에서 충돌하고, 단순 덮어쓰기면 한쪽 결과가 사라진다(순차 실행이어도 반영 시점은 superstep 끝이다). 그래서 dict 필드는 키 단위 병합, `evidence`는 에이전트 단위 교체 + 중복 제거, `gaps`는 중복 제거 append로 필드마다 reducer를 정했다.
-- 종료 보장 : `recursion_limit`만 두면 상한에서 예외로 끝나 보고서가 남지 않는다. 그래서 `step_count`가 `MAX_STEPS`(20)를 넘으면 Supervisor가 조사를 멈추고 근거 공백을 적은 뒤 종합·보고서·평가까지 마치고 정상 종료하게 했다. 관점 재시도 2회, 후속 재조사 1회, 보고서 재작성 2회가 그 앞에서 루프를 끊고, `recursion_limit`은 마지막 안전장치다.
+#### Control
+
+| 필드 | 용도 |
+|---|---|
+| `trace_id` | LangGraph `thread_id`, LangSmith metadata, 결정 로그 파일명을 연결한다. |
+| `step_count` | Supervisor가 판단한 횟수다. `MAX_STEPS`를 넘기면 조사 대신 마무리 단계로 진행한다. |
+| `next_agents` | 현재 Supervisor가 선택한 다음 작업 노드다. |
+| `perspective_status` | 각 관점의 충분성 상태(`pending`, `sufficient`, `insufficient`, `failed`, `excluded`)를 저장한다. |
+| `retry_counts` | 근거 부족 또는 실행 실패에 대한 재시도 횟수다. |
+| `followup_counts` | 종합·품질 평가가 특정 관점을 다시 요청했을 때 사용하는 별도 횟수다. |
+| `node_status` / `last_error` | 노드의 실행 상태와 마지막 오류를 저장해 `--resume`에 사용한다. |
+| `feedback` | Supervisor가 agent에 전달하는 재조사 사유와 검색 힌트다. |
+| `eval_result` | `quality_evaluator`의 4가지 평가 결과다. |
+| `gaps` | 재조사 한도를 넘겨 남긴 근거 공백이다. 각 항목은 관점, 기술, 공백 종류, 상세 사유를 가진다. |
+
+#### Payload
+
+| 필드 | 용도 |
+|---|---|
+| `perspectives` | 기술·시장·이해관계자·도메인 agent의 결과다. |
+| `synthesis` | 관점 간 일치, 상충, 추가 조사 요청을 담는다. |
+| `report` | 최종 Markdown 보고서 본문이다. |
+| `evidence` | 보고서와 평가에 쓰는 근거 목록이다. State에는 최대 160자 발췌와 `excerpt_ref`만 둔다. |
+| `cache_keys` | RAG 결과와 원문 근거가 저장된 캐시 위치다. |
+
+#### 병합과 저장
+
+`Send`로 여러 agent가 같은 단계에서 결과를 반환할 수 있으므로,
+병합 규칙을 필드별로 정의했다.
+
+- dict 필드: 키 단위 병합
+- `evidence`: 재실행한 agent의 이전 근거를 새 결과로 교체한 뒤 중복 제거
+- `gaps`: 같은 공백은 한 번만 유지
+
+긴 원문 근거와 RAG 캐시는 State 밖의 `data/cache/{trace_id}/`에 저장한다.
+결정 이력 전체도 State에 쌓지 않고
+`outputs/decisions_{trace_id}.jsonl`과 LangSmith에서 관리한다.
+
 
 **필드 구성** (`src/kv_eval/state.py`)
 
@@ -142,7 +176,7 @@ Supervisor가 다음 노드를 정하는 순서다. 작업 노드는 실행 후 
 #11 end:unverified                            같은 원인으로 반복 → 재작성 중단
 ```
 
-종합이 4관점 중 market·stakeholder만 골라 다시 조사했고, 평가 미달은 원인 관점(market)을 지목했다. market은 후속 재조사 한도를 이미 썼기 때문에 Supervisor는 재조사 대신 4.2 표 아래에 판정 한계를 적게 하는 재작성으로 보냈고, 같은 원인으로 다시 미달하자 무한 재작성 없이 미검증으로 끝냈다. 남은 미달은 market이 MLA의 시장성 판정 3개를 모두 '긍정'으로 내리면서 반대 방향 근거를 찾지 않은 것(편향 통제 3점)으로, 7장 근거 공백에 그대로 적혀 있다. 부족한 관점만 재조사해 통과하는 경로는 `tests/test_scenarios.py`, `tests/test_review_fixes.py`가 Fake로 재현한다.
+종합 네 가지 관점 중 market·stakeholder만 골라 다시 조사했고, 평가 미달은 원인 관점(market)을 지목했다. market은 후속 재조사 한도를 이미 썼기 때문에 Supervisor는 재조사 대신 4.2 표 아래에 판정 한계를 적게 하는 재작성으로 보냈고, 같은 원인으로 다시 미달하자 무한 재작성 없이 미검증으로 끝냈다. 남은 미달은 market이 MLA의 시장성 판정 3개를 모두 '긍정'으로 내리면서 반대 방향 근거를 찾지 않은 것(편향 통제 3점)으로, 7장 근거 공백에 그대로 적혀 있다. 부족한 관점만 재조사해 통과하는 경로는 `tests/test_scenarios.py`, `tests/test_review_fixes.py`가 Fake로 재현한다.
 
 ### 설계 결정
 
