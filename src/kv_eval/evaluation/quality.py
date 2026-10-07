@@ -2,7 +2,7 @@
 
 | 항목 | 규칙 검사(결정적) | LLM Judge | 미달 시 경로 |
 |---|---|---|---|
-| groundedness | validate_report(목차·인용·REFERENCE·10p) + 수치 문장 인용 필수([D]는 1·2장 설계 전제에만) | 발췌가 주장을 뒷받침하는가 | 보고서 재작성 (결함이 에이전트 판정에서 왔으면 그 관점 재조사) |
+| groundedness | validate_report(목차·인용·REFERENCE·10p) + 수치 문장 인용 필수([D]는 SUMMARY·1·2장 설계 전제에만) | 발췌가 주장을 뒷받침하는가 | 보고서 재작성 (결함이 에이전트 판정에서 왔으면 그 관점 재조사) |
 | neutrality | 두 기술 간 비교 우열·추천·지시 표현 탐지(바로 뒤가 부정이면 제외) | 암묵적 우열 판정 | 보고서 재작성 (에이전트 판정에서 왔으면 그 관점 재조사) |
 | bias_control | 기술·관점별 고유 출처 ≥2, 웹 단일 발행처 비중 상한, 긍정·우려 양방향 근거 | 한쪽 근거 편중 | 원인 관점 재조사 |
 | coverage | 4.1~4.4 서술·판정표 존재, 두 기술 모두 기재, 관점 결과 존재 | 4관점 실질 서술 | 원인 관점 재조사 |
@@ -49,7 +49,9 @@ CLAUSE_BREAK = re.compile(r"(지만|는데|으나|이나|반면|그러나|,|;)")
 # 단위가 붙은 수치(성능·용량·비율). TRL 같은 등급 숫자나 날짜는 대상이 아니다.
 QUANTITY = re.compile(r"\d[\d,.]*\s*(%|배|×|GB|GiB|TB|TiB|MB|ms|μs|us\b|tokens?\b|토큰|tok/s|req/s|x\b)")
 EVIDENCE_CITATION = re.compile(r"\[\d+,\s*p\.\d+\]|\[W\d+\]")
-DESIGN_CHAPTERS = ("1", "2")  # 팀 설계 문서 [D]를 쓸 수 있는 장(배경·선정의 설계 조건). 기술 사실의 근거로는 쓰지 않는다
+# 팀 설계 문서 [D]를 쓸 수 있는 장: 배경·선정의 설계 조건과, 그 설계 전제를 요약에서 다시 말하는 SUMMARY.
+# 기술 사실의 근거로는 쓰지 않는다(3장 이후에서 [D]만 붙은 문장·수치는 규칙 위반).
+DESIGN_CHAPTERS = ("SUMMARY", "1", "2")
 POSITIVE = {"긍정", "적합"}
 CONCERN = {"우려", "제약"}
 MIXED = {"혼재", "조건부"}  # 조건부 = 조건이 붙은 적합 → 긍정·우려 양쪽 근거를 함께 담은 판정
@@ -144,15 +146,15 @@ def check_groundedness(state: dict) -> dict:
             if sentence in static:
                 continue
             if not design_ok and "[D]" in sentence and not EVIDENCE_CITATION.search(sentence):
-                # 설계 문서는 조사 근거가 아니다. 1·2장 밖에서 [D]만 붙은 문장은 사실 근거 없이 서술한 것이다.
-                issues.append(f"설계 문서 [D]만 인용(1·2장 설계 조건 밖): {sentence[:120]}")
+                # 설계 문서는 조사 근거가 아니다. SUMMARY·1·2장 밖에서 [D]만 붙은 문장은 사실 근거 없이 서술한 것이다.
+                issues.append(f"설계 문서 [D]만 인용(SUMMARY·1·2장 설계 조건 밖): {sentence[:120]}")
                 continue
             if not QUANTITY.search(sentence):
                 continue
-            # [D](팀 설계 문서)는 1·2장의 설계 전제에만 근거가 된다. 다른 장의 수치를 [D]로 막으면 조사 근거 검사를 우회한다.
+            # [D](팀 설계 문서)는 SUMMARY·1·2장의 설계 전제에만 근거가 된다. 다른 장의 수치를 [D]로 막으면 조사 근거 검사를 우회한다.
             cited = EVIDENCE_CITATION.search(sentence) or (design_ok and "[D]" in sentence)
             if not cited:
-                issues.append(f"수치 문장에 인용 없음{'([D]는 1·2장 설계 전제에만 허용)' if '[D]' in sentence else ''}: {sentence[:120]}")
+                issues.append(f"수치 문장에 인용 없음{'([D]는 SUMMARY·1·2장 설계 전제에만 허용)' if '[D]' in sentence else ''}: {sentence[:120]}")
     return {"passed": not issues, "issues": issues, "targets": ["report"] if issues else [],
             "pdf_pages": validation.get("pdf_pages")}
 

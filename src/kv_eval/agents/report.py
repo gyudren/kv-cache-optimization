@@ -12,7 +12,8 @@ from ..schemas import ReportParts
 from ..config import PERSPECTIVES
 from ..evidence_store import hydrate
 from ..state import deduplicate_evidence, perspective, prompt_view
-from ..reporting.sections import citation_catalog, citeable_evidence, normalize_citations, used_references
+from ..reporting.sections import (citation_catalog, citeable_evidence, link_source_refs, normalize_citations,
+                                  used_references)
 
 TECHS = (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME"))
 
@@ -21,7 +22,7 @@ from datetime import date
 
 AS_OF = date.today().isoformat()
 
-# 팀 설계 산출물. 1·2장의 고정 표와 설계 판단은 이 문서를 출처 [D]로 표기한다.
+# 팀 설계 산출물. 1·2장의 고정 표와 설계 판단(SUMMARY에서 그 전제를 다시 말할 때 포함)은 이 문서를 출처 [D]로 표기한다.
 DESIGN_REF = ("[D] 판교 9반 2조 (2026). RAG-Design 설계 산출물: KV cache 최적화 기술 다관점 평가 "
               "(A-2 문제 상황, A-4 선정 사유, C 평가 기준). 내부 설계 문서.")
 
@@ -116,11 +117,13 @@ def _web_citations(ids: list[str], evidence: list[dict]) -> str:
 
 
 def trl_table(state: dict) -> str:
+    """기술 조사 에이전트의 TRL 판정을 그대로 옮긴다. 에이전트가 쓴 문서 ID·source_id 인용은 보고서 인용 형식으로 바꾼다."""
     tech = perspective(state, "tech")
+    evidence = deduplicate_evidence(state["evidence"])
+    cell = lambda text: _cell(link_source_refs(str(text or "근거 부족"), evidence))
     rows = ["| 기술 | TRL 추정(공개 정보 기반) | 판단 근거 요약 |", "|---|---|---|"]
     for key, label in TECHS:
-        rows.append(f"| {label} | {_cell((tech.get('trl') or {}).get(key) or '근거 부족')} | "
-                    f"{_cell((tech.get('trl_basis') or {}).get(key) or '근거 부족')} |")
+        rows.append(f"| {label} | {cell((tech.get('trl') or {}).get(key))} | {cell((tech.get('trl_basis') or {}).get(key))} |")
     return "\n".join(rows)
 
 
@@ -285,7 +288,8 @@ def render_report(state: dict, llm: Any) -> str:
         "(재조사 횟수, 한도, Supervisor 단계, 종합 단계 요청) into the prose; the code appends the supervisor gap list. "
         "Every number must literally appear in the excerpt of the catalog entry you cite; a figure found only in a web article must be cited "
         "to that [Wn] as a third-party report, never to a paper citation. Do not describe a web source beyond what its excerpt says. "
-        "The team design document [D] is NOT a research source: use [D] only in background and selection for design conditions "
+        "The team design document [D] is NOT a research source: use [D] only in background and selection (and in a summary bullet "
+        "that restates those design premises) for design conditions "
         "(domain choice, selection method and reasons, non-selected candidates, KV cache scale assumptions, evaluation criteria). "
         "Every technical fact about MLA or ITME (mechanism, numbers, deployment) must cite a paper [n, p.X] or a web source [Wn], never [D]. "
         "Stakeholder statements from forums, Hacker News or personal blogs may be mentioned only as developer-community opinion. "
