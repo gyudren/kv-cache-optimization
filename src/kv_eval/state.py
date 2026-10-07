@@ -69,7 +69,7 @@ class GraphState(TypedDict, total=False):
     perspectives: Annotated[dict[str, dict], merge_dict]   # tech / market / stakeholder / domain
     synthesis: dict[str, Any]
     report: str
-    evidence: Annotated[list[dict], merge_evidence]        # 축약 발췌(≤300자) + excerpt_ref(원문은 디스크)
+    evidence: Annotated[list[dict], merge_evidence]        # 축약 발췌(≤160자) + excerpt_ref(원문은 디스크)
     cache_keys: Annotated[dict[str, str], merge_dict]      # RAG 캐시 위치(원문은 디스크)
 
 

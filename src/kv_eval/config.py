@@ -46,7 +46,7 @@ def recursion_limit_for(max_steps: int) -> int:
     """
     return (max_steps + FINALIZE_STEPS) * 2 + 10
 # State에 남기는 Evidence 발췌 길이. 원문은 evidence_store(디스크)에 두고 excerpt_ref로 참조한다.
-STATE_EXCERPT_CHARS = 300
+STATE_EXCERPT_CHARS = 160
 # 편향 통제 규칙: 기술·관점별 최소 고유 출처 수, 웹 근거의 단일 발행처 비중 상한
 MIN_DISTINCT_SOURCES = 2
 MAX_SINGLE_SOURCE_SHARE = 0.6
