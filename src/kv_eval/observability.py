@@ -13,7 +13,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from .config import LANGSMITH_RUN_NAME, LANGSMITH_TAGS, RECURSION_LIMIT
+from .config import LANGSMITH_RUN_NAME, LANGSMITH_TAGS
 
 
 def new_trace_id() -> str:
@@ -46,11 +46,14 @@ def langsmith_enabled() -> bool:
     return os.getenv("LANGSMITH_TRACING", "").strip().lower() == "true" and bool(os.getenv("LANGSMITH_API_KEY", "").strip())
 
 
-def run_config(trace_id: str, recursion_limit: int = RECURSION_LIMIT) -> dict:
-    """LangGraph 실행 설정. LANGSMITH_TRACING=true면 LangSmith가 run_name·tags·metadata를 그대로 기록한다."""
+def run_config(trace_id: str) -> dict:
+    """LangGraph 실행 설정. LANGSMITH_TRACING=true면 LangSmith가 run_name·tags·metadata를 그대로 기록한다.
+
+    recursion_limit은 여기서 정하지 않는다. build_graph가 그 그래프의 Policy.max_steps로 계산해
+    그래프 기본 설정에 넣으므로 Policy와 상한이 어긋날 수 없다(단일 출처).
+    """
     return {
         "configurable": {"thread_id": trace_id},
-        "recursion_limit": recursion_limit,
         "run_name": LANGSMITH_RUN_NAME,
         "tags": list(LANGSMITH_TAGS),
         "metadata": {"trace_id": trace_id, "project": os.getenv("LANGSMITH_PROJECT", "")},

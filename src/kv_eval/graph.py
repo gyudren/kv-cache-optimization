@@ -24,8 +24,9 @@ WORKER_NODES = (*AGENT_NODES, "quality_evaluator")
 
 
 def build_graph(rag: Any, web: Any, llm: Any, checkpointer: Any = None, policy: Policy | None = None):
+    policy = policy or Policy()
     graph = StateGraph(GraphState)
-    graph.add_node("supervisor", partial(supervisor_node, policy=policy or Policy()))
+    graph.add_node("supervisor", partial(supervisor_node, policy=policy))
     agents = {
         "tech": partial(technology.technology_node, rag=rag, llm=llm, web=web),
         "market": partial(market.market_node, web=web, llm=llm),
@@ -43,4 +44,5 @@ def build_graph(rag: Any, web: Any, llm: Any, checkpointer: Any = None, policy: 
     graph.add_conditional_edges("supervisor", route, [*WORKER_NODES, END])
     for name in WORKER_NODES:
         graph.add_edge(name, "supervisor")
-    return graph.compile(checkpointer=checkpointer)
+    # recursion_limit은 이 그래프가 쓰는 Policy에서 계산한다(호출 config가 명시하면 그 값이 우선).
+    return graph.compile(checkpointer=checkpointer).with_config(recursion_limit=policy.recursion_limit)

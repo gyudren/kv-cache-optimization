@@ -36,8 +36,15 @@ MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
 # 상한 도달 후 마무리에 필요한 Supervisor 진입 수: 종합 → 보고서 → 평가 → 종료 = 4, 여유 1을 더해 5.
 # (마무리 중 실패한 노드는 재시도하지 않고 공백으로 넘기므로 4회를 넘지 않는다. 여유분은 재개 직후의 재진입용)
 FINALIZE_STEPS = 5
-# Supervisor 1회 = supervisor + 작업 노드 = 2 superstep. LangGraph 상한은 마지막 그물이다.
-RECURSION_LIMIT = (MAX_STEPS + FINALIZE_STEPS) * 2 + 10
+
+
+def recursion_limit_for(max_steps: int) -> int:
+    """LangGraph recursion_limit은 Supervisor 단계 상한에서만 계산한다(단일 출처).
+
+    Supervisor 1회 = supervisor + 작업 노드 = 2 superstep. 마무리 단계와 여유 10을 더한다.
+    build_graph가 실제로 쓰는 Policy.max_steps로 이 값을 계산해 그래프 기본 설정에 넣는다.
+    """
+    return (max_steps + FINALIZE_STEPS) * 2 + 10
 # State에 남기는 Evidence 발췌 길이. 원문은 evidence_store(디스크)에 두고 excerpt_ref로 참조한다.
 STATE_EXCERPT_CHARS = 300
 # 편향 통제 규칙: 기술·관점별 최소 고유 출처 수, 웹 근거의 단일 발행처 비중 상한

@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
-from ..config import FINALIZE_STEPS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS
+from ..config import FINALIZE_STEPS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS, recursion_limit_for
 from ..evaluation.quality import REINVESTIGATE_CRITERIA, REWRITE_CRITERIA, evidence_shortfalls
 from ..state import perspective
 
@@ -30,6 +30,10 @@ class Policy:
 
     def limit(self, name: str) -> int:
         return self.retry_limits.get(name, 0)
+
+    @property
+    def recursion_limit(self) -> int:
+        return recursion_limit_for(self.max_steps)
 
 
 @dataclass

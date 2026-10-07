@@ -154,3 +154,19 @@ def test_supervisor_verifies_sufficiency_deterministically():
     decision = decide(state)
     assert decision.targets == ["market"]
     assert any("market/itme: 고유 출처 1개" in m for m in decision.updates["feedback"]["market"]["missing"])
+
+
+def test_recursion_limit_follows_policy_instance():
+    """Policy(max_steps=30)으로 상한까지 도는 실행도 GraphRecursionError 없이 끝난다(D-20)."""
+    from kv_eval.config import FINALIZE_STEPS
+    policy = Policy(max_steps=30)
+    graph = build_graph(FakeRAG(), FakeWeb(), FakeLLM(insufficient={p: INF for p in PERSPECTIVES}), policy=policy)
+    assert graph.config["recursion_limit"] == policy.recursion_limit == (30 + FINALIZE_STEPS) * 2 + 10
+    assert "recursion_limit" not in run_config("t")
+    # 재조사 한도를 크게 열어 max_steps까지 실제로 진행시킨다
+    wide = Policy(max_steps=30, retry_limits={**RETRY_LIMITS, **{p: 100 for p in PERSPECTIVES}})
+    graph = build_graph(FakeRAG(), FakeWeb(), FakeLLM(insufficient={p: INF for p in PERSPECTIVES}), policy=wide)
+    trace_id = new_trace_id()
+    state = graph.invoke(initial_state("q", trace_id), config=run_config(trace_id))
+    assert state["step_count"] > 30 and state["status"] in ("completed_with_gaps", "unverified")
+    assert any("단계 상한" in gap for gap in state["gaps"])
