@@ -88,9 +88,21 @@ class SynthesisAssessment(BaseModel):
     needs_source_agents: list[Literal["tech", "market", "stakeholder", "domain"]] = Field(default_factory=list)
     needs_revision: bool = False
 
-class ReportAssessment(BaseModel):
+EvalTarget = Literal["tech", "market", "stakeholder", "domain", "report"]
+
+class CriterionVerdict(BaseModel):
+    """품질 평가 1개 항목의 LLM Judge 판정. score는 1(미흡)~5(충족)."""
     passed: bool
-    issues: list[str] = Field(default_factory=list)
+    score: int
+    reason: str
+    target_agent: EvalTarget | None = None  # 미달 원인 에이전트(관점 재조사 대상 또는 report)
+
+class EvalVerdict(BaseModel):
+    """DEV_PLAN §6 품질 평가 4항목. 규칙 검사 실패는 이 판정으로 뒤집을 수 없다."""
+    groundedness: CriterionVerdict
+    neutrality: CriterionVerdict
+    bias_control: CriterionVerdict
+    coverage: CriterionVerdict
 
 class ReportParts(BaseModel):
     summary: str

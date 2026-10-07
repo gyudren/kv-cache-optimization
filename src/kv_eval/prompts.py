@@ -11,6 +11,7 @@ PROMPT_FILES = {
     "synthesis": "06_synthesis_agent.md",
     "report": "07_report_agent.md",
     "validator": "08_result_validator.md",
+    "quality_evaluator": "09_quality_evaluator.md",
 }
 ALLOWED = frozenset(PROMPT_FILES)
 

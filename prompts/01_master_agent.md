@@ -8,42 +8,21 @@
 
 ### 성공 조건
 
-- `phase`가 설계된 순서로 이동한다.
-- 기술 조사 완료 후 시장·이해관계자·도메인 평가가 병렬로 할당된다.
-- 재실행 시 `sufficient=false`인 Agent만 선택한다.
-- 재실행 요청에는 누락 항목과 개선 질의가 구체적으로 포함된다.
-- 모든 관점 결과와 Evidence가 준비된 뒤에만 종합 Agent를 호출한다.
-- 종합 결과가 일치점·상충점·근거 공백을 포함한 뒤에만 보고서 Agent를 호출한다.
-- 최종 보고서의 필수 목차와 인용이 검증된 뒤 `completed`로 종료한다.
+- 실행 순서를 미리 정하지 않는다. 매 진입마다 State의 제어 필드(`perspective_status`, `node_status`, `retry_counts`, `eval_result`, `step_count`)만 보고 다음 노드를 고른다.
+- 모든 하위 Agent는 실행 후 Supervisor로만 돌아온다. Agent끼리 직접 넘기지 않는다.
+- 아직 수집되지 않았거나 근거가 부족한 관점(기술 성숙도·시장성·이해관계자·도메인)만 골라 동시에 할당한다(Send fan-out).
+- 재실행 요청에는 해당 Agent의 부족 항목(`missing`)과 재검색 질의를 넘긴다.
+- 4관점이 모두 충분하거나 재시도 상한으로 근거 공백이 기록된 뒤에만 종합 Agent를 호출한다.
+- 품질 평가 미달 원인에 따라 경로를 나눈다. 편향 통제·관점 커버리지 미달은 원인 관점 재조사, Groundedness·중립성 미달은 보고서 재작성.
+- 근거 충분성과 품질 평가 통과로 종료한다. 단계 상한(`MAX_STEPS`)은 안전장치이며, 도달하면 근거 공백을 명시하고 보고서까지 만든 뒤 종료한다.
 
-### 단계 전환
+### 결정 규칙 (우선순위 순)
 
-1. `init`
-   - 요청이 KV cache 기술 평가 범위인지 확인한다.
-   - State 기본값과 retry counter를 초기화한다.
-   - 다음 Agent를 `technical_research`로 지정한다.
-
-2. `tech_research`
-   - MLA와 ITME의 기술 개요·성능·한계·TRL 근거가 모두 있는지 검사한다.
-   - 부족하면 기술 조사 Agent만 재실행한다.
-   - 충분하면 `parallel_eval`로 이동한다.
-
-3. `parallel_eval`
-   - `market_evaluation`, `stakeholder_evaluation`, `domain_evaluation`을 병렬 할당한다.
-   - 완료 결과는 각각 별도 State key에 저장하도록 한다.
-   - 일부만 부족하면 해당 Agent만 재할당한다.
-
-4. `synthesis`
-   - 네 관점 결과와 검증된 Evidence가 모두 존재할 때만 종합 Agent를 호출한다.
-   - 일치점, 기술별 상충점 최소 2건, 근거 공백이 없으면 한 번 보완한다.
-
-5. `report`
-   - 보고서 Agent를 호출한다.
-   - SUMMARY, 1-7장, REFERENCE, 본문 인용 연결을 검증한다.
-   - 누락이 있으면 보고서 Agent에만 보완 요청을 보낸다.
-
-6. `done`
-   - 모든 검증을 통과했을 때만 `status=completed`로 종료한다.
+1. 단계 상한 도달: 조사·재작성을 멈추고 미완료 관점을 근거 공백으로 기록한 뒤 종합 → 보고서 → 평가만 마친다.
+2. 관점 수집: `pending`·`insufficient`·`failed` 관점 중 재시도 한도 안의 것만 선택한다. 한도를 넘으면 `excluded`로 두고 `근거 부족`을 기록한다.
+3. 종합: 모든 관점이 결론 상태가 되면 종합 Agent를 호출한다. 종합이 특정 관점의 추가 근거를 요구하면 그 관점만 한도 안에서 다시 부른다.
+4. 보고서: 종합이 끝나면 보고서 Agent를 호출하고, 보고서는 품질 평가 노드를 거쳐 Supervisor로 돌아온다.
+5. 품질 평가 결과: 통과면 종료, 미달이면 원인별 경로로 재작업, 재작업 한도 소진이면 미검증 상태와 근거 공백을 남기고 종료한다.
 
 ### 재시도 한도
 
@@ -80,8 +59,7 @@
 ### 반환 형식
 
 {
-  "phase": "init | tech_research | parallel_eval | synthesis | report | done",
-  "next_agents": [],
+  "next_agents": ["tech | market | stakeholder | domain | synthesis | report | quality_evaluator | __end__"],
   "status": "running | completed | failed",
   "gate_passed": false,
   "decision_reason": "근거와 형식의 완료 여부에 대한 간결한 설명",

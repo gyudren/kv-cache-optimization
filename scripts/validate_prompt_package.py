@@ -22,6 +22,7 @@ PROMPT_FILES = [
     "06_synthesis_agent.md",
     "07_report_agent.md",
     "08_result_validator.md",
+    "09_quality_evaluator.md",
 ]
 
 AGENT_FILES = PROMPT_FILES[1:]
@@ -42,6 +43,9 @@ ALLOWED_PLACEHOLDERS = {
     "retry_limit",
     "agent_result",
     "evidence",
+    "rule_results",
+    "evidence_gaps",
+    "report_draft",
 }
 
 REQUIRED_CRITERIA = {

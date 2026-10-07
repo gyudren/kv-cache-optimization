@@ -17,7 +17,8 @@
 
 | Agent | 허용 도구/데이터 | 금지 사항 |
 |---|---|---|
-| Master | State 읽기·라우팅 | 직접 조사·평가·인용 생성 |
+| Supervisor(Master) | State 제어 필드 읽기·라우팅 | 직접 조사·평가·인용 생성 |
+| 품질 평가 | 보고서·인용 발췌·규칙 검사 결과 | 보고서 수정, 규칙 실패 번복 |
 | 기술 조사 | 지정 PDF RAG | 웹 검색, 지정 문서 밖 지식 사용 |
 | 시장 평가 | Tavily 웹 검색 | 논문 RAG를 시장 근거처럼 사용 |
 | 이해관계자 평가 | Tavily 웹 검색 | 가상 발언·가상 기업 반응 생성 |
@@ -44,6 +45,9 @@
 | `{{retry_limit}}` | 해당 Agent의 재시도 상한 |
 | `{{agent_result}}` | Validator가 검사할 Agent 출력 |
 | `{{evidence}}` | 검사 대상 출력이 참조하는 Evidence 목록 |
+| `{{rule_results}}` | 품질 평가 노드의 결정적 규칙 검사 결과(4항목별 passed·issues) |
+| `{{evidence_gaps}}` | Supervisor가 재시도 상한·실행 실패로 기록한 근거 공백 |
+| `{{report_draft}}` | 품질 평가 대상 보고서 Markdown |
 
 ## 구현 원칙
 
@@ -57,7 +61,7 @@
 ## 파일 구성
 
 - `00_common_contract.md`: 프로젝트 전체의 불변 규칙
-- `01_master_agent.md`: 단계 전환, 병렬 할당, 게이트, 재시도
+- `01_master_agent.md`: Supervisor 라우팅 정책(State 기반 다음 Agent 선택, 재작업, 종료)
 - `02_technical_research_agent.md`: 원문 RAG 기반 기술·TRL 조사
 - `03_market_evaluation_agent.md`: 웹 기반 시장성 평가
 - `04_stakeholder_evaluation_agent.md`: 웹 기반 이해관계자 평가
@@ -65,6 +69,7 @@
 - `06_synthesis_agent.md`: 관점 간 일치·상충 종합
 - `07_report_agent.md`: 최종 보고서 생성
 - `08_result_validator.md`: 결과 충분성·출처·형식 검증
+- `09_quality_evaluator.md`: 보고서 품질 평가 LLM Judge(Groundedness·중립성·편향 통제·관점 커버리지)
 - `../schemas/evidence.schema.json`: 공통 Evidence 구조
 
 ## 정적 검증
