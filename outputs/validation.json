@@ -1,79 +1,69 @@
 {
   "passed": false,
   "issues": [
-    "정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능",
-    "정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능",
-    "품질 평가 groundedness 미달: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 수치 문장에 인용 없음: | 저자 보고 효과 | MHA 대비 small MoE KV cache 14%, large MoE 4% | NVMe-oF 기준선 대비 처리량 1.80배 |",
-    "품질 평가 bias_control 미달: 4.4 표와 MLA 단락에서 D3·D4를 각각 “적합”으로 판정하지만, 직접 근거는 사실상 동일 저자 논문의 통제 비교([1, p.31-32])에 집중된다. D4 단락에는 “저자 보고·단일 출처”, “장문맥 정보 보존 직접 평가는 근거 부족”을 뒤이어 적었으나, 판정 위치에서 그 제한을 함께 반영하지 않아 긍정 방향 판정이 과도하게 강하다. 이 결함은 Supervisor가 기록한 domain 품질 공백과도 일치한다."
+    "품질 평가 groundedness 미달: 4.1 TRL 및 5장 매트릭스의 “실제 서비스 운영 또는 상용 채택은 확인되지 않는다”는 서술은 제공 발췌문 [1, p.16]의 “actually deployed DeepSeek-V2” 및 실제 배포된 DeepSeek 67B 서비스의 길이 분포를 사용했다는 설명과 충돌하거나, 적어도 저자 보고 기준의 서비스 배포 근거를 누락한다. 독립 검증·외부 고객 채택이 없다고 한정해야 한다. 또한 MLA의 “TRL 4-6” 범위는 구현·내부 평가 근거와 연결되지만, 제시된 자료에는 해당 숫자 범위를 매핑하는 TRL 기준 자체가 없다."
   ],
   "warnings": [],
   "used_references": [
-    "[1] DeepSeek-AI (2024). DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model. arXiv preprint arXiv:2405.04434, p.1, p.6, p.7, p.8, p.16, p.31, p.32.",
-    "[2] Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix) (2026). ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories. arXiv preprint arXiv:2606.12556, p.1, p.2, p.5, p.6, p.8, p.9, p.10, p.11.",
-    "[3] Lee, W., Lee, J., Seo, J., & Sim, J. (Seoul National University) (2024). InfiniGen: Efficient Generative Inference of Large Language Models with Dynamic KV Cache Management. arXiv preprint arXiv:2406.19707, p.12.",
-    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.1.",
-    "[W24] networkworld.com (게시일 미확인). Chip wafer shortage will run through 2030 as AI demand overwhelms supply: SK Hynix chief | Network World. networkworld.com, https://www.networkworld.com/article/4146270/chip-wafer-shortage-will-run-through-2030-as-ai-demand-overwhelms-supply-sk-hynix-chief.html",
-    "[W23] mordorintelligence.com (Fri, 11 Sep 2026 00:00:00 GMT). Large Language Model Market Size, Growth & Outlook | Industry Report 2031. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/large-language-model-llm-market",
-    "[W20] lmsys.org (게시일 미확인). SGLang v0.3 Release: 7x Faster DeepSeek MLA, 1.5x Faster torch.compile, Multi-Image/Video LLaVA-OneVision - LMSYS Org. lmsys.org, https://www.lmsys.org/blog/2024-09-04-sglang-v0-3",
-    "[W4] docs.dynatrace.com (Fri, 28 Aug 2026 00:00:00 GMT). AI Observability integrations — Dynatrace Docs. docs.dynatrace.com, https://docs.dynatrace.com/docs/observe/dynatrace-for-ai-observability/integrations",
-    "[W6] docs.vllm.ai (게시일 미확인). Attention Backend Feature Support - vLLM. docs.vllm.ai, https://docs.vllm.ai/en/stable/design/attention_backends",
+    "[1] DeepSeek-AI (2024). DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model. arXiv preprint arXiv:2405.04434, p.1, p.4, p.5, p.6, p.7, p.8, p.12, p.15, p.16, p.21, p.28.",
+    "[2] Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix) (2026). ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories. arXiv preprint arXiv:2606.12556, p.1, p.2, p.4, p.7, p.9, p.10, p.11.",
+    "[3] Lee, W., Lee, J., Seo, J., & Sim, J. (Seoul National University) (2024). InfiniGen: Efficient Generative Inference of Large Language Models with Dynamic KV Cache Management. arXiv preprint arXiv:2406.19707, p.4.",
+    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.4.",
     "[W5] docs.vllm.ai (게시일 미확인). mla_attention - vLLM. docs.vllm.ai, https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/attention/mla_attention",
-    "[W22] mordorintelligence.com (Tue, 28 Jul 2026 00:00:00 GMT). CXL Memory Controller IC Market Size, Share & 2031 Growth Trends Report. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/cxl-memory-controller-ic-market",
-    "[W8] finance.biggo.com (Tue, 06 Oct 2026 18:17:28 GMT). AI Memory Shortage Could Last Years; Morgan Stanley Names Nvidia, Micron Among 6 Outperformers — BigGo Finance. finance.biggo.com, https://finance.biggo.com/news/eba2a946-29a5-4439-9bcb-99029f17b123",
+    "[W6] docs.vllm.ai (게시일 미확인). Attention Backend Feature Support - vLLM. docs.vllm.ai, https://docs.vllm.ai/en/stable/design/attention_backends",
+    "[W21] mordorintelligence.com (Tue, 28 Jul 2026 00:00:00 GMT). CXL Memory Controller IC Market Size, Share & 2031 Growth Trends Report. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/cxl-memory-controller-ic-market",
     "[W1] computeexpresslink.org (게시일 미확인). Breaking Boundaries in Memory: Highlights from AI Infra Summit and SDC 2025 - Compute Express Link. computeexpresslink.org, https://computeexpresslink.org/blog/breaking-boundaries-in-memory-highlights-from-ai-infra-summit-and-sdc-2025-4198",
-    "[W26] penguinsolutions.com (게시일 미확인). CXL 3.0 vs. CXL 2.0: Advancing Composable AI Infrastructure. penguinsolutions.com, https://www.penguinsolutions.com/en-us/resources/blog/cxl-30-vs-cxl-20-key-differences-and-benefits",
-    "[W14] vtechworks.lib.vt.edu (게시일 미확인). Disaggregated LLM Serving with CXL Shared Memory KV .... vtechworks.lib.vt.edu, https://vtechworks.lib.vt.edu/server/api/core/bitstreams/fb5697b4-124d-4dca-be49-dab91e3e0c2a/content",
-    "[W16] asteralabs.com (게시일 미확인). How CXL Transforms RAG and KV Cache Performance. asteralabs.com, https://www.asteralabs.com/resources/blog/breaking-through-the-memory-wall-how-cxl-transforms-rag-and-kv-cache-performance",
-    "[W17] facebook.com (게시일 미확인). NVIDIA AI - ✨ DeepSeek-V4 is here — a million-token.... facebook.com, https://www.facebook.com/NVIDIAAI/posts/-deepseek-v4-is-here-a-million-token-context-16t-parameter-powerhouse-optimized-/1400447275452883",
-    "[W12] news.ycombinator.com (게시일 미확인). DeepSeek Open Source FlashMLA – MLA Decoding Kernel for Hopper GPUs | Hacker News. news.ycombinator.com, https://news.ycombinator.com/item?id=43155023",
-    "[W13] semiconductor.samsung.com (게시일 미확인). Breaking AI Memory Limits with CXL Memory Pooling. semiconductor.samsung.com, https://semiconductor.samsung.com/news-events/tech-blog/breaking-ai-memory-limits-with-cxl-memory-pooling"
+    "[W9] github.com (Wed, 09 Sep 2026 12:00:00 GMT). GitHub - deepseek-ai/FlashMLA: FlashMLA: Efficient Multi-head Latent Attention Kernels · GitHub. github.com, https://github.com/deepseek-ai/FlashMLA",
+    "[W17] gminsights.com (Thu, 01 Oct 2026 10:00:00 GMT). Enterprise LLM Market Size, Forecasts Report 2026-2035. gminsights.com, https://www.gminsights.com/industry-analysis/enterprise-llm-market",
+    "[W22] mordorintelligence.com (Fri, 11 Sep 2026 00:00:00 GMT). Large Language Model Market Size, Growth & Outlook | Industry Report 2031. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/large-language-model-llm-market",
+    "[W19] lmsys.org (게시일 미확인). SGLang v0.3 Release: 7x Faster DeepSeek MLA, 1.5x Faster torch.compile, Multi-Image/Video LLaVA-OneVision - LMSYS Org. lmsys.org, https://www.lmsys.org/blog/2024-09-04-sglang-v0-3",
+    "[W25] penguinsolutions.com (게시일 미확인). CXL 3.0 vs. CXL 2.0: Advancing Composable AI Infrastructure. penguinsolutions.com, https://www.penguinsolutions.com/en-us/resources/blog/cxl-30-vs-cxl-20-key-differences-and-benefits",
+    "[W13] news.ycombinator.com (게시일 미확인). DeepSeek Open Source FlashMLA – MLA Decoding Kernel for Hopper GPUs | Hacker News. news.ycombinator.com, https://news.ycombinator.com/item?id=43155023",
+    "[W11] liorsinai.github.io (게시일 미확인). DeepSeek's Multi-Head Latent Attention - Lior Sinai. liorsinai.github.io, https://liorsinai.github.io/machine-learning/2025/02/22/mla.html",
+    "[W14] semiconductor.samsung.com (게시일 미확인). Breaking AI Memory Limits with CXL Memory Pooling. semiconductor.samsung.com, https://semiconductor.samsung.com/news-events/tech-blog/breaking-ai-memory-limits-with-cxl-memory-pooling",
+    "[W23] networkworld.com (게시일 미확인). Chip wafer shortage will run through 2030 as AI demand overwhelms supply: SK Hynix chief | Network World. networkworld.com, https://www.networkworld.com/article/4146270/chip-wafer-shortage-will-run-through-2030-as-ai-demand-overwhelms-supply-sk-hynix-chief.html"
   ],
   "pdf_pages": 8,
   "page_check": "checked",
   "quality_eval": {
     "groundedness": {
       "passed": false,
-      "score": 2,
-      "reason": "정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 수치 문장에 인용 없음: | 저자 보고 효과 | MHA 대비 small MoE KV cache 14%, large MoE 4% | NVMe-oF 기준선 대비 처리량 1.80배 |",
+      "score": 3,
+      "reason": "4.1 TRL 및 5장 매트릭스의 “실제 서비스 운영 또는 상용 채택은 확인되지 않는다”는 서술은 제공 발췌문 [1, p.16]의 “actually deployed DeepSeek-V2” 및 실제 배포된 DeepSeek 67B 서비스의 길이 분포를 사용했다는 설명과 충돌하거나, 적어도 저자 보고 기준의 서비스 배포 근거를 누락한다. 독립 검증·외부 고객 채택이 없다고 한정해야 한다. 또한 MLA의 “TRL 4-6” 범위는 구현·내부 평가 근거와 연결되지만, 제시된 자료에는 해당 숫자 범위를 매핑하는 TRL 기준 자체가 없다.",
       "target_agents": [
         "report"
       ]
     },
     "neutrality": {
       "passed": true,
-      "score": 4,
-      "reason": "요약·5장·6장에서 단일 승자나 추천을 제시하지 않고, MLA를 KV 표현량 축소, ITME를 잔여 KV의 계층형 수용·이동으로 구분한다. 5장의 쟁점/관점 A/관점 B/엇갈리는 이유 표도 양 기술을 병기한다. 다만 4.4의 ‘적합’ 표기는 조건과 한계를 같은 표 셀에서 더 명확히 병기할 여지가 있다.",
+      "score": 5,
+      "reason": "요약, 3장, 5장 및 6장에서 두 기술을 서로 다른 작동 계층의 보완 가능 접근으로 서술하며, “우승”, 순위, 단일 추천 또는 직접적 우열 판정은 확인되지 않는다. 상충표도 두 기술에 동일한 쟁점·관점 A·관점 B·이유 형식으로 제시됐다.",
       "target_agents": []
     },
     "bias_control": {
-      "passed": false,
-      "score": 3,
-      "reason": "4.4 표와 MLA 단락에서 D3·D4를 각각 “적합”으로 판정하지만, 직접 근거는 사실상 동일 저자 논문의 통제 비교([1, p.31-32])에 집중된다. D4 단락에는 “저자 보고·단일 출처”, “장문맥 정보 보존 직접 평가는 근거 부족”을 뒤이어 적었으나, 판정 위치에서 그 제한을 함께 반영하지 않아 긍정 방향 판정이 과도하게 강하다. 이 결함은 Supervisor가 기록한 domain 품질 공백과도 일치한다.",
-      "target_agents": [
-        "domain"
-      ]
+      "passed": true,
+      "score": 4,
+      "reason": "각 기술에 대해 긍정 신호와 제한을 함께 보존했다. 예를 들어 MLA는 생태계 지원과 KV 축소 근거를, 동시에 MLA 단독 효과·품질·운영 근거 공백을 병기했고, ITME는 처리량·메모리 효율 저자 보고와 원격 지연·경합·제품화 공백을 함께 제시했다. 다만 4.3 MLA의 ‘개발자·도입 기업 관점: 혼재’는 실제 도입기업 근거가 없고 커뮤니티 경험 및 비판적 기술 블로그에 주로 의존하므로 표현의 근거 폭은 제한적이다.",
+      "target_agents": []
     },
     "coverage": {
       "passed": true,
-      "score": 4,
-      "reason": "4.1 TRL, 4.2 시장성, 4.3 이해관계자, 4.4 D1-D7 도메인 적용성을 두 기술 모두에 대해 실질적으로 서술했다. MLA 시장·채택·이해관계자 및 도메인 입력조건 등의 공백도 7장에 ‘근거 부족’과 Supervisor 기록으로 드러냈다.",
+      "score": 5,
+      "reason": "4.1 TRL, 4.2 시장성, 4.3 이해관계자, 4.4 D1-D7 도메인 적용성이 두 기술 모두에 대해 실질적으로 서술되어 있다. 확인되지 않은 시장·채택·독립 재현·D1 동시성 등 공백도 7장과 Supervisor 근거 공백 목록에서 ‘근거 부족’으로 명시했다.",
       "target_agents": []
     }
   },
   "gaps": [
-    "tech: 기술 성숙도(TRL) 재조사 2회 후에도 근거 부족 — 제공된 인용문에는 별도의 ‘메모리 계층(memory hierarchy)’ 메커니즘에 대한 설명이 없다.; 제공된 발췌문에는 하드웨어 종류·대수, 분산 학습의 구체적 토폴로지, 학습 총 스텝/시간, 평가 데이터셋별 전체 결과, SFT 및 RL의 세부 구현 설정은 없습니다.; MLA의 처리량(throughput) 수치 및 비교 조건",
-    "market: 시장성 재조사 2회 후에도 근거 부족 — MLA가 속한 LLM 추론 서빙·추론 최적화 시장을 직접 정의하고, 기준연도·전망연도·단위·CAGR·발행일·조사 방법론을 제시하는 원문 시장조사 웹 자료; DeepSeek-V2 MLA 자체를 명시한 유료 서비스 출시, 고객 운영 사례, 사용량, 계약 또는 독립 보도; Amazon Bedrock·Dynatrace 등에서 DeepSeek 모델 제공과 별개로 MLA 기능 자체를 지원한다고 명시한 공식 문서",
-    "stakeholder: 이해관계자 재조사 2회 후에도 근거 부족 — MLA 또는 DeepSeek의 MLA 서빙에 대해 경쟁 기업·경쟁 기술 제공자가 직접 발언한 공식 발표, 인터뷰 또는 기술 문서; 식별 가능한 데이터센터·클라우드 도입 기업 또는 운영 조직의 MLA 직접 도입 경험과 호환성·유지보수·품질·성능 자료; 서빙 프레임워크·모델 버전, 하드웨어 구성, 워크로드, 측정 지표 및 재현 절차를 갖춘 MLA 관련 공식 이슈 또는 벤치마크",
-    "domain: 도메인 적용성 재조사 2회 후에도 근거 부족 — GPU 메모리 총용량 및 모델 가중치가 차지하는 메모리; 요청별 컨텍스트 길이와 생성 길이; KV 캐시의 실제 바이트 정밀도/데이터형 및 런타임 오버헤드",
+    "tech: 기술 성숙도(TRL) 재조사 2회 후에도 근거 부족 — 제공된 발췌문에는 ‘메모리 계층(memory hierarchy)’ 자체의 계층 구조, 저장 장치 간 데이터 이동, 또는 관리 정책에 대한 설명은 없습니다.; 제공된 발췌문에는 온라인 RL 프레임워크의 구체적 알고리즘, 하이퍼파라미터, 하드웨어 구성, 데이터셋 규모, 학습 단계 수 및 재현 가능한 실행 설정이 없습니다.; 제공된 발췌문에는 표준 벤치마크 평가의 전체 결과 수치 및 각 벤치마크의 상세 프롬프트·샷 설정이 완전하게 ",
+    "market: 시장성 재조사 2회 후에도 근거 부족 — MLA가 속한 LLM 추론 서빙·추론 최적화 시장을 직접 정의하는 신뢰 가능한 시장조사기관 웹 자료(조사기관, 기준연도, 전망연도, 단위, CAGR 포함); ITME가 속한 CXL 메모리 시장의 시장조사기관 웹 자료(조사기관별 기준연도, 전망연도, 단위, CAGR 포함); DeepSeek-V2 MLA 자체를 명시하는 유료 서비스, 독립 고객사 도입 또는 실제 운영 사례",
+    "stakeholder: 이해관계자 재조사 2회 후에도 근거 부족 — ITME 이해관계자 관련 고유 출처 최소 2개 및 최신 시도 기준의 직접 근거; OpenAI, Google, Anthropic, Meta 등 경쟁 진영의 MLA 또는 DeepSeek MLA 계열에 대한 식별 가능한 직접 발언; ITME 자체에 대한 경쟁사 또는 경쟁 기술 제공자의 대안·한계·병행 가능성 관련 명시적 발언",
+    "domain: 도메인 적용성 재조사 2회 후에도 근거 부족 — ‘D1 워크로드’의 정의 및 해당 워크로드의 모델/서빙 구성; 제한된 GPU 메모리의 구체적 용량과 GPU 종류; GPU 메모리 제약별 수용 가능한 동시 요청 수",
     "tech: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족",
     "market: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족",
     "stakeholder: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족",
-    "domain: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족",
-    "domain: 품질 평가 미달, 재조사 한도 소진 — bias_control: 4.4 MLA D4는 “[1, p.31]”의 저자 통제 벤치마크 결과 하나에 의존해 ‘적합’으로 판정한다. 같은 절에서 장문맥 정보 보존의 직접 측정 부재 또는 저자 보고·단일 출처라는 반대 방향의 한계를 해당 판정에 병기하지 않았다. D3의 ‘적합’도 사실상 동일 저자 논문 단일 출처의 KV 비교에 의존한다. 반면 ITME에는 원",
-    "domain: 품질 평가 미달, 재조사 한도 소진 — bias_control: 4.4 도메인 적용성 표와 MLA 단락에서 D3·D4를 각각 “적합”으로 판정하지만, 두 판정의 직접 근거는 사실상 저자 통제 비교인 [1, p.31-32] 중심이다. 본문 후반에 “단일 저자 논문”, “장문맥 정보 보존의 직접 측정은 부족”이라고 적었으나, D4의 ‘품질·정보 보존’ 적합 판정과 같은 위치에서 저자 보고·단일 출처",
-    "domain: 품질 평가 미달, 재조사 한도 소진 — bias_control: 4.4 표와 MLA 단락에서 D3·D4를 각각 “적합”으로 판정하지만, 직접 근거는 사실상 동일 저자 논문의 통제 비교([1, p.31-32])에 집중된다. D4 단락에는 “저자 보고·단일 출처”, “장문맥 정보 보존 직접 평가는 근거 부족”을 뒤이어 적었으나, 판정 위치에서 그 제한을 함께 반영하지 않아 긍정 방향 판정이 과도하게"
+    "domain: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족"
   ],
-  "trace_id": "61afa03b-2492-480d-930e-0ba7aecbca42",
+  "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
   "status": "unverified",
   "supervisor_steps": 11,
   "retry_counts": {
@@ -86,10 +76,10 @@
     "quality_evaluator": 0
   },
   "evidence_store": {
-    "items": 194,
+    "items": 199,
     "missing_full_text": 0,
     "evaluator": {
-      "cited": 154,
+      "cited": 150,
       "cited_missing_full_text": 0
     }
   }

@@ -1,10 +1,10 @@
 """그래프 구조·reducer·실패 처리·재개·관측성 검증."""
 from __future__ import annotations
+import asyncio
 import json
-import sqlite3
 
 import pytest
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
@@ -108,20 +108,27 @@ def test_agent_always_failing_is_excluded_and_reported_as_gap(run_graph):
 # ---- 재개(체크포인트) --------------------------------------------------------------------------
 def test_resume_from_sqlite_checkpoint_skips_completed_nodes(tmp_path):
     llm = FakeLLM(crash_on={"synthesis": 1})
-    saver = SqliteSaver(sqlite3.connect(str(tmp_path / "ckpt.sqlite"), check_same_thread=False))
-    graph = build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=saver)
+    path = str(tmp_path / "ckpt.sqlite")
     trace_id = new_trace_id()
     config = run_config(trace_id)
-    with pytest.raises(SimulatedCrash):
-        graph.invoke(initial_state("q", trace_id), config=config)
-    snapshot = graph.get_state(config)
+
+    async def first_process():
+        async with AsyncSqliteSaver.from_conn_string(path) as saver:
+            graph = build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=saver)
+            with pytest.raises(SimulatedCrash):
+                await graph.ainvoke(initial_state("q", trace_id), config=config)
+            return await graph.aget_state(config)
+
+    snapshot = asyncio.run(first_process())
     assert snapshot.next == ("synthesis",)
     assert set(snapshot.values["perspectives"]) == set(PERSPECTIVES)
 
     # 새 프로세스를 흉내: 같은 파일로 체크포인터와 그래프를 다시 만든 뒤 입력 None으로 이어서 실행
-    saver2 = SqliteSaver(sqlite3.connect(str(tmp_path / "ckpt.sqlite"), check_same_thread=False))
-    resumed = build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=saver2)
-    state = resumed.invoke(None, config=config)
+    async def second_process():
+        async with AsyncSqliteSaver.from_conn_string(path) as saver:
+            return await build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=saver).ainvoke(None, config=config)
+
+    state = asyncio.run(second_process())
     assert state["status"] == "completed" and state["trace_id"] == trace_id
     assert all(llm.runs[name] == 1 for name in PERSPECTIVES)  # 완료된 관점은 다시 실행하지 않음
     assert llm.runs["synthesis"] == 2
@@ -167,6 +174,6 @@ def test_recursion_limit_follows_policy_instance():
     wide = Policy(max_steps=30, retry_limits={**RETRY_LIMITS, **{p: 100 for p in PERSPECTIVES}})
     graph = build_graph(FakeRAG(), FakeWeb(), FakeLLM(insufficient={p: INF for p in PERSPECTIVES}), policy=wide)
     trace_id = new_trace_id()
-    state = graph.invoke(initial_state("q", trace_id), config=run_config(trace_id))
+    state = asyncio.run(graph.ainvoke(initial_state("q", trace_id), config=run_config(trace_id)))
     assert state["step_count"] > 30 and state["status"] in ("completed_with_gaps", "unverified")
     assert any("단계 상한" in gap for gap in state["gaps"])

@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 import argparse
+import asyncio
+from contextlib import asynccontextmanager
 import json
 import os
 import sys
@@ -16,7 +18,7 @@ from pathlib import Path
 # Source checkout invocation (also supports pip editable install).
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-from kv_eval.config import PERSPECTIVES, REPORT_STEM, RETRY_LIMITS, Settings
+from kv_eval.config import AGENT_CONCURRENCY, PERSPECTIVES, REPORT_STEM, RETRY_LIMITS, Settings
 from kv_eval.graph import build_graph
 from kv_eval.observability import (langsmith_enabled, new_trace_id, read_decisions, run_config)
 from kv_eval.state import initial_state
@@ -37,12 +39,13 @@ def checkpoint_path(output_dir: Path) -> Path:
     return Path(os.getenv("CHECKPOINT_PATH", str(output_dir / "checkpoints.sqlite")))
 
 
-def open_checkpointer(path: Path):
-    """파일 기반 체크포인터. thread_id=trace_id로 저장되어 프로세스가 죽어도 --resume으로 이어 간다."""
-    import sqlite3
-    from langgraph.checkpoint.sqlite import SqliteSaver
+@asynccontextmanager
+async def open_checkpointer(path: Path):
+    """파일 기반 비동기 체크포인터. thread_id=trace_id로 저장되어 프로세스가 죽어도 --resume으로 이어 간다."""
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
     path.parent.mkdir(parents=True, exist_ok=True)
-    return SqliteSaver(sqlite3.connect(str(path), check_same_thread=False))
+    async with AsyncSqliteSaver.from_conn_string(str(path)) as saver:
+        yield saver
 
 
 def build_runtime(settings: Settings, started_at: float):
@@ -60,18 +63,21 @@ def build_runtime(settings: Settings, started_at: float):
     stats = corpus_stats(chunks, manifest, settings.summary_path)
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     (settings.output_dir / "corpus_stats.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
-    rag = RAGWorkflow(HybridRetriever(build_index(chunks)), StructuredLLM(settings.openai_key))
-    print(f"[{time.time()-started_at:6.0f}s] 색인 완료 · 그래프 실행 시작", flush=True)
+    store = build_index(chunks)
+    rag = RAGWorkflow(HybridRetriever(store), StructuredLLM(settings.openai_key))
+    print(f"[{time.time()-started_at:6.0f}s] 색인 완료"
+          f"({'저장된 문서 임베딩 재사용' if store.embeddings_cached else '최초 문서 임베딩 후 data/cache/index/에 저장'})"
+          " · 그래프 실행 시작", flush=True)
     return rag, WebSearch(settings.tavily_key), rag.llm
 
 
-def execute(graph, trace_id: str, initial: dict | None, started_at: float) -> dict:
-    """그래프를 stream으로 실행한다. initial=None이면 체크포인트에서 이어서 실행한다(resume).
+async def execute(graph, trace_id: str, initial: dict | None, started_at: float) -> dict:
+    """그래프를 비동기 stream으로 실행한다. initial=None이면 체크포인트에서 이어서 실행한다(resume).
 
     LLM 호출이 100회 이상 일어나므로 노드가 끝날 때마다 진행 상황과 Supervisor 결정 사유를 출력한다.
     """
     config = run_config(trace_id)
-    for update in graph.stream(initial, config=config, stream_mode="updates"):
+    async for update in graph.astream(initial, config=config, stream_mode="updates"):
         for node, delta in update.items():
             elapsed = time.time() - started_at
             if node == "supervisor" and isinstance(delta, dict):
@@ -82,33 +88,36 @@ def execute(graph, trace_id: str, initial: dict | None, started_at: float) -> di
                 status = (delta.get("node_status") or {}).get(node, "")
                 error = (delta.get("last_error") or {}).get(node, "")
                 print(f"[{elapsed:6.0f}s] {node} {status}{f' ({error[:120]})' if error else ''}", flush=True)
-    return graph.get_state(config).values
+    return (await graph.aget_state(config)).values
 
 
 def run(query: str = DEFAULT_QUERY, resume: str | None = None) -> dict:
+    return asyncio.run(_run(query, resume))
+
+
+async def _run(query: str, resume: str | None) -> dict:
     started_at = time.time()
     settings = Settings.from_env()
     settings.require_credentials()
     trace_id = resume or new_trace_id()
     configure_tracing()
     print(f"[trace] trace_id={trace_id} · LangSmith "
-          + (f"ON (project={os.getenv('LANGSMITH_PROJECT', 'default')})" if langsmith_enabled() else "OFF"), flush=True)
-    checkpointer = open_checkpointer(checkpoint_path(settings.output_dir))
-    if resume:
-        # 색인(수 분)을 만들기 전에 체크포인트부터 확인한다. 상태 조회에는 런타임이 필요 없다.
-        snapshot = build_graph(None, None, None, checkpointer=checkpointer).get_state(run_config(trace_id))
-        if not snapshot.values:
-            raise ValueError(f"체크포인트에 trace_id={trace_id} 실행이 없습니다")
-        if not snapshot.next:
-            print("[resume] 이미 종료된 실행입니다. 결과만 다시 내보냅니다.", flush=True)
-            return save_and_finalize(snapshot.values, settings.output_dir)
-    rag, web, llm = build_runtime(settings, started_at)
-    graph = build_graph(rag, web, llm, checkpointer=checkpointer)
-    if resume:
-        # 입력 None = 마지막 체크포인트부터 이어서 실행(완료된 노드는 다시 실행하지 않음)
-        state = execute(graph, trace_id, None, started_at)
-    else:
-        state = execute(graph, trace_id, initial_state(query, trace_id), started_at)
+          + (f"ON (project={os.getenv('LANGSMITH_PROJECT', 'default')})" if langsmith_enabled() else "OFF")
+          + f" · 에이전트 동시 실행 {AGENT_CONCURRENCY}", flush=True)
+    async with open_checkpointer(checkpoint_path(settings.output_dir)) as checkpointer:
+        if resume:
+            # 색인(수 분)을 만들기 전에 체크포인트부터 확인한다. 상태 조회에는 런타임이 필요 없다.
+            snapshot = await build_graph(None, None, None, checkpointer=checkpointer).aget_state(run_config(trace_id))
+            if not snapshot.values:
+                raise ValueError(f"체크포인트에 trace_id={trace_id} 실행이 없습니다")
+            if not snapshot.next:
+                print("[resume] 이미 종료된 실행입니다. 결과만 다시 내보냅니다.", flush=True)
+                return save_and_finalize(snapshot.values, settings.output_dir)
+        # 색인 생성은 그래프 실행 전 한 번뿐이고 이때 루프에서 도는 다른 작업이 없으므로 그대로 호출한다.
+        rag, web, llm = build_runtime(settings, started_at)
+        graph = build_graph(rag, web, llm, checkpointer=checkpointer)
+        # resume이면 입력 None = 마지막 체크포인트부터 이어서 실행(완료된 노드는 다시 실행하지 않음)
+        state = await execute(graph, trace_id, None if resume else initial_state(query, trace_id), started_at)
     return save_and_finalize(state, settings.output_dir)
 
 
@@ -219,11 +228,16 @@ def report_only() -> dict:
     seed["node_status"] = {**{name: "done" for name in (*PERSPECTIVES, "synthesis")},
                            "report": "pending", "quality_evaluator": "pending"}
     policy = Policy(retry_limits={**RETRY_LIMITS, **{name: 0 for name in PERSPECTIVES}, "synthesis": 0})
-    graph = build_graph(None, None, StructuredLLM(settings.openai_key),
-                        checkpointer=open_checkpointer(checkpoint_path(settings.output_dir)), policy=policy)
+    llm = StructuredLLM(settings.openai_key)
+    initial = initial_state(previous.get("user_query", DEFAULT_QUERY), trace_id, seed)
     print(f"[trace] trace_id={trace_id} (report-only)", flush=True)
-    state = execute(graph, trace_id, initial_state(previous.get("user_query", DEFAULT_QUERY), trace_id, seed), time.time())
-    return save_and_finalize(state, settings.output_dir)
+
+    async def _report_loop() -> dict:
+        async with open_checkpointer(checkpoint_path(settings.output_dir)) as checkpointer:
+            graph = build_graph(None, None, llm, checkpointer=checkpointer, policy=policy)
+            return await execute(graph, trace_id, initial, time.time())
+
+    return save_and_finalize(asyncio.run(_report_loop()), settings.output_dir)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

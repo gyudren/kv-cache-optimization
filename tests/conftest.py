@@ -27,6 +27,8 @@ def isolated_outputs(tmp_path, monkeypatch):
 
 @pytest.fixture
 def run_graph():
+    """운영(app.py)과 같은 경로로 실행한다: 비동기 ainvoke + run_config(max_concurrency 포함)."""
+    import asyncio
     from fakes import FakeRAG, FakeWeb
     from kv_eval.graph import build_graph
     from kv_eval.observability import new_trace_id, run_config
@@ -36,7 +38,7 @@ def run_graph():
         trace_id = new_trace_id()
         web = web or FakeWeb()
         graph = build_graph(rag or FakeRAG(), web, llm, policy=policy)
-        state = graph.invoke(initial_state("테스트 질의", trace_id), config=run_config(trace_id))
+        state = asyncio.run(graph.ainvoke(initial_state("테스트 질의", trace_id), config=run_config(trace_id)))
         return state
 
     return _run

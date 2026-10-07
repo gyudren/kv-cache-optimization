@@ -27,7 +27,8 @@ def _size(obj) -> int:
 
 
 def measure_fake(scenario: str) -> dict:
-    from langgraph.checkpoint.sqlite import SqliteSaver
+    import asyncio
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
     from fakes import FakeLLM, FakeRAG, FakeWeb
     from kv_eval.graph import build_graph
     from kv_eval.observability import new_trace_id, run_config
@@ -36,10 +37,15 @@ def measure_fake(scenario: str) -> dict:
         os.environ.update(OUTPUT_DIR=f"{tmp}/out", RAG_CACHE_DIR=f"{tmp}/cache",
                           MANIFEST_PATH=str(ROOT / "data" / "manifest.json"))
         llm = FakeLLM() if scenario == "normal" else FakeLLM(insufficient={"market": 1}, one_sided={"stakeholder": 1})
-        conn = sqlite3.connect(f"{tmp}/ckpt.sqlite", check_same_thread=False)
         trace_id = new_trace_id()
-        graph = build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=SqliteSaver(conn))
-        state = graph.invoke(initial_state("q", trace_id), config=run_config(trace_id))
+
+        async def _run():  # 운영(app.py)과 같은 비동기 경로·체크포인터로 잰다
+            async with AsyncSqliteSaver.from_conn_string(f"{tmp}/ckpt.sqlite") as saver:
+                graph = build_graph(FakeRAG(), FakeWeb(), llm, checkpointer=saver)
+                return await graph.ainvoke(initial_state("q", trace_id), config=run_config(trace_id))
+
+        state = asyncio.run(_run())
+        conn = sqlite3.connect(f"{tmp}/ckpt.sqlite")
         rows, blob = conn.execute("select count(*), sum(length(checkpoint)) from checkpoints").fetchone()
         writes = conn.execute("select coalesce(sum(length(value)),0) from writes").fetchone()[0]
         disk = sum(p.stat().st_size for p in Path(f"{tmp}/cache").rglob("*") if p.is_file())

@@ -1,48 +1,45 @@
-[trace] trace_id=61afa03b-2492-480d-930e-0ba7aecbca42 · LangSmith ON (project=kv-cache-supervisor)
+[trace] trace_id=bdb9d055-1130-41f7-bde3-a3a6fe5e4391 · LangSmith ON (project=kv-cache-supervisor) · 에이전트 동시 실행 1
 [     0s] 청크 359개 적재 · 색인 생성 중(FAISS + BM25)...
 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Loading weights:   0%|          | 0/310 [00:00<?, ?it/s]Loading weights: 100%|██████████| 310/310 [00:00<00:00, 25434.44it/s]
-[    37s] 색인 완료 · 그래프 실행 시작
-[    37s] supervisor#1 → dispatch:tech,market,stakeholder,domain (tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집)
-[    62s] stakeholder done
-[    63s] market done
-[    90s] domain done
-[    93s] tech done
-[    93s] supervisor#2 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 1/2 (별도의 메모리 계층 구조 및 그 운영 방식에 관한 정보; 구현 코드, 소프트웨어/하드웨어 구성, 학습 데이터, 옵티마이저, 학습률·배치 크기·학습 단계 등의 구체적 구현 및 학습 실험 설정은 제공된 발췌문에 없다.)
-[   134s] stakeholder done
-[   144s] market done
-[   145s] domain done
-[   151s] tech done
-[   151s] supervisor#3 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 2/2 (제공된 인용문에는 ‘memory hierarchy(메모리 계층)’라는 별도의 메커니즘이나 계층별 배치·이동 정책에 대한 설명이 없습니다.; 제공된 인용문에는 구현 코드, 프레임워크/라이브러리 버전, 하드웨어 구성,)
-[   194s] market done
-[   209s] domain done
-[   218s] tech done
-[   232s] stakeholder done
-[   232s] supervisor#4 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
-[   261s] synthesis done
-[   261s] supervisor#5 → report (종합 완료 → 보고서 작성)
-[   290s] report done
-[   290s] supervisor#6 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
-[   298s] quality_evaluator done
-[   298s] supervisor#7 → rewrite:report (품질 평가 미달(groundedness,bias_control) → 보고서 재작성: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, )
-[   336s] report done
-[   336s] supervisor#8 → evaluate (보고서 완료(시도 1) → 품질 평가 4항목 판정)
-[   348s] quality_evaluator done
-[   348s] supervisor#9 → rewrite:report (품질 평가 미달(groundedness,bias_control) → 보고서 재작성: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, )
-[   378s] report done
-[   378s] supervisor#10 → evaluate (보고서 완료(시도 2) → 품질 평가 4항목 판정)
-[   386s] quality_evaluator done
-[   386s] supervisor#11 → end:unverified (재작업 한도 소진 — 품질 평가 미달 항목 ['groundedness', 'bias_control'] 남김)
+Loading weights:   0%|          | 0/310 [00:00<?, ?it/s]Loading weights: 100%|██████████| 310/310 [00:00<00:00, 7895.09it/s]
+[     9s] 색인 완료(저장된 문서 임베딩 재사용) · 그래프 실행 시작
+[     9s] supervisor#1 → dispatch:tech,market,stakeholder,domain (tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집)
+[    72s] tech done
+[   103s] market done
+[   127s] stakeholder done
+[   170s] domain done
+[   170s] supervisor#2 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 1/2 (제공된 인용문에는 일반적인 의미의 ‘메모리 계층(memory hierarchy)’ 구조나 캐시 계층 간 데이터 이동 방식은 설명되어 있지 않습니다.; 제공된 발췌문에는 구체적인 하드 벤치마크의 이름, Table 8)
+[   222s] tech done
+[   279s] market done
+[   321s] stakeholder done
+[   380s] domain done
+[   380s] supervisor#3 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 2/2 (처리량(throughput)의 정량 결과 및 측정 조건; 지연시간(latency)의 정량 결과 및 측정 조건); market: 근거 부족 재조사 2/2 (MLA가 속한 LLM 추론 서빙/최적화 시장을 직접 정의한 )
+[   442s] tech done
+[   494s] market done
+[   530s] stakeholder done
+[   581s] domain done
+[   581s] supervisor#4 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
+[   604s] synthesis done
+[   604s] supervisor#5 → report (종합 완료 → 보고서 작성)
+[   636s] report done
+[   636s] supervisor#6 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
+[   649s] quality_evaluator done
+[   649s] supervisor#7 → rewrite:report (품질 평가 미달(groundedness) → 보고서 재작성: 수치 문장에 인용 없음: 저자 보고 기준 ITME는 재계산 기준 대비 5턴에서 1.81배 속도 향상, NVMe-oF 기준선 대비 1.80배 처리량 향상을 보고했다.)
+[   682s] report done
+[   682s] supervisor#8 → evaluate (보고서 완료(시도 1) → 품질 평가 4항목 판정)
+[   691s] quality_evaluator done
+[   691s] supervisor#9 → rewrite:report (품질 평가 미달(groundedness) → 보고서 재작성: 수치 문장에 인용 없음: | 저자 보고 효과 | KV cache 축소 및 효율적 추론을 목표로 제시 | NVMe-oF 기준선 대비 처리량 **1.80배** 향상 보고 |; 수치 문장에 인용 )
+[   722s] report done
+[   722s] supervisor#10 → evaluate (보고서 완료(시도 2) → 품질 평가 4항목 판정)
+[   736s] quality_evaluator done
+[   736s] supervisor#11 → end:unverified (재작업 한도 소진 — 품질 평가 미달 항목 ['groundedness'] 남김)
 WARNING: report generated but NOT verified for submission
 {
   "status": "unverified",
-  "trace_id": "61afa03b-2492-480d-930e-0ba7aecbca42",
+  "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
   "verified": false,
   "issues": [
-    "정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능",
-    "정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능",
-    "품질 평가 groundedness 미달: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 수치 문장에 인용 없음: | 저자 보고 효과 | MHA 대비 small MoE KV cache 14%, large MoE 4% | NVMe-oF 기준선 대비 처리량 1.80배 |",
-    "품질 평가 bias_control 미달: 4.4 표와 MLA 단락에서 D3·D4를 각각 “적합”으로 판정하지만, 직접 근거는 사실상 동일 저자 논문의 통제 비교([1, p.31-32])에 집중된다. D4 단락에는 “저자 보고·단일 출처”, “장문맥 정보 보존 직접 평가는 근거 부족”을 뒤이어 적었으나, 판정 위치에서 그 제한을 함께 반영하지 않아 긍정 방향 판정이 과도하게 강하다. 이 결함은 Supervisor가 기록한 domain 품질 공백과도 일치한다."
+    "품질 평가 groundedness 미달: 4.1 TRL 및 5장 매트릭스의 “실제 서비스 운영 또는 상용 채택은 확인되지 않는다”는 서술은 제공 발췌문 [1, p.16]의 “actually deployed DeepSeek-V2” 및 실제 배포된 DeepSeek 67B 서비스의 길이 분포를 사용했다는 설명과 충돌하거나, 적어도 저자 보고 기준의 서비스 배포 근거를 누락한다. 독립 검증·외부 고객 채택이 없다고 한정해야 한다. 또한 MLA의 “TRL 4-6” 범위는 구현·내부 평가 근거와 연결되지만, 제시된 자료에는 해당 숫자 범위를 매핑하는 TRL 기준 자체가 없다."
   ],
   "md": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.md",
   "pdf": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.pdf",

@@ -6,11 +6,11 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)·하드웨어(ITME
 
 - Objective : 두 기술을 4개 관점에서 비교 평가하되, 우승 기술을 고르지 않고 관점별 장점·제약·근거 수준·도입 전 확인사항을 근거와 함께 제시
 - Method : Multi-Agent(**Supervisor**) + Agentic RAG + 웹 검색
-- Tools : LangGraph(StateGraph·`Send`·SqliteSaver), FAISS + BM25(RRF), Tavily Web API, LangSmith, pdfplumber
+- Tools : LangGraph(StateGraph·`Send`·비동기 `astream`·AsyncSqliteSaver), FAISS + BM25(RRF), Tavily Web API, LangSmith, pdfplumber
 - **Pattern : Supervisor** — 단일 `supervisor` 노드가 State를 읽고 `add_conditional_edges` 하나로 다음 에이전트를 고른다. 보고서·품질 평가 노드를 포함한 모든 작업 노드는 실행 후 Supervisor로만 돌아온다(작업 노드 간 직접 엣지 0개, `tests/test_graph_structure.py`로 강제). Supervisor는 LLM이 아닌 결정적 규칙 함수(`supervisor/policy.py`, 명세 `docs/SUPERVISOR_POLICY.md`)다.
 - **선정 이유** : 이 과제의 핵심 요구는 "관점별 근거 충분성 판단 → 부족한 관점만 재조사"와 "품질 평가 미달 원인에 따라 다른 에이전트로 되돌리기"다. Distributed(단계 체인)는 순서가 엣지에 묶여 특정 관점만 다시 부를 수 없고, Hierarchical(팀 단위 하위 Supervisor)은 에이전트 6개 규모에서 조정 계층만 늘린다. 한 곳에서 State 전체를 보고 다음 노드를 정하는 Supervisor가 요구에 가장 직접 대응한다.
 - **동적 처리** : 실행 순서를 하드코딩하지 않는다. Supervisor는 매 진입마다 `perspective_status`·`node_status`·`retry_counts`·`eval_result`·`step_count`만 보고 결정한다.
-  - 미수집 4관점을 `Send`로 동시에 fan-out(기술 조사 결과를 다른 관점이 입력으로 쓰지 않으므로 선행을 강제하지 않음)
+  - 미수집 4관점을 `Send`로 한 번에 fan-out(기술 조사 결과를 다른 관점이 입력으로 쓰지 않으므로 선행을 강제하지 않음). 할당은 한 번에 하되, 실행은 비동기 노드를 `max_concurrency=AGENT_CONCURRENCY`(기본 1)로 하나씩 순차 처리한다(메모리 상한·MPS 임베딩 경합 방지)
   - `sufficient=False`이거나 Supervisor의 결정적 검사(관점·기술별 고유 출처 ≥2)에 못 미친 관점만 다시 부름 (예: 시장 근거 부족 → `dispatch:market`만). 부족 항목(`missing`)과 재검색 힌트는 재작업 지시로 전달되어 RAG 질의 계획·캐시 키·에이전트 프롬프트에 실제로 반영된다(지시가 겨냥한 질문만 재검색)
   - 종합 에이전트가 특정 관점의 추가 근거를 요구하면 그 관점만 재조사
   - 보고서가 정상 완료되면 Supervisor가 `evaluate`로 품질 평가 노드를 부른다(실패·빈 보고서는 평가하지 않고 재작성). 미달 시 원인별 분기: 편향 통제·관점 커버리지 → 원인 관점 재조사 / Groundedness·중립성 → 보고서 재작성
@@ -50,12 +50,13 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)·하드웨어(ITME
 | Category | Details |
 |---|---|
 | Framework | LangGraph 1.x (StateGraph, `Send`, `add_conditional_edges`), Python 3.11+ |
-| Checkpoint | langgraph-checkpoint-sqlite `SqliteSaver` (thread_id = trace_id) |
+| Execution | 비동기 그래프 실행(`astream`), 작업 노드 `async def` + 블로킹 SDK 호출은 `asyncio.to_thread`, 관점 에이전트 순차 실행(`AGENT_CONCURRENCY=1`) |
+| Checkpoint | langgraph-checkpoint-sqlite `AsyncSqliteSaver` (thread_id = trace_id) |
 | Observability | LangSmith (run_name `kv-eval-supervisor`, tags `pattern:supervisor`, metadata `trace_id`), 결정 로그 JSONL |
 | LLM / Generator | gpt-5.6-terra (OpenAI Responses API, Pydantic 구조화 출력) |
 | LLM / Judge | gpt-5.6-terra (품질 평가 `EvalVerdict`, 대체 모델 없음) |
 | Retrieval | FAISS(Dense) + BM25(Sparse), RRF 융합, 기술별 문서 필터 — 92케이스 **Hit@1 0.84 / Hit@3 0.99 / Hit@6 1.00 / MRR 0.92**, 필수 용어 커버리지 0.92 (`outputs/retrieval_eval.json`) |
-| Embedding | Qwen3-Embedding-0.6B (다국어·교차언어 검색) |
+| Embedding | Qwen3-Embedding-0.6B (다국어·교차언어 검색). 문서 임베딩은 최초 1회만 계산해 `data/cache/index/{지문}.npy`에 저장 후 재사용 |
 | Web Search | Tavily API (시장·이해관계자 평가, TRL 7~9 상용화 근거) |
 | Test | pytest + Fake LLM·Web·RAG (API 키 불필요) |
 
@@ -103,8 +104,8 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)·하드웨어(ITME
 
    **원문 저장소가 없을 때** : `data/cache/`는 git에 포함되지 않는다. 원문이 없는 Evidence는 축약 발췌로 대체하되 조용히 넘기지 않는다. 항목에 `excerpt_truncated`를 표시하고, 품질 평가 Judge 프롬프트에 축약 경고를 넣으며, `eval_result.evidence_store`와 `validation.json`의 `evidence_store`·`warnings`에 개수를 남긴다. 새로 clone한 저장소에서 `--report-only`를 실행하면 원문이 없으므로 즉시 실패하고 전체 실행(`python app.py`)을 안내한다.
 4. **상관** : 키를 따로 쓰면 트레이스·State·로그를 사람이 손으로 맞춰야 하므로, uuid4 `trace_id` 하나를 LangGraph `thread_id`·LangSmith metadata·결정 로그 파일명에 함께 썼다.
-5. **재개/복구** : 메모리 체크포인터는 프로세스가 죽으면 사라져 15분짜리 실행을 처음부터 다시 해야 하고 Postgres 체크포인터는 단일 사용자 CLI에 DB 서버를 요구하므로, 파일 하나인 `SqliteSaver`와 `node_status{pending/running/done/failed/skipped}`·`last_error`·`retry_counts`로 실패 지점부터 `--resume`하게 했다.
-6. **동시 처리** : reducer 없이 `Send`로 병렬 실행하면 같은 키에 동시에 쓸 때 `InvalidUpdateError`가 나거나 마지막 값만 남으므로, 필드별 병합 규칙(dict merge, dedup-append)을 명시했다.
+5. **재개/복구** : 메모리 체크포인터는 프로세스가 죽으면 사라져 15분짜리 실행을 처음부터 다시 해야 하고 Postgres 체크포인터는 단일 사용자 CLI에 DB 서버를 요구하므로, 파일 하나인 `AsyncSqliteSaver`와 `node_status{pending/running/done/failed/skipped}`·`last_error`·`retry_counts`로 실패 지점부터 `--resume`하게 했다.
+6. **동시 처리** : reducer 없이 `Send`로 함께 할당된 노드가 같은 superstep에서 같은 키에 쓰면(순차 실행이어도 쓰기는 superstep 끝에 함께 반영된다) `InvalidUpdateError`가 나거나 마지막 값만 남으므로, 필드별 병합 규칙(dict merge, dedup-append)을 명시했다.
 7. **종료 보장** : `recursion_limit`만 두면 상한에 걸릴 때 예외로 죽어 보고서가 남지 않으므로, Supervisor가 `step_count > MAX_STEPS`를 먼저 감지해 근거 공백을 명시하고 보고서까지 만든 뒤 정상 종료하게 했다(재시도 상한·`recursion_limit`은 2·3차 안전장치).
 
 ## Architecture
@@ -150,7 +151,9 @@ flowchart TD
 - **Supervisor 판단 방식** : Supervisor를 LLM 라우터로 하면 같은 State에서도 실행마다 다음 노드가 바뀌어 재현·테스트가 불가능하고 매 진입마다 LLM 비용·지연이 붙으므로, 라우팅 입력이 모두 구조화된 제어 필드라는 점을 이용해 결정적 규칙 함수(`policy.decide`)를 선정했다(내용 판단은 각 에이전트와 LLM Judge가 맡는다).
 - **평가 노드 위치** : `report → quality_evaluator` 고정 엣지로 하면 보고서 에이전트가 Supervisor를 거치지 않고 다른 노드로 넘기고 실패한 보고서까지 평가되므로, 모든 작업 노드가 Supervisor로만 돌아오고 Supervisor가 "보고서 정상 완료 + 평가 미실행"일 때만 `evaluate`로 평가 노드를 부르게 했다(마지막 보고서 이후 평가 없는 `end:passed` 불가를 테스트로 강제).
 - **품질 평가 방식** : 형식 검사만 하면 근거가 주장을 뒷받침하는지 볼 수 없고 LLM Judge만 쓰면 실행마다 판정이 바뀌므로, 규칙 검사를 하드 게이트·LLM Judge를 내용 게이트로 쓰는 Hybrid를 선정하고 규칙 실패는 Judge가 뒤집지 못하게 했다.
-- **체크포인터** : `MemorySaver`는 프로세스가 죽으면 사라지고 Postgres는 단일 사용자 CLI에 DB 서버 운영을 요구하므로, 파일 하나로 재개되는 `SqliteSaver`(thread_id=trace_id)를 선정했다.
+- **체크포인터** : `MemorySaver`는 프로세스가 죽으면 사라지고 Postgres는 단일 사용자 CLI에 DB 서버 운영을 요구하므로, 파일 하나로 재개되는 SQLite 체크포인터(비동기 실행이라 `AsyncSqliteSaver`, thread_id=trace_id)를 선정했다.
+- **에이전트 실행 동시성 (`AGENT_CONCURRENCY=1`)** : 4관점을 동시에 돌리면 관점마다 근거 원문·프롬프트·RAG 질문이 함께 메모리에 올라 최대 메모리가 관점 수만큼 커지고(OOM 위험), 같은 MPS 임베딩 모델을 여러 스레드가 동시에 불러 Metal abort로 실제 실행이 2회 중단됐으므로, Supervisor의 할당(`Send` fan-out)은 그대로 두고 실행만 `max_concurrency`로 하나씩 순차 처리했다(환경변수로 조정, 테스트로 겹침 0 확인).
+- **문서 임베딩 저장** : 실행마다 청크 359개를 다시 임베딩하면 시작에 40~60초가 걸리고 같은 계산을 반복하므로, 모델 ID·청크로 만든 지문을 키로 정규화 벡터를 최초 1회 저장하고 이후 실행은 읽기만 한다(청크·모델이 바뀌면 자동 재임베딩).
 - **재시도 상한 (관점 2 / 보고서 2 / 종합 1 / 평가 실행 1)** : 0~1회면 질의 재작성 한 번으로 회복되는 일시적 근거 부족도 공백으로 끝나고 3회 이상이면 같은 공개 자료를 반복 검색해 비용만 늘므로, 이전 실제 실행에서 관찰된 재작업 범위(tech 재작성 2회·관점 재할당 2회)에 맞춰 2회를 기본으로 했다(종합은 표현 보완만이라 1회).
 - **`MAX_STEPS = 20`** : 10 이하면 Fake 고장 주입 시나리오의 최대 관측치(Judge 상시 미달 17회)조차 마치기 전에 끊기고 이론적 최악(30회 이상)까지 허용하면 실제 실행이 1시간을 넘으므로, 정상 경로(5회)와 관측 최악(17회)은 끝까지 가고 그 이상은 근거 공백을 명시하는 마무리 모드로 끊도록 20으로 정했다.
 - **`FINALIZE_STEPS = 5`** : 마무리(종합→보고서→평가→종료)는 4회인데 4로 딱 맞추면 재개 직후 재진입 한 번에도 보고서 없이 하드 종료되므로, 여유 1을 더해 5로 정했다. `recursion_limit`은 그래프가 실제로 쓰는 Policy에서 (max_steps+5)×2+10으로 계산한다(기본 60, 단일 출처).
@@ -235,6 +238,8 @@ python app.py --resume <trace_id>    # 중단된 실행을 SQLite 체크포인�
 python app.py --report-only          # 직전 결과로 보고서 → 품질 평가 루프만 (새 검색 없음)
 python app.py --export-only          # LLM 호출 없이 검증·Markdown/PDF 내보내기만
 ```
+
+첫 실행은 문서 임베딩을 계산해 `data/cache/index/`에 저장하고, 이후 실행은 저장된 임베딩을 읽어 색인을 바로 만든다. 관점 에이전트는 기본 하나씩 순차로 돈다(`AGENT_CONCURRENCY`로 조정).
 
 실행 중에는 노드별 진행과 Supervisor 결정 사유(`supervisor#3 → dispatch:market (market: 근거 부족 재조사 1/2 ...)`)가 출력된다. `LANGSMITH_TRACING=true`와 키가 있으면 LangSmith 프로젝트에 같은 `trace_id`로 기록된다.
 
