@@ -160,6 +160,13 @@ def finalize(state: dict, output_dir: Path) -> dict:
         "gaps": state.get("gaps", []), "trace_id": trace_id, "status": state.get("status"),
         "supervisor_steps": state.get("step_count"), "retry_counts": state.get("retry_counts", {}),
     })
+    from kv_eval.evidence_store import missing_full_text
+    store_missing = missing_full_text(state.get("evidence", []))
+    validation["evidence_store"] = {"items": len(state.get("evidence", [])), "missing_full_text": store_missing,
+                                    "evaluator": eval_result.get("evidence_store", {})}
+    validation["warnings"] = list(dict.fromkeys(
+        validation.get("warnings", []) + eval_result.get("warnings", [])
+        + ([f"Evidence {store_missing}건의 원문이 저장소(data/cache/)에 없음: 축약 발췌만 남아 있음"] if store_missing else [])))
     # 10p 상한은 validate_report가 같은 조판으로 이미 검사했다. 실제 파일의 페이지 수를 함께 남긴다.
     export = export_report(report, str(output_dir), REPORT_STEM)
     validation["pdf_pages"] = export["pages"]
@@ -193,11 +200,20 @@ def report_only() -> dict:
         raise RuntimeError("OPENAI_API_KEY is required")
     configure_tracing()  # LLM 클라이언트(wrap_openai 여부)를 만들기 전에 트레이싱 설정을 확정한다
     previous = _load_final_state(settings.output_dir)
+    # 보고서·평가는 발췌 원문이 필요하다. final_state에는 축약본과 참조만 있으므로 원문 저장소가 없으면
+    # (새로 clone한 저장소 등) 축약 발췌로 조용히 다시 쓰지 않고 여기서 멈춘다.
+    store_stats: dict = {}
+    hydrated = evidence_store.hydrate(previous.get("evidence", []), store_stats)
+    if store_stats.get("missing_full_text"):
+        raise RuntimeError(
+            f"--report-only 불가: Evidence {store_stats['missing_full_text']}/{len(hydrated)}건의 원문이 저장소에 없습니다 "
+            "(data/cache/<trace_id>/evidence_*.json은 git에 포함되지 않음). 원래 실행한 머신에서 다시 하거나 "
+            "python app.py로 전체 실행하세요.")
     trace_id = new_trace_id()
     seed = {key: previous.get(key) for key in ("perspectives", "synthesis", "evidence", "gaps", "cache_keys")
             if previous.get(key) is not None}
     # 이전 형식 State의 원문 발췌도 저장소로 옮겨 State에는 축약본만 넣는다(보고서는 hydrate로 원문 사용).
-    seed["evidence"] = evidence_store.offload(trace_id, "seed", seed.get("evidence", []))
+    seed["evidence"] = evidence_store.offload(trace_id, "seed", hydrated)
     seed["perspective_status"] = {name: "sufficient" if (previous["perspectives"].get(name) or {}).get("sufficient")
                                   else "excluded" for name in PERSPECTIVES}
     seed["node_status"] = {**{name: "done" for name in (*PERSPECTIVES, "synthesis")},

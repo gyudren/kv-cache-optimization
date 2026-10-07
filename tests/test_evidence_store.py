@@ -28,3 +28,44 @@ def test_state_keeps_compact_evidence_but_readers_get_full_text(run_graph):
     # 품질 평가 Judge의 인용 발췌도 원문이다
     snippets = cited_snippets(state)
     assert snippets and max(len(s["excerpt"]) for s in snippets) > STATE_EXCERPT_CHARS
+
+
+def test_missing_store_is_flagged_not_silent(run_graph, isolated_outputs):
+    import shutil
+    from kv_eval.evaluation.quality import quality_evaluator_node
+    llm = FakeLLM()
+    state = run_graph(llm)
+    assert evidence_store.missing_full_text(state["evidence"]) == 0
+    shutil.rmtree(isolated_outputs / "cache")  # 원문 저장소 삭제(새 clone과 같은 상황)
+    assert evidence_store.missing_full_text(state["evidence"]) > 0
+    result = quality_evaluator_node(state, llm)["eval_result"]
+    assert result["evidence_store"]["cited_missing_full_text"] > 0 and result["warnings"]
+    assert "TRUNCATED" in llm.prompts["judge"][-1]  # Judge에게 축약 사실을 알린다
+    assert all(s["excerpt_truncated"] for s in cited_snippets(state))
+
+
+def test_report_only_fails_fast_without_store(isolated_outputs, monkeypatch, run_graph):
+    import importlib.util
+    import json
+    import shutil
+    from pathlib import Path
+    import pytest
+    state = run_graph(FakeLLM())
+    out = isolated_outputs / "outputs"
+    (out / "final_state.json").write_text(json.dumps(state, ensure_ascii=False, default=str), encoding="utf-8")
+    shutil.rmtree(isolated_outputs / "cache")
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("kv_app_ro", root / "app.py")
+    app = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(app)
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
+    with pytest.raises(RuntimeError, match="--report-only 불가"):
+        app.report_only()
+
+
+def test_rehydrated_seed_is_reoffloaded():
+    full = "나" * 900
+    first = evidence_store.offload("trace-a", "tech", [{"source_id": "s", "claim": "c", "page": 1, "excerpt": full}])
+    hydrated = evidence_store.hydrate(first)
+    again = evidence_store.offload("trace-b", "seed", hydrated)
+    assert again[0]["excerpt_ref"].startswith("trace-b/seed/") and evidence_store.hydrate(again)[0]["excerpt"] == full

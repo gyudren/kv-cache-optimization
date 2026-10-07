@@ -229,18 +229,25 @@ def cited_snippets(state: dict) -> list[dict]:
         if (paper_key and paper_key in used) or key in used:
             out.append({"citation": cite, "claim": ev.get("claim", ""), "title": ev.get("title", ""),
                         "publisher": ev.get("publisher", ""), "published_at": ev.get("published_at", ""),
-                        "url": ev.get("url", ""), "excerpt": ev.get("excerpt", "")[:1000]})
+                        "url": ev.get("url", ""), "excerpt": ev.get("excerpt", "")[:1000],
+                        "excerpt_truncated": bool(ev.get("excerpt_truncated"))})
     return out
 
 
-def judge(state: dict, rules: dict[str, dict], llm: Any) -> EvalVerdict:
+def judge(state: dict, rules: dict[str, dict], llm: Any, snippets: list[dict] | None = None) -> EvalVerdict:
     rule_summary = {name: {"passed": r["passed"], "issues": r["issues"][:10]} for name, r in rules.items()}
+    snippets = cited_snippets(state) if snippets is None else snippets
+    truncated = sum(1 for s in snippets if s.get("excerpt_truncated"))
+    warning = (f"WARNING: {truncated} of {len(snippets)} cited excerpts are TRUNCATED to a short prefix because the full-text "
+               "evidence store is unavailable (marked excerpt_truncated=true). Do not treat a claim as supported unless the "
+               "truncated text itself supports it; mention unverifiable citations in the groundedness reason.\n"
+               if truncated else "")
     return llm.generate_structured(
-        prompt_template("quality_evaluator") + "\n"
+        prompt_template("quality_evaluator") + "\n" + warning +
         f"Today's date (search/verification date): {date.today().isoformat()}.\n"
         f"Deterministic rule results (cannot be overruled): {rule_summary}\n"
         f"Evidence gaps recorded by the supervisor: {state.get('gaps', [])}\n"
-        f"Verified evidence snippets for every citation used in the report: {repr(cited_snippets(state))}\n"
+        f"Verified evidence snippets for every citation used in the report: {repr(snippets)}\n"
         f"Report:\n{state.get('report', '')}",
         EvalVerdict,
     )
@@ -275,8 +282,14 @@ def combine(rules: dict[str, dict], verdict: EvalVerdict) -> dict:
 
 def quality_evaluator_node(state: dict, llm: Any) -> dict:
     rules = rule_checks(state)
-    result = combine(rules, judge(state, rules, llm))
+    snippets = cited_snippets(state)
+    result = combine(rules, judge(state, rules, llm, snippets))
     result["report_attempt"] = state.get("retry_counts", {}).get("report", 0)
+    truncated = sum(1 for s in snippets if s.get("excerpt_truncated"))
+    # 원문 저장소가 없어 축약 발췌로만 판정했으면 결과에 명시한다(조용한 대체 금지).
+    result["evidence_store"] = {"cited": len(snippets), "cited_missing_full_text": truncated}
+    result["warnings"] = ([f"인용 근거 {truncated}/{len(snippets)}건의 원문이 저장소에 없어 축약 발췌로만 평가됨"]
+                          if truncated else [])
     failed = [name for name, c in result["criteria"].items() if not c["passed"]]
     log_decision(state["trace_id"], state.get("step_count", 0), "quality_evaluator",
                  "pass" if result["passed"] else "fail:" + ",".join(failed),

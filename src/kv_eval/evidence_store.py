@@ -40,7 +40,7 @@ def offload(trace_id: str, agent: str, evidence: list[dict]) -> list[dict]:
     compact, store = [], {}
     for ev in evidence:
         excerpt = ev.get("excerpt") or ""
-        if ev.get("excerpt_ref") or len(excerpt) <= STATE_EXCERPT_CHARS:
+        if len(excerpt) <= STATE_EXCERPT_CHARS:  # 이미 축약본(또는 짧은 원문)이면 그대로 둔다
             compact.append(ev)
             continue
         key = _key(ev)
@@ -54,10 +54,14 @@ def offload(trace_id: str, agent: str, evidence: list[dict]) -> list[dict]:
     return compact
 
 
-def hydrate(evidence: list[dict]) -> list[dict]:
-    """excerpt_ref가 있는 항목의 발췌를 원문으로 되살린다(원문이 없으면 축약본 유지)."""
+def hydrate(evidence: list[dict], stats: dict | None = None) -> list[dict]:
+    """excerpt_ref가 있는 항목의 발췌를 원문으로 되살린다.
+
+    원문을 찾지 못하면(저장소 삭제, 다른 머신에서 clone 등) 축약본을 쓰되 조용히 넘기지 않는다:
+    항목에 `excerpt_truncated=True`를 표시하고 stats["missing_full_text"]에 개수를 센다.
+    """
     files: dict[tuple[str, str], dict] = {}
-    out = []
+    out, missing = [], 0
     for ev in evidence:
         ref = ev.get("excerpt_ref")
         if not ref:
@@ -67,8 +71,20 @@ def hydrate(evidence: list[dict]) -> list[dict]:
         if (trace_id, agent) not in files:
             files[(trace_id, agent)] = _read(_path(trace_id, agent))
         full = files[(trace_id, agent)].get(key)
-        out.append({**ev, "excerpt": full} if full else ev)
+        if full:
+            out.append({**ev, "excerpt": full})
+        else:
+            missing += 1
+            out.append({**ev, "excerpt_truncated": True})
+    if stats is not None:
+        stats["missing_full_text"] = stats.get("missing_full_text", 0) + missing
     return out
+
+
+def missing_full_text(evidence: list[dict]) -> int:
+    stats: dict = {}
+    hydrate(evidence, stats)
+    return stats["missing_full_text"]
 
 
 def source_unit(ev: dict) -> str:
