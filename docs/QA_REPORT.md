@@ -1,6 +1,6 @@
 # QA 보고서 (feat/multi-agent-supervisor)
 
-> **최신 판정: 반복 2, 84/100 (반려, 남은 Blocker는 D-01 실제 실행 1건).** 상세 내용은 문서 끝의 "반복 2"를 본다. 아래는 반복 1의 기록이며 수정하지 않고 보존한다.
+> **최신 판정: 반복 3, 87/100. 코드는 로컬 실제 실행에 들어갈 준비가 됐다(남은 항목은 D-01 실제 실행과 캡처뿐이며, 실행 후 최대 100점).** 상세 내용은 문서 끝의 "반복 3"을 본다. 반복 1·2 기록은 수정하지 않고 보존한다.
 
 # 반복 1
 
@@ -277,3 +277,100 @@ market(병렬 중) 크래시, quality_evaluator 크래시, report 크래시 모�
 2. **D-16, D-17**: 재작업 질의 생성과 충분성 계산을 고치고, `short.py`와 같은 시나리오를 테스트로 추가한다.
 3. **D-18**: hydrate에 원문이 없을 때 경고나 차단을 남긴다.
 4. **D-20, D-19**: recursion_limit을 Policy와 연동하고, 실제 실행 뒤 체크포인트 실측치를 README에 반영한다.
+
+---
+
+# 반복 3
+
+- 검증일 2026-10-07 · 대상 커밋 `19b6a08..359f184` (Engineer 커밋 5개: a1d0f1b, cdec3c1, c6e7e0c, 6e5ea67, 359f184)
+- PM 결정에 따라 채점했다. 아래 세 가지는 결함으로 보지 않는다.
+  - D-18: 원문이 없으면 명시적 경고(비차단)를 남기고 `--report-only`는 즉시 실패한다 — 승인.
+  - D-19: 발췌를 160자로 줄이고 실측치와 잔여 증가를 README에 정직하게 적는 선에서 "지속성 비용"을 충분한 것으로 본다 — 승인.
+  - P-01: DEV_PLAN 개정 메모 — 승인.
+- 반복 1·2의 재현 스크립트를 모두 다시 실행했다: 엣지 덤프, 고장 주입 7종, 캐시/재작업, 출처 부족, 병적 단계 상한 3종, SQLite 재개, app 경로 시뮬레이션, 원문 저장소 삭제, State 크기 실측. 실제 API 실행과 LangSmith 캡처는 여전히 **미검증**이다.
+
+## R3-1. 총점
+
+**87 / 100. 반려 사유는 D-01 하나뿐이다. 코드는 로컬 실제 실행 준비가 됐다(Yes).**
+
+| 항목 | 배점 | 반복 1 | 반복 2 | 반복 3 | 실행 후 최대 | 근거 |
+|---|---|---|---|---|---|---|
+| 패턴 적용 정합성 | 20 | 15 | 19 | **20** | 20 | D-16 해결: 재검색 힌트가 기술별 구조(`queries_by_tech`)로 바뀌어 사유 문장이 질의에 들어가지 않는다. D-17 해결: 최신 시도의 `source_units`로 충분성을 센다. 작업 노드 사이 엣지 0개, 단일 conditional 분기 유지. |
+| 동적 동작 실증 | 20 | 11 | 14 | **14** | 20 | 코드 쪽 준비는 끝났다(결정 로그 사유, `evaluate` 결정, 스레드 컨텍스트 전파 테스트 통과). 실제 LangSmith 트레이스는 미검증이라 6점을 보류한다. |
+| State Schema 설계 | 20 | 17 | 19 | **20** | 20 | D-19는 PM 기준을 충족한다. README `지속성 비용`(`README.md:94-104`)에 300자·160자 실측표와 "SqliteSaver가 superstep마다 State 전체를 다시 저장" 잔여 증가를 명시했다. QA 재측정값과 일치한다(이전 실행 evidence 179,972B, Fake 재작업 체크포인트 21개 1,495,368B). |
+| 품질 평가 노드 | 15 | 12 | 14 | **15** | 15 | D-18 해결(승인 기준): 저장소를 지우고 평가하면 `cited_missing_full_text: 42/42`, Judge 프롬프트에 `TRUNCATED` 경고, `eval_result.warnings`가 기록된다. 4항목 판정, 규칙 하드 게이트, 원인별 루프는 유지된다. |
+| 코드 구조·모듈 분리 | 5 | 4 | 5 | **5** | 5 | 변동 없음. README 트리와 실제 트리가 일치한다. |
+| 실행 결과 재현성 | 10 | 6 | 7 | **7** | 10 | `pytest` **48 passed**. 고장 주입과 단계 상한 시나리오가 모두 정상 종료하고, app 4개 경로가 모두 동작한다. 실제 실행은 미검증이라 3점 보류. |
+| Output 보고서 | 10 | 5 | 6 | **6** | 10 | 이전 State를 내보내면 9p다. 새 파이프라인의 `Agent_*` 보고서가 없어 4점 보류. |
+| **합계** | **100** | **70** | **84** | **87** | **100** | 보류 13점(동적 6, 재현성 3, Output 4)은 D-01 완료로만 회복된다. |
+
+## R3-2. 반복 2 결함 재검증
+
+| ID | 판정 | 재검증 근거 (QA 직접 실행) |
+|---|---|---|
+| D-16 | **해결** | `short.py`(market이 기술마다 출처 1개만 인용): 재검색 질의가 `"DeepSeek-V2 MLA additional independent sources analysis"`, `"ITME CXL hybrid memory additional independent sources analysis"`로 바뀌었다. 사유 문장과 다른 기술 이름이 섞이지 않는다. 평가 기반 재조사도 `queries_by_tech` 힌트만 쓴다. |
+| D-17 | **해결** | 같은 시나리오에서 이제 `dispatch:market`이 2회 실행되고 한도를 소진하면 gap `market: … 고유 출처 1개(<2, 최신 시도 기준)`가 남고 `completed_with_gaps`로 끝난다. 반복 2에서는 누적 출처로 1회 만에 통과했다. |
+| D-18 | **해결(PM 승인 기준)** | 저장소를 지운 뒤 `--report-only`는 `RuntimeError: --report-only 불가: Evidence 75/75건의 원문이 저장소에 없습니다…`로 즉시 실패한다. `--export-only`는 `validation.json`의 `warnings`와 `evidence_store.missing_full_text=75`를 남긴다. 평가 노드는 축약 경고를 Judge 프롬프트와 결과에 기록한다. |
+| D-19 | **해결(PM 승인 기준)** | 160자로 줄였다. `measure_state_size.py`를 다시 돌려 README 수치와 일치함을 확인했다. 잔여 증가(체크포인트마다 State 전체 저장)를 README가 숨기지 않고 적었다. |
+| D-20 | **해결** | `Policy(max_steps=30)`은 진입 33회에서 `end:step_limit`, `Policy(max_steps=50)`은 41회에서 자연 종료(`end:unverified`)했다. `GraphRecursionError`는 없다. `recursion_limit`은 `build_graph(...).with_config(recursion_limit=policy.recursion_limit)`에서 Policy로 계산한다(단일 출처). 저장소 안에서 삭제된 `config.RECURSION_LIMIT`를 import하는 곳은 0건이다. |
+| P-01 | **종결** | `DEV_PLAN.md`에 "2026-10-07 개정… PM 승인" 메모가 있다. |
+
+## R3-3. 회귀 검증 (반복 1·2 스크립트 재실행)
+
+| 대상 | 결과 |
+|---|---|
+| 엣지 덤프 | 작업 노드 7개가 모두 `supervisor`로만 복귀한다. 분기는 `{'supervisor': ['route']}` 하나. **회귀 없음** |
+| 고장 주입 7종 | 반복 2와 같은 경로와 종료 상태다(모두 예외 → `end:report_failed`, Judge 상시 미달 → 진입 17회 `end:unverified` 등). 실패한 보고서는 평가하지 않는다. **회귀 없음** |
+| 평가 기반 domain 재조사 | RAG 41회 중 피드백 포함 14회. 이제 지시가 `queries_by_tech`로 기술별로 나뉜다. **회귀 없음** |
+| 병적 단계 상한 | 기본값(MAX_STEPS=20)은 진입 21회, superstep 42에서 `end:step_limit`이고 직전 보고서까지 평가했다. 상한이 없으면(60) 자연 최악은 41회다. `patho.py`의 max_steps 1~15 12종은 모두 마지막 보고서를 평가한 뒤 `end:*`로 끝났다. **회귀 없음** |
+| SQLite 재개 | market(병렬 중)·quality_evaluator·report 크래시 모두 해당 노드만 다시 실행하고 `completed`로 끝났다. **회귀 없음** |
+| 병렬 reducer | `test_parallel_send_writes_are_merged` 통과. `source_units`는 guard가 관점 결과 안에 넣으므로(`supervisor/guard.py:25-29`) 병렬 쓰기 키가 겹치지 않는다. **회귀 없음** |
+| 트레이스 컨텍스트 | `test_worker_threads_inherit_graph_run_context` 통과. 스레드풀 코드는 반복 2 이후 바뀌지 않았다. **회귀 없음** |
+| app 경로 (Fake 시뮬레이션) | run → report 크래시 → `--resume` → `completed`(report만 재실행). 종료된 trace를 다시 resume하면 내보내기만 한다. `--report-only`는 새 형식 State에서 hydrate 900자, 이전 형식 State에서는 `completed_with_gaps`. 저장소를 지우면 즉시 실패. `--export-only`(이전 State)는 9p이고 `run_logs.json`을 보존한다. **회귀 없음** |
+
+## R3-4. 남은 결함
+
+| ID | 심각도 | 루브릭 항목 | 내용 | 기대 동작 |
+|---|---|---|---|---|
+| D-01 | **Blocker** | 동적 동작 실증, 재현성, Output | 실제 실행 산출물과 LangSmith 캡처가 없다(코드 결함이 아니라 증빙 미제출). | 아래 R3-5의 종결 기준을 모두 충족한다. |
+| D-21 | Minor (신규, 감점 없음) | 패턴(재검색 품질) | 에이전트나 종합이 자유 서술로 보고한 부족 항목은 접두어·기술명만 지운 뒤 질의가 된다. 그래서 `"ITME CXL hybrid memory 상용 고객사 발표 근거 없음"`처럼 부정 표현이 섞인 질의가 나간다. 기술 범위 지정은 올바르다(itme에만 붙음). | 선택 개선: `근거 없음`, `미기재`, `미충족` 같은 부정·메타 표현을 질의에서 제거한다. 루브릭 만점 판정에는 영향이 없다. |
+
+## R3-5. 판정
+
+**코드는 로컬 실제 실행과 캡처를 할 준비가 됐다: Yes.** 오프라인으로 검증할 수 있는 루브릭 항목(패턴 20, State 20, 품질 15, 구조 5)은 만점이다. 남은 13점은 D-01을 실행으로 증명해야만 회복된다. 실행이 아래 기준을 모두 통과하면 다음 반복에서 **100점**으로 판정할 수 있다.
+
+### D-01 종결 기준 (팀이 로컬 실행 후 확인하고 커밋할 것)
+
+1. **실행 전**: 로컬에서 `python -m pytest -q`가 48개 통과하는지 확인한다. 한글 TrueType 폰트를 설치한다(없으면 `validation.json`에 "PDF 조판 검사 불가" 이슈가 남는다). `.env`에 `LANGSMITH_TRACING=true`와 3개 키를 넣는다.
+2. **실행**: `python app.py 2>&1 | tee outputs/run_console.log`. 종료 코드가 0이어야 한다. 2이면 `validation.json`의 `issues`가 보고서 7장 한계점에 드러나 있어야 한다(`completed_with_gaps`나 `unverified` 사유 명시). 1이면 실패이므로 다시 실행한다.
+3. **상관(trace_id) 일치**: 다음 4곳의 값이 모두 같아야 한다.
+   - 콘솔 첫 줄 `trace_id=…`
+   - `outputs/decisions_{trace_id}.jsonl`의 파일명과 각 행의 `trace_id`
+   - `validation.json`의 `trace_id`
+   - LangSmith root run(`kv-eval-supervisor`, tag `pattern:supervisor`)의 metadata `trace_id`
+4. **LangSmith 트리 캡처** (`outputs/tracing/*.png`):
+   - root 아래에 `supervisor`와 작업 노드가 번갈아 나오는 화면
+   - **tech 또는 domain 노드 안에 RAG LLM 호출이 자식 run으로 붙은 화면**(D-02 수정의 실증. root 밖에 고아 run이 따로 생기면 안 된다)
+   - `quality_evaluator` 노드의 4항목 결과 화면
+   - 캡처에 API 키와 개인정보가 보이지 않아야 한다.
+5. **결정 로그 내용**:
+   - `decisions_*.jsonl`(그리고 같은 내용의 `run_logs.json`)에 `dispatch:…`, `synthesis`, `report`, `evaluate`, `end:*` 결정이 각각 `reason`과 함께 있다.
+   - 재작업(`dispatch:<관점>` 재할당, `reinvestigate:`, `rewrite:report` 중 하나)이 1회 이상이면 그 사유와 `retry_counts`가 `validation.json`과 일치한다.
+   - 재작업이 0회인 정상 경로였다면, 동적 동작 증빙은 Fake 시나리오 테스트(`tests/test_scenarios.py`)로 대신한다고 README에 명시한다.
+6. **보고서**:
+   - `outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.pdf`와 `.md`
+   - `validation.json`의 `pdf_pages`가 10 이하(목표 9 이하)
+   - `## SUMMARY`와 `## REFERENCE`가 각 1회
+   - 본문 인용이 모두 REFERENCE에 있다(`validation.json`의 `issues`에 인용·목차 이슈가 없다)
+   - 보고서 내용은 결정 로그와 일치해야 한다: gaps가 있으면 7장 "근거 공백 (Supervisor 기록)"에 같은 항목이 나온다.
+7. **산출물 교체와 커밋**:
+   - `outputs/final_state.json`, `validation.json`, `run_logs.json`, `decisions_{trace_id}.jsonl`, `Agent_*.md/pdf`, `tracing/*.png`, `run_console.log`를 커밋한다.
+   - `checkpoints.sqlite`와 `data/cache/`는 커밋하지 않는다(gitignore 대상).
+   - `validation.json`의 `warnings`에 원문 저장소 누락 경고가 **없어야** 한다(같은 머신에서 실행했다면 0건).
+8. **README 갱신**:
+   - "실행 예시"를 실제 실행의 결정 경로로 바꾼다(또는 추가한다).
+   - `지속성 비용` 표에 실제 실행의 최종 State와 체크포인트 누적 크기를 추가한다. 반복 2에서 README가 약속한 갱신이다.
+   - LangSmith 캡처 이미지를 연결한다.
+9. **(선택) 재개 시연**: 실행 중 Ctrl+C → `python app.py --resume <trace_id>`. 콘솔에서 완료된 관점이 다시 실행되지 않는 것을 확인하고 캡처한다.
+
+다음 반복에서 QA는 위 1~8을 커밋된 파일끼리 대조한다(trace_id, 결정 로그, validation, 보고서 gaps, 캡처). 모두 맞으면 만점으로 판정한다.
