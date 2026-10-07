@@ -7,13 +7,13 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)·하드웨어(ITME
 - Objective : 두 기술을 4개 관점에서 비교 평가하되, 우승 기술을 고르지 않고 관점별 장점·제약·근거 수준·도입 전 확인사항을 근거와 함께 제시
 - Method : Multi-Agent(**Supervisor**) + Agentic RAG + 웹 검색
 - Tools : LangGraph(StateGraph·`Send`·SqliteSaver), FAISS + BM25(RRF), Tavily Web API, LangSmith, pdfplumber
-- **Pattern : Supervisor** — 단일 `supervisor` 노드가 State를 읽고 `add_conditional_edges` 하나로 다음 에이전트를 고른다. 모든 하위 에이전트는 실행 후 Supervisor로만 돌아온다(에이전트 간 직접 엣지 0개, `tests/test_graph_structure.py`로 강제).
+- **Pattern : Supervisor** — 단일 `supervisor` 노드가 State를 읽고 `add_conditional_edges` 하나로 다음 에이전트를 고른다. 보고서·품질 평가 노드를 포함한 모든 작업 노드는 실행 후 Supervisor로만 돌아온다(작업 노드 간 직접 엣지 0개, `tests/test_graph_structure.py`로 강제). Supervisor는 LLM이 아닌 결정적 규칙 함수(`supervisor/policy.py`, 명세 `docs/SUPERVISOR_POLICY.md`)다.
 - **선정 이유** : 이 과제의 핵심 요구는 "관점별 근거 충분성 판단 → 부족한 관점만 재조사"와 "품질 평가 미달 원인에 따라 다른 에이전트로 되돌리기"다. Distributed(단계 체인)는 순서가 엣지에 묶여 특정 관점만 다시 부를 수 없고, Hierarchical(팀 단위 하위 Supervisor)은 에이전트 6개 규모에서 조정 계층만 늘린다. 한 곳에서 State 전체를 보고 다음 노드를 정하는 Supervisor가 요구에 가장 직접 대응한다.
 - **동적 처리** : 실행 순서를 하드코딩하지 않는다. Supervisor는 매 진입마다 `perspective_status`·`node_status`·`retry_counts`·`eval_result`·`step_count`만 보고 결정한다.
   - 미수집 4관점을 `Send`로 동시에 fan-out(기술 조사 결과를 다른 관점이 입력으로 쓰지 않으므로 선행을 강제하지 않음)
-  - `sufficient=False`인 관점만, 부족 항목(`missing`)을 재검색 질의로 넘겨 다시 부름 (예: 시장 근거 부족 → `dispatch:market`만)
+  - `sufficient=False`이거나 Supervisor의 결정적 검사(관점·기술별 고유 출처 ≥2)에 못 미친 관점만 다시 부름 (예: 시장 근거 부족 → `dispatch:market`만). 부족 항목(`missing`)과 재검색 힌트는 재작업 지시로 전달되어 RAG 질의 계획·캐시 키·에이전트 프롬프트에 실제로 반영된다(지시가 겨냥한 질문만 재검색)
   - 종합 에이전트가 특정 관점의 추가 근거를 요구하면 그 관점만 재조사
-  - 품질 평가 미달 시 원인별 분기: 편향 통제·관점 커버리지 → 원인 관점 재조사 / Groundedness·중립성 → 보고서 재작성
+  - 보고서가 정상 완료되면 Supervisor가 `evaluate`로 품질 평가 노드를 부른다(실패·빈 보고서는 평가하지 않고 재작성). 미달 시 원인별 분기: 편향 통제·관점 커버리지 → 원인 관점 재조사 / Groundedness·중립성 → 보고서 재작성
   - 에이전트 예외는 `node_status=failed`로 기록되어 재시도, 한도를 넘으면 제외하고 "근거 부족"으로 보고서에 명시
   - 종료는 근거 충분성 + 품질 평가 통과로 한다. `MAX_STEPS`·재시도 상한·`recursion_limit`은 안전장치이며, 상한에 닿아도 근거 공백을 기록한 보고서를 만들고 정상 종료한다.
   - 모든 결정은 사유와 함께 `outputs/decisions_{trace_id}.jsonl`과 LangSmith(metadata `trace_id`)에 남는다.
@@ -84,16 +84,24 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)·하드웨어(ITME
 | 제어 | `gaps` (근거 공백) | 순서 유지 중복 제거 append |
 | 페이로드 | `perspectives{tech, market, stakeholder, domain}` | 키 단위 dict merge |
 | 페이로드 | `synthesis`, `report` | 단일 작성자 |
-| 페이로드 | `evidence` | dedup-append + 발췌 1,600자 상한 |
+| 페이로드 | `evidence` | dedup-append, 발췌 300자 축약 + `excerpt_ref`(원문은 디스크 저장소) |
 | 페이로드 | `cache_keys` (RAG 캐시 위치, 원문은 디스크) | 키 단위 dict merge |
 
 설계 항목별 선정 이유 (전체 결정 기록: `docs/DECISIONS.md`)
 
 1. **제어 vs 페이로드 분리** : 한 딕셔너리에 섞으면 라우팅 조건이 결과 본문 구조에 의존해 프롬프트를 바꿀 때 라우팅이 깨지므로, Supervisor가 제어 필드와 결과의 `sufficient/missing`만 읽도록 분리했다.
 2. **관측성 위치** : 로그를 State의 `operator.add` 리스트에 쌓으면 체크포인트마다 전체 이력이 복제되어 커지므로, 결정 로그 본문은 `outputs/decisions_{trace_id}.jsonl`과 LangSmith에 두고 State에는 직전 결정(`last_decision`)만 남겼다.
-3. **지속성 비용** : 원문 RAG 캐시를 State에 넣으면 `final_state.json`이 848KB까지 커지고 체크포인트마다 저장되므로, 캐시는 `data/cache/{trace_id}/` 디스크에 두고 State에는 `cache_keys`만, `evidence`는 발췌 길이 상한과 dedup reducer로 관리했다.
+3. **지속성 비용** : 원문 RAG 캐시와 Evidence 발췌 원문을 State에 넣으면 이전 실행 기준 `final_state.json` 848KB(evidence만 491KB)가 체크포인트마다 다시 저장되므로, RAG 캐시와 발췌 원문은 `data/cache/{trace_id}/` 디스크 저장소에 두고 State에는 300자 축약본·`excerpt_ref`·`cache_keys`만 남겼다(보고서·평가는 원문을 `hydrate()`로 사용). `Send`에도 State 전체가 아니라 에이전트가 읽는 제어 필드만 넘긴다.
+
+   | 실측 (`python scripts/measure_state_size.py`) | 변경 전 | 변경 후 |
+   |---|---|---|
+   | 이전 실제 실행 evidence 320건 (State 안 바이트) | 491,320B | 227,639B |
+   | Fake 정상 실행: 최종 State / 체크포인트 11개 누적 | 155,001B / 1,171,039B | 85,062B / 605,880B |
+   | Fake 재작업 실행: 최종 State / 체크포인트 21개 누적 | 234,825B / 3,968,002B | 125,510B / 1,856,254B |
+
+   (Fake 발췌 길이는 실데이터 수준인 논문 1,200자·웹 1,000자. 디스크 저장소는 정상 실행 기준 169,019B)
 4. **상관** : 키를 따로 쓰면 트레이스·State·로그를 사람이 손으로 맞춰야 하므로, uuid4 `trace_id` 하나를 LangGraph `thread_id`·LangSmith metadata·결정 로그 파일명에 함께 썼다.
-5. **재개/복구** : 메모리 체크포인터는 프로세스가 죽으면 사라져 15분짜리 실행을 처음부터 다시 해야 하므로, `SqliteSaver`와 `node_status{pending/running/done/failed/skipped}`·`last_error`·`retry_counts`로 실패 지점부터 `--resume`하게 했다.
+5. **재개/복구** : 메모리 체크포인터는 프로세스가 죽으면 사라져 15분짜리 실행을 처음부터 다시 해야 하고 Postgres 체크포인터는 단일 사용자 CLI에 DB 서버를 요구하므로, 파일 하나인 `SqliteSaver`와 `node_status{pending/running/done/failed/skipped}`·`last_error`·`retry_counts`로 실패 지점부터 `--resume`하게 했다.
 6. **동시 처리** : reducer 없이 `Send`로 병렬 실행하면 같은 키에 동시에 쓸 때 `InvalidUpdateError`가 나거나 마지막 값만 남으므로, 필드별 병합 규칙(dict merge, dedup-append)을 명시했다.
 7. **종료 보장** : `recursion_limit`만 두면 상한에 걸릴 때 예외로 죽어 보고서가 남지 않으므로, Supervisor가 `step_count > MAX_STEPS`를 먼저 감지해 근거 공백을 명시하고 보고서까지 만든 뒤 정상 종료하게 했다(재시도 상한·`recursion_limit`은 2·3차 안전장치).
 
@@ -117,7 +125,8 @@ flowchart TD
     SUP -. "4관점 충분 또는 근거 공백 기록" .-> SYN["평가 종합"]
     SYN --> SUP
     SUP -. "종합 완료 / Groundedness·중립성 미달 → 재작성" .-> REPORT["보고서 작성"]
-    REPORT --> EVAL["품질 평가 노드<br/>규칙 4종 + LLM Judge"]
+    REPORT --> SUP
+    SUP -. "보고서 정상 완료 → evaluate" .-> EVAL["품질 평가 노드<br/>규칙 4종 + LLM Judge"]
     EVAL --> SUP
     SUP -. "편향·커버리지 미달 → 원인 관점 재조사" .-> MARKET
     SUP -. "평가 통과 / 재작업 한도·MAX_STEPS (근거 부족 명시)" .-> END([END])
@@ -130,7 +139,21 @@ flowchart TD
     class EVAL gate;
 ```
 
-실행 예시(Fake 시나리오, 시장 근거 1회 부족): `dispatch:tech,market,stakeholder,domain` → `dispatch:market` → `synthesis` → `report` → `quality_evaluator: pass` → `end:passed`.
+실행 예시(Fake 시나리오, 시장 근거 1회 부족, `tests/test_scenarios.py`): `dispatch:tech,market,stakeholder,domain` → `dispatch:market` → `synthesis` → `report` → `evaluate`(quality_evaluator: pass) → `end:passed`. 실제 실행 경로는 로컬 실행 후 `outputs/run_logs.json`으로 갱신한다(`scripts/capture_checklist.md`).
+
+## 설계 결정 (선정 이유)
+
+전체 목록(43건)은 `docs/DECISIONS.md`. 평가에 직접 관련된 결정은 아래와 같다.
+
+- **Supervisor 판단 방식** : Supervisor를 LLM 라우터로 하면 같은 State에서도 실행마다 다음 노드가 바뀌어 재현·테스트가 불가능하고 매 진입마다 LLM 비용·지연이 붙으므로, 라우팅 입력이 모두 구조화된 제어 필드라는 점을 이용해 결정적 규칙 함수(`policy.decide`)를 선정했다(내용 판단은 각 에이전트와 LLM Judge가 맡는다).
+- **평가 노드 위치** : `report → quality_evaluator` 고정 엣지로 하면 보고서 에이전트가 Supervisor를 거치지 않고 다른 노드로 넘기고 실패한 보고서까지 평가되므로, 모든 작업 노드가 Supervisor로만 돌아오고 Supervisor가 "보고서 정상 완료 + 평가 미실행"일 때만 `evaluate`로 평가 노드를 부르게 했다(마지막 보고서 이후 평가 없는 `end:passed` 불가를 테스트로 강제).
+- **품질 평가 방식** : 형식 검사만 하면 근거가 주장을 뒷받침하는지 볼 수 없고 LLM Judge만 쓰면 실행마다 판정이 바뀌므로, 규칙 검사를 하드 게이트·LLM Judge를 내용 게이트로 쓰는 Hybrid를 선정하고 규칙 실패는 Judge가 뒤집지 못하게 했다.
+- **체크포인터** : `MemorySaver`는 프로세스가 죽으면 사라지고 Postgres는 단일 사용자 CLI에 DB 서버 운영을 요구하므로, 파일 하나로 재개되는 `SqliteSaver`(thread_id=trace_id)를 선정했다.
+- **재시도 상한 (관점 2 / 보고서 2 / 종합 1 / 평가 실행 1)** : 0~1회면 질의 재작성 한 번으로 회복되는 일시적 근거 부족도 공백으로 끝나고 3회 이상이면 같은 공개 자료를 반복 검색해 비용만 늘므로, 이전 실제 실행에서 관찰된 재작업 범위(tech 재작성 2회·관점 재할당 2회)에 맞춰 2회를 기본으로 했다(종합은 표현 보완만이라 1회).
+- **`MAX_STEPS = 20`** : 10 이하면 Fake 고장 주입 시나리오의 최대 관측치(Judge 상시 미달 17회)조차 마치기 전에 끊기고 이론적 최악(30회 이상)까지 허용하면 실제 실행이 1시간을 넘으므로, 정상 경로(5회)와 관측 최악(17회)은 끝까지 가고 그 이상은 근거 공백을 명시하는 마무리 모드로 끊도록 20으로 정했다.
+- **`FINALIZE_STEPS = 5`** : 마무리(종합→보고서→평가→종료)는 4회인데 4로 딱 맞추면 재개 직후 재진입 한 번에도 보고서 없이 하드 종료되므로, 여유 1을 더해 5로 정했다(`recursion_limit` = (20+5)×2+10 = 60).
+- **편향 임계값 (`MIN_DISTINCT_SOURCES=2`, `MAX_SINGLE_SOURCE_SHARE=0.6`)** : 고유 출처 하한 1이면 단일 기사·단일 페이지로 판정이 확정되고 3 이상이면 공개 자료가 적은 ITME에서 거의 항상 공백이 되므로 2로, 단일 발행처 비중 상한은 70% 이상이면 한 매체 편중을 놓치고 50%면 출처 2개 중 1개 같은 발행처까지 경계에 걸리므로 0.6(3개 중 2개 이상 같은 발행처면 재조사)으로 정했다.
+- **충분성 판단 주체** : 에이전트의 자기 보고(`sufficient`)만 믿으면 출처 1개로도 "충분"이 통과해 편향이 보고서 단계에서야 드러나므로, Supervisor가 관점·기술별 고유 출처 수를 결정적으로 다시 검사한다.
 
 ## Data Preprocessing
 
@@ -174,6 +197,7 @@ python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과
 │   ├── state.py                   # State Schema(제어/페이로드) + reducer
 │   ├── graph.py                   # Supervisor 그래프 조립(단일 conditional edge)
 │   ├── observability.py           # trace_id, 결정 로그 JSONL, LangSmith run 설정
+│   ├── evidence_store.py          # Evidence 발췌 원문 디스크 저장소(State에는 축약본·참조)
 │   ├── supervisor/                # 조정 계층: policy(결정) · router(라우팅) · guard(실패 처리)
 │   ├── evaluation/quality.py      # 품질 평가 노드(규칙 4종 + LLM Judge)
 │   ├── agents/                    # 하위 에이전트: technology, market, stakeholder, domain, synthesis, report
@@ -181,13 +205,14 @@ python -m eval.evaluate_retrieval --show-hits  # 케이스별 검색 결과
 │   ├── tools/                     # Tavily 웹 검색, 재검색 질의(retry_queries)
 │   ├── reporting/                 # 목차·인용·10p 검증(sections), Markdown/PDF 내보내기(export)
 │   ├── llm.py · prompts.py · schemas.py
-├── prompts/                       # 공통 계약(00) + 역할별 프롬프트(01~08) + 품질 평가(09)
+├── prompts/                       # 공통 계약(00) + 에이전트 프롬프트(02~07) + 품질 평가 Judge(09) (Supervisor는 프롬프트 없음)
 ├── schemas/evidence.schema.json   # Evidence 공통 구조
 ├── eval/                          # 검색 품질 평가 세트·하네스
 ├── tests/                         # Fake LLM·Web·RAG 시나리오 테스트
-├── scripts/                       # export_graph.py(그래프 이미지), validate_prompt_package.py
-├── docs/                          # DEV_PLAN.md, DECISIONS.md
-└── outputs/                       # 보고서, validation.json, decisions_*.jsonl, architecture.png, 이전 과제 산출물(RAG-Output_*)
+├── scripts/                       # export_graph.py · measure_state_size.py · validate_prompt_package.py · capture_checklist.md
+├── docs/                          # DEV_PLAN.md · DECISIONS.md · SUPERVISOR_POLICY.md · QA_REPORT.md
+└── outputs/                       # 새 실행 산출물(보고서·validation·decisions_*.jsonl), architecture.png,
+                                   #   이전 과제 제출물(RAG-Output_*), legacy_rag/(이전 master 구조 실행물)
 ```
 
 ## Usage
@@ -219,15 +244,21 @@ python app.py --export-only          # LLM 호출 없이 검증·Markdown/PDF �
 | `checkpoints.sqlite` | LangGraph 체크포인트(`--resume`용, git 제외) |
 | `architecture.png` / `.mmd` | 컴파일 그래프 이미지 (`python scripts/export_graph.py`) |
 | `RAG-Output_…` | 이전 과제(Agentic RAG) 제출물 — 수정하지 않음 |
+| `legacy_rag/` | 이전 master 구조 실행물(final_state·validation·run_logs) — 새 실행 증빙과 구분 |
 
 종료 코드: 품질 평가 통과 `0`, 보고서는 생성됐으나 미검증 `2`, 실행 실패 `1`. 종료 상태는 `completed`(통과·공백 없음) / `completed_with_gaps`(통과·근거 공백 명시) / `unverified`(평가 미통과).
 
-### 3. 테스트 (API 키 불필요)
+### 3. 실제 실행·LangSmith 캡처 (제출 증빙)
+
+이 저장소의 새 Supervisor 실행 산출물은 키가 있는 로컬에서 만든다. 절차·캡처 화면·커밋 파일 목록은 `scripts/capture_checklist.md`를 그대로 따른다: `python app.py` → 콘솔의 `trace_id` 기록 → LangSmith(`kv-cache-supervisor` 프로젝트, run `kv-eval-supervisor`, 태그 `pattern:supervisor`)에서 `outputs/tracing/tracing-1~5.png` 캡처 → `Agent_*.md/pdf`·`validation.json`·`run_logs.json`·`decisions_{trace_id}.jsonl`·`final_state.json` 커밋.
+
+### 4. 테스트 (API 키 불필요)
 
 ```bash
 python -m pytest -q                       # 정상·관점 재작업·평가 미달 루프·상한 종료·재개·예외 fallback·엣지 검사
 python scripts/export_graph.py            # outputs/architecture.png 생성
 python scripts/validate_prompt_package.py # 프롬프트 패키지 정적 검증
+python scripts/measure_state_size.py      # State·체크포인트 크기 실측
 ```
 
 ## Contributors

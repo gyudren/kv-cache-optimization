@@ -52,7 +52,8 @@ flowchart TD
     SUP -- "4관점 충분 또는 재시도 소진" --> SYN[종합]
     SYN --> SUP
     SUP -- "종합 완료" --> REPORT[보고서 작성]
-    REPORT --> EVAL["품질 평가 노드<br/>Hybrid: 규칙 + LLM Judge"]
+    REPORT --> SUP
+    SUP -- "보고서 정상 완료 → 평가" --> EVAL["품질 평가 노드<br/>Hybrid: 규칙 + LLM Judge"]
     EVAL --> SUP
     SUP -- "커버리지/편향 미달 → 해당 관점 재조사" --> MARKET
     SUP -- "Groundedness/중립성 미달 → 재작성" --> REPORT
@@ -61,7 +62,7 @@ flowchart TD
 
 설계 규칙 (가이드 B 필수 항목과 1:1 대응):
 
-1. 모든 하위 에이전트는 실행 후 **Supervisor로만 돌아온다**. 하위 에이전트끼리 잇는 엣지는 0개이고, 테스트로 강제한다.
+1. 모든 하위 에이전트(보고서·품질 평가 노드 포함)는 실행 후 **Supervisor로만 돌아온다**. 작업 노드끼리 잇는 엣지는 0개이고, 테스트로 강제한다. (반복 2, QA D-03 반영: `report → quality_evaluator` 고정 엣지 제거)
 2. Supervisor는 하나의 `add_conditional_edges(supervisor, route)`로 다음 노드를 정한다. 판단 입력은 `perspective_status`·`retry_counts`·`eval_result`·`step_count`이고, 고정된 실행 순서는 없다.
 3. **고정 스텝 수로 끝내지 않는다.** 4관점 충분성(Supervisor 판정)과 품질 평가 통과로 종료하며, `step_count`와 관점별 재시도 상한은 안전장치로만 쓴다.
 4. 근거 부족 시 **해당 하위 에이전트만** 재작업시킨다. 부족 항목(`missing`)을 재검색 질의로 넘긴다(기존 `retry_queries` 재사용).
