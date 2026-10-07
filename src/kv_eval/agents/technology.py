@@ -152,6 +152,7 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
         "State the maturity of the specific technology separately from the maturity of its general family. "
         "In trl_basis describe the evidence level in words (e.g. 프로토타입·내부 평가 확인, 상용 서비스 운영 확인) and, when something is "
         "not confirmed, narrow it to exactly what is missing (e.g. 독립 재현·외부 고객 채택 미확인) instead of a broad '운영 미확인'. "
+        "Cite papers exactly as the supplied [n, p.X] strings (never by document name such as deepseek_v2) and web sources by their source_id. "
         "List in missing only facts you could not confirm; they are reported as limitations. No unsupported claims.\n"
         + "\n".join(f"{k}: {v}" for k, v in findings.items())
         + "\nPaper sources (구현·검증 수준):\n" + paper_refs

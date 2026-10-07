@@ -49,6 +49,28 @@ WEB_CITATION = re.compile(r"\[W(\d+)\]")
 _GROUPED_PAPER = re.compile(r"\[(\d+),\s*(p{1,2}\.\s*\d+(?:\s*[-–]\s*\d+)?(?:\s*[;,]\s*(?:p{1,2}\.)?\s*\d+(?:\s*[-–]\s*\d+)?)+|pp\.\s*\d+\s*[-–]\s*\d+)\]")
 _GROUPED_WEB = re.compile(r"\[(W\d+(?:\s*[,;]\s*W\d+)+)\]")
 MALFORMED_CITATION = re.compile(r"\[\d+,\s*p{1,2}\.[^\]]*[;,–-][^\]]*\]|\[W\d+\s*[,;][^\]]*\]")
+# 에이전트 출력에 남는 내부 식별자 인용: 문서 ID("[deepseek_v2, p.1]")와 웹 source_id("web:trl:mla:…").
+# 보고서 카탈로그 형식이 아니라 검증·REFERENCE 연결을 우회하므로 코드가 [n, p.X]/[Wn]으로 바꾸고, 남으면 이슈로 잡는다.
+DOC_ID_CITATION = re.compile(r"\[([a-z][a-z0-9_]*),\s*(p{1,2}\.[^\]]*)\]")
+SOURCE_ID = re.compile(r"\[?(web:[a-z:]+[0-9a-f]{14})\]?")
+
+
+def link_source_refs(text: str, evidence: list[dict]) -> str:
+    """에이전트가 쓴 문서 ID·source_id 인용을 보고서 인용 형식으로 바꾼다(모르는 ID는 그대로 두어 검증에서 걸리게 한다)."""
+    doc_number = {ev["doc_id"]: ev["citation_number"] for ev in evidence
+                  if ev.get("source_type") == "paper" and ev.get("doc_id") and ev.get("citation_number")}
+    web_number = {ev["url"]: n for n, ev in citation_catalog(evidence)["web"].items()}
+    url_of = {ev["source_id"]: ev.get("url") for ev in evidence if ev.get("source_type") == "web"}
+
+    def doc(match: re.Match) -> str:
+        number = doc_number.get(match.group(1))
+        return f"[{number}, {match.group(2)}]" if number else match.group(0)
+
+    def web(match: re.Match) -> str:
+        n = web_number.get(url_of.get(match.group(1), ""))
+        return f"[W{n}]" if n else match.group(0)
+
+    return normalize_citations(SOURCE_ID.sub(web, DOC_ID_CITATION.sub(doc, text)))
 
 
 def normalize_citations(text: str) -> str:
@@ -150,6 +172,8 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
     body = report.split("\n## REFERENCE", 1)[0]
     for bad in dict.fromkeys(MALFORMED_CITATION.findall(body)):
         issues.append(f"정규 형식이 아닌 묶음 인용 {bad}: [n, p.X] / [Wn] 단위로 나눠야 검증 가능")
+    for bad in dict.fromkeys(m.group(0) for m in [*DOC_ID_CITATION.finditer(body), *SOURCE_ID.finditer(body)]):
+        issues.append(f"내부 식별자 인용 {bad}: 보고서 인용 형식([n, p.X] / [Wn])이 아니라 검증 불가")
     refs, citation_issues = used_references(report, evidence)
     issues.extend(citation_issues)
     if not PAPER_CITATION.search(report) and not WEB_CITATION.search(report):

@@ -154,3 +154,23 @@ def test_readable_gaps_drop_internal_wording():
     ])
     assert grouped == {"tech": ["MLA: TRL 판정·근거 미기재", "ITME: 필수 질문(정량 성능 결과)의 원문 근거 없음",
                                 "종합 단계에서 추가 근거가 필요하다고 판단됨"]}
+
+
+# ---- 에이전트 내부 식별자 인용 → 보고서 인용 형식 ---------------------------------------------------
+def test_agent_doc_ids_and_source_ids_become_report_citations():
+    from kv_eval.reporting.sections import DOC_ID_CITATION, SOURCE_ID, link_source_refs
+    evidence = [{"source_type": "paper", "doc_id": "deepseek_v2", "citation_number": 1, "page": 1, "source_id": "p1"},
+                {"source_type": "web", "source_id": "web:trl:mla:0123456789abcd", "url": "https://github.com/deepseek-ai/FlashMLA"}]
+    text = "통합 구현 확인 [deepseek_v2, p.1, p.32]. 운영 커널 web:trl:mla:0123456789abcd 확인."
+    out = link_source_refs(text, evidence)
+    assert "[1, p.1] [1, p.32]" in out and "[W1]" in out
+    assert not DOC_ID_CITATION.search(out) and not SOURCE_ID.search(out)
+    assert link_source_refs("[unknown_doc, p.3]", evidence) == "[unknown_doc, p.3]"  # 모르는 ID는 남겨 검증에서 걸리게
+
+
+def test_validation_flags_internal_identifier_citations(run_graph):
+    from kv_eval.reporting.sections import validate_report
+    state = run_graph(FakeLLM())
+    tampered = state["report"].replace("## 6. 시사점\n", "## 6. 시사점\nMLA는 운영 중이다 [deepseek_v2, p.16].\n", 1)
+    issues = validate_report(tampered, state["evidence"])["issues"]
+    assert any("내부 식별자 인용" in i for i in issues)
