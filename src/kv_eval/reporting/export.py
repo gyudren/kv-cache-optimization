@@ -81,7 +81,7 @@ def korean_font() -> str:
 
 def _styles() -> dict[str, ParagraphStyle]:
     font, bold = korean_fonts()
-    normal = ParagraphStyle("KNormal", fontName=font, fontSize=9.4, leading=14.6, spaceAfter=6,
+    normal = ParagraphStyle("KNormal", fontName=font, fontSize=9.0, leading=13.2, spaceAfter=4,
                             textColor=INK, wordWrap="CJK", alignment=TA_LEFT)
     return {
         "normal": normal,
@@ -233,7 +233,7 @@ def _story(report_md: str, styles: dict) -> list:
 def _build_pdf(report_md: str, target) -> int:
     """PDF를 만들고 페이지 수를 돌려준다. target은 파일 경로 또는 BytesIO."""
     doc = SimpleDocTemplate(target, pagesize=A4, leftMargin=24*mm, rightMargin=24*mm,
-                            topMargin=22*mm, bottomMargin=22*mm, title=REPORT_TITLE,
+                            topMargin=20*mm, bottomMargin=20*mm, title=REPORT_TITLE,
                             author=REPORT_AUTHORS)
     doc.build(_story(report_md, _styles()), onFirstPage=_page_footer, onLaterPages=_page_footer)
     return doc.page

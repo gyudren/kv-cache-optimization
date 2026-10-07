@@ -44,6 +44,8 @@ STATE_EXCERPT_CHARS = 300
 MIN_DISTINCT_SOURCES = 2
 MAX_SINGLE_SOURCE_SHARE = 0.6
 MAX_REPORT_PAGES = 10
+# 목표 페이지(여유 1p). 넘으면 경고만 남긴다(상한 초과는 이슈).
+TARGET_REPORT_PAGES = 9
 REPORT_STEM = "Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"
 # 이전 과제(RAG) 산출물 파일명. 덮어쓰지 않도록 구분만 해 둔다.
 LEGACY_REPORT_STEM = "RAG-Output_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"

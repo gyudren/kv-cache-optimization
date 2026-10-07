@@ -5,7 +5,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from ..config import MAX_REPORT_PAGES
+from ..config import MAX_REPORT_PAGES, TARGET_REPORT_PAGES
 from ..state import deduplicate_evidence
 
 
@@ -160,6 +160,8 @@ def validate_report(report: str, evidence: list[dict]) -> dict:
     if not refs and "근거 부족" not in report:
         issues.append("검증 가능한 출처 및 근거 부족 표기 모두 없음")
     warnings = []
+    if pages is not None and TARGET_REPORT_PAGES < pages <= MAX_REPORT_PAGES:
+        warnings.append(f"보고서 PDF {pages}p: 목표 {TARGET_REPORT_PAGES}p 초과(상한 {MAX_REPORT_PAGES}p까지 여유 없음)")
     if not renderable:
         message = f"PDF 조판 검사 불가(한글 TrueType 폰트 없음): {MAX_REPORT_PAGES}p 상한·SUMMARY 1/2p 미검증"
         # 오프라인 테스트처럼 조판과 무관한 검증만 할 때는 ALLOW_UNCHECKED_PDF=1로 경고로 낮출 수 있다.
