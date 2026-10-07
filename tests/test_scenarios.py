@@ -62,6 +62,8 @@ def test_eval_bias_failure_reinvestigates_responsible_perspective(run_graph):
     # 관점이 바뀌었으므로 종합·보고서·평가는 다시 만든다
     assert llm.runs["synthesis"] == 2 and llm.runs["report"] == 2 and llm.runs["judge"] == 2
     assert state["eval_result"]["passed"] is True
+    # 한쪽(긍정) 판정뿐이었으므로 재조사 질의는 반대 방향(우려) 근거를 찾도록 바뀐다
+    assert "concerns" in " ".join(state["feedback"]["market"]["rewritten_queries"])
 
 
 def test_llm_judge_groundedness_failure_rewrites_report(run_graph):

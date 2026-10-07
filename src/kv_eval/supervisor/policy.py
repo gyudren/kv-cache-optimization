@@ -57,6 +57,21 @@ def _feedback(missing: list[str], *, search: bool = True) -> dict:
     return {"missing": missing, "rewritten_queries": missing if search else []}
 
 
+# 품질 평가(편향·커버리지) 미달 사유 → 재검색 질의 힌트. 사유 문장을 그대로 검색하면 결과가 나오지 않는다.
+EVAL_QUERY_HINTS = (
+    ("긍정 한쪽뿐", "limitations risks concerns criticism"),
+    ("우려 한쪽뿐", "adoption benefits positive outlook support"),
+    ("단일 발행처", "independent analysis industry report"),
+    ("고유 출처", "additional independent sources analysis"),
+)
+
+
+def _eval_feedback(issues: list[str]) -> dict:
+    """평가 미달 사유는 missing으로 그대로 넘기고, 재검색 질의는 반대 방향·독립 출처 힌트로 바꾼다."""
+    queries = [hint for issue in issues for key, hint in EVAL_QUERY_HINTS if key in issue]
+    return {"missing": issues[:6], "rewritten_queries": list(dict.fromkeys(queries or issues))[:3]}
+
+
 class _Builder:
     """한 번의 결정에서 State 갱신분을 모은다."""
 
@@ -239,7 +254,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
                   else f"{agent}: 품질 평가 미달, 재조사 한도 소진 — {issue[:200]}")
     if rerun:
         for agent in rerun:
-            b.bump(agent, _feedback(issues_by_agent[agent]))
+            b.bump(agent, _eval_feedback(issues_by_agent[agent]))
         b.run(*rerun)
         b.invalidate_downstream()
         return b.done(rerun, "reinvestigate:" + ",".join(rerun),
