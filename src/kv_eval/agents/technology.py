@@ -6,11 +6,12 @@ TRL 판정 근거는 설계 C-1에 따라 두 갈래를 모두 쓴다.
 논문만으로는 "제품 출시·상용 서비스 적용" 근거를 얻을 수 없어 TRL 7~9를 판정할 수 없다.
 """
 from __future__ import annotations
-from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from typing import Any
 from ..config import MAX_PARALLEL_QUESTIONS
+from langchain_core.runnables.config import ContextThreadPoolExecutor
 from ..prompts import prompt_template
+from ..tools import rework_note
 from ..schemas import TechnologyAssessment
 from ..rag import cache as rag_cache
 from ..rag.workflow import answer_with_cache
@@ -62,9 +63,11 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     attempt = state["retry_counts"]["tech"]
     feedback = state.get("feedback", {}).get("tech", {})
     # 질문끼리 독립이므로 병렬로 검색·답변한다(순서는 아래에서 원래대로 복원).
+    # ContextThreadPoolExecutor는 contextvars(LangGraph 실행 설정·LangSmith 부모 run)를 워커 스레드로 복사해
+    # 스레드 안의 LLM·웹 호출이 그래프 run 아래 자식 run(같은 trace_id)으로 남게 한다.
     tasks = [(tech, question) for tech in ("mla", "itme") for question in TECH_QUESTIONS]
     cache = rag_cache.load(state["trace_id"], "tech")
-    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
+    with ContextThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
         answers_by_task = list(pool.map(
             lambda item: answer_with_cache(rag, cache, f"[{item[0]}] {item[1]}", item[0], feedback), tasks))
         baseline_future = pool.submit(answer_with_cache, rag, cache, BASELINE_QUESTION, "itme_baseline", feedback)
@@ -108,7 +111,7 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
         "State the maturity of the specific technology separately from the maturity of its general family (for example CXL memory modules in general). "
         "No unsupported claims.\n" + "\n".join(f"{k}: {v}" for k, v in findings.items())
         + "\nPaper sources (구현·검증 수준):\n" + paper_refs
-        + "\nWeb sources (상용화·통합 발표):\n" + (web_refs or "없음"),
+        + "\nWeb sources (상용화·통합 발표):\n" + (web_refs or "없음") + rework_note(feedback),
         TechnologyAssessment,
     )
     missing.extend(result.missing)

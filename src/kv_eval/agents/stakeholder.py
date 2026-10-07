@@ -5,7 +5,7 @@ from ..prompts import prompt_template
 from hashlib import sha256
 from ..schemas import StakeholderAssessment
 
-from ..tools import retry_queries
+from ..tools import retry_queries, rework_note
 
 # 설계 C-3의 평가 대상별 검색어(경쟁 진영 / 도입 기업·개발자 / 투자 업계)
 STAKEHOLDER_QUERIES = {
@@ -49,7 +49,7 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
             "Use only provided source IDs in cited_ids; absence of information means missing. "
             "Statements about the technology family (MLA: DeepSeek's MLA-based models and MLA serving kernels; ITME: SK hynix/CXL memory expansion) "
             "may support a verdict when the speaker is identified and the text labels them '계열·간접 반응', distinct from reactions to the exact technology.\n"
-            + "\n".join(f"{r['source_id']}: [{r.get('speaker', '기타')}] {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw),
+            + "\n".join(f"{r['source_id']}: [{r.get('speaker', '기타')}] {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw) + rework_note(feedback),
             StakeholderAssessment,
         )
         cited = [r for r in raw if r["source_id"] in set(assessment.cited_ids)]

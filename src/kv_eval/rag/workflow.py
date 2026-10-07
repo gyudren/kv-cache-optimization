@@ -1,5 +1,8 @@
 """Inner Agentic RAG workflow. Not a top-level graph agent."""
 from __future__ import annotations
+import json
+import re
+from hashlib import sha256
 from typing import Any
 from .retrieve import HybridRetriever, RetrievedChunk
 from ..schemas import QueryPlan, Relevance, Rewrite, RAGResponse
@@ -13,7 +16,7 @@ class RAGWorkflow:
     def rag_answer(self, question: str, technology_filter: str, feedback: dict | None = None) -> dict:
         feedback = feedback or {}
         plan = self.llm.generate_structured(
-            f"Translate/plan this Korean research question to precise English technical search terms, without changing its scope.\nQuestion: {question}\nMissing: {feedback.get('missing', [])}", QueryPlan)
+            f"Translate/plan this Korean research question to precise English technical search terms, without changing its scope.\nQuestion: {question}\nMissing: {feedback.get('missing', [])}\nSearch hints from the supervisor (cover these if relevant): {feedback.get('rewritten_queries', [])}", QueryPlan)
         query = plan.english_query
         attempts = 0
         relevant: list[RetrievedChunk] = []
@@ -55,14 +58,41 @@ class RAGWorkflow:
                 "search_attempts": attempts}
 
 
-def answer_with_cache(rag: Any, cache: dict, question: str, technology_filter: str, feedback: dict | None) -> dict:
-    """재시도 시 이미 근거가 충분했던 질문은 이전 답변을 재사용한다.
+TECH_TOKENS = {"mla": ("mla", "deepseek"), "itme": ("itme", "cxl")}
 
-    Master 게이트가 일부 항목만 부족하다고 판정해도 모든 질문을 다시 검색·답변하면
-    LLM 호출의 절반 이상이 같은 답을 반복하는 데 쓰인다(설계 D-2: 부족 항목만 재검색).
-    sufficient=False 였던 질문만 부족 항목 피드백과 함께 다시 실행한다.
+
+def feedback_fingerprint(feedback: dict | None) -> str:
+    """재작업 지시(missing·재검색 질의)의 지문. 지시가 바뀌면 캐시 키가 바뀐 것으로 본다."""
+    items = [*(feedback or {}).get("missing", []), *(feedback or {}).get("rewritten_queries", [])]
+    if not items:
+        return ""
+    return sha256(json.dumps(items, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def question_targeted(question: str, technology_filter: str, feedback: dict | None) -> bool:
+    """재작업 지시가 이 질문을 겨냥하는가(기술명·D-코드가 지시에 있으면 그 범위만, 없으면 전체)."""
+    tech = "itme" if technology_filter.startswith("itme") else technology_filter
+    dim = re.search(r"\bD([1-7])\b", question)
+    for item in [*(feedback or {}).get("missing", []), *(feedback or {}).get("rewritten_queries", [])]:
+        text = str(item).lower()
+        techs = {name for name, tokens in TECH_TOKENS.items() if any(t in text for t in tokens)}
+        dims = set(re.findall(r"\bd([1-7])\b", text))
+        if (not techs or tech in techs) and (not dims or (dim and dim.group(1) in dims)):
+            return True
+    return False
+
+
+def answer_with_cache(rag: Any, cache: dict, question: str, technology_filter: str, feedback: dict | None) -> dict:
+    """재시도 시 이미 근거가 충분했던 질문은 이전 답변을 재사용한다(부족 항목만 재검색).
+
+    단, Supervisor의 재작업 지시(feedback)가 이 질문을 겨냥하면 캐시 키에 지시 지문이 들어간 것으로 보고
+    재사용하지 않는다. 그래야 품질 평가가 "반대 방향 근거"를 요구했을 때 같은 답을 돌려주지 않고
+    지시가 반영된 질의로 다시 검색한다(같은 지시로 이미 다시 검색한 답은 재사용).
     """
+    fingerprint = feedback_fingerprint(feedback)
+    targeted = bool(fingerprint) and question_targeted(question, technology_filter, feedback)
     previous = cache.get(question)
-    if previous and previous.get("sufficient"):
+    if previous and previous.get("sufficient") and (not targeted or previous.get("feedback_fp") == fingerprint):
         return previous
-    return rag.rag_answer(question, technology_filter, feedback)
+    answer = rag.rag_answer(question, technology_filter, feedback or {})
+    return {**answer, "feedback_fp": fingerprint if targeted else ""}

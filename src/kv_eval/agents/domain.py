@@ -1,10 +1,11 @@
 """7 shared domain dimensions, grounded in each selected primary paper only."""
 from __future__ import annotations
 import re
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from ..config import MAX_PARALLEL_QUESTIONS
+from langchain_core.runnables.config import ContextThreadPoolExecutor
 from ..prompts import prompt_template
+from ..tools import rework_note
 from ..schemas import DomainAssessment
 from ..rag import cache as rag_cache
 from ..rag.workflow import answer_with_cache
@@ -61,7 +62,8 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
     cache = rag_cache.load(state["trace_id"], "domain")
     tasks = [(tech, code, title, question)
              for tech in ("mla", "itme") for code, title, question in DIMENSIONS]
-    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
+    # contextvars(LangSmith 부모 run·실행 설정)를 워커 스레드로 복사한다.
+    with ContextThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
         answers = list(pool.map(
             lambda t: answer_with_cache(rag, cache, f"{t[0]} {t[1]} {t[2]}: {t[3]}", t[0], feedback), tasks))
     for (tech, code, title, question), answer in zip(tasks, answers):
@@ -73,7 +75,8 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
     assessed = llm.generate_structured(
         prompt_template("domain") + "\n" + "Evaluate each of D1–D7 for each technology separately. Return 14 distinct items; verdict only 적합/조건부/제약/근거 부족. "
         "If the underlying answer is insufficient, use 근거 부족, not assumed performance. Cite only listed IDs. "
-        "Do NOT award winner or aggregate numeric score.\n" + repr(research) + "\nSource excerpts:\n" + sources,
+        "Do NOT award winner or aggregate numeric score.\n" + repr(research) + "\nSource excerpts:\n" + sources
+        + rework_note(feedback),
         DomainAssessment,
     )
     valid_ids = {ev["source_id"] for ev in evidence}

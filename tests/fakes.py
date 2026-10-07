@@ -28,9 +28,13 @@ class SimulatedCrash(BaseException):
 class FakeRAG:
     def __init__(self):
         self.calls = 0
+        self.log: list[dict] = []  # 호출별 질문·재작업 지시·워커 스레드에서 본 실행 설정
 
     def rag_answer(self, question: str, technology_filter: str, feedback: dict | None = None) -> dict:
+        from langchain_core.runnables.config import var_child_runnable_config
         self.calls += 1
+        self.log.append({"question": question, "feedback": dict(feedback or {}),
+                         "config": var_child_runnable_config.get()})
         doc_id, number, tech = DOCS[technology_filter]
         page = int(sha256(question.encode()).hexdigest(), 16) % 40 + 1
         chunk_id = f"{doc_id}#p{page}#{sha256(question.encode()).hexdigest()[:6]}"
@@ -90,6 +94,7 @@ class FakeLLM:
         self.judge_fail = judge_fail or {}
         self.needs_source = needs_source or []
         self.runs: Counter = Counter()
+        self.prompts: dict[str, list[str]] = {}
 
     # 시장·이해관계자는 기술별로 2번 호출되므로 mla 호출에서만 실행 회차를 센다.
     def _run(self, agent: str, prompt: str) -> int:
@@ -102,6 +107,7 @@ class FakeLLM:
 
     def generate_structured(self, prompt: str, schema):
         agent = SCHEMA_AGENT[schema]
+        self.prompts.setdefault(agent, []).append(prompt)
         run = self._run(agent, prompt)
         if _runs_left(self.crash_on, agent, run):
             raise SimulatedCrash(f"{agent} crashed")

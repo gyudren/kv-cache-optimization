@@ -5,7 +5,7 @@ from ..prompts import prompt_template
 from hashlib import sha256
 from ..schemas import MarketAssessment
 
-from ..tools import retry_queries
+from ..tools import retry_queries, rework_note
 
 # 기준별(M1 시장 규모·성장, M2 상용화·채택, M3 생태계 지지) 검색어. (query, topic)
 # M1은 설계 C-2대로 "기술이 속한 시장"을 본다. M3의 공식 문서·릴리스 노트는 뉴스가 아니라 general로 찾는다.
@@ -55,7 +55,7 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
             "M2/M3 may also use family-level evidence (MLA: DeepSeek models built on MLA, serving frameworks with an MLA backend; "
             "ITME: SK hynix/CXL memory products) as long as the text labels it '계열 근거' and keeps it distinct from direct adoption of the exact technology. "
             "An explicit MLA kernel/backend in vLLM or SGLang is DIRECT ecosystem support for MLA.\n"
-            + "\n".join(f"{r['source_id']}: {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw),
+            + "\n".join(f"{r['source_id']}: {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw) + rework_note(feedback),
             MarketAssessment,
         )
         cited = [r for r in raw if r["source_id"] in set(assessment.cited_ids) & valid_ids]
