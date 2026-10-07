@@ -16,8 +16,9 @@ from urllib.parse import urlparse
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
-# 어느 관점에서도 입장 근거가 되지 못하는 영상·강의 사이트
-DEFAULT_EXCLUDED_DOMAINS = ["youtube.com", "udemy.com", "coursera.org"]
+# 어느 관점에서도 입장 근거가 되지 못하는 영상·강의 사이트와 SNS(게시물 본문이 검증 가능한 발췌로 남지 않는다)
+DEFAULT_EXCLUDED_DOMAINS = ["youtube.com", "udemy.com", "coursera.org",
+                            "instagram.com", "facebook.com", "tiktok.com", "x.com", "twitter.com", "pinterest.com"]
 
 # 이해관계자 전용 추가 제외: 프로필 페이지는 입장 표명이 아니고, 논문은 RAG 담당
 STAKEHOLDER_EXCLUDED_DOMAINS = DEFAULT_EXCLUDED_DOMAINS + ["linkedin.com", "arxiv.org"]
@@ -25,14 +26,21 @@ STAKEHOLDER_EXCLUDED_DOMAINS = DEFAULT_EXCLUDED_DOMAINS + ["linkedin.com", "arxi
 MIN_SCORE = 0.4  # Tavily 관련도 점수가 이보다 낮은 결과는 근거로 쓰지 않는다
 MAX_RESULTS = 4
 
+# 개인 의견 게시물. 개발자 반응의 보조 근거로만 쓰고 기업·시장·투자자 반응의 근거로는 쓰지 않는다.
+COMMUNITY_SPEAKER = "개인·커뮤니티 글"
+
 # 발언 주체 구분용 도메인 힌트(설계 C-3: 발언 주체를 함께 기록).
 # 최종 귀속은 Agent가 본문을 보고 판단하며, 여기서는 후보만 붙인다.
+# 순서대로 처음 맞는 유형을 붙인다. 개인·커뮤니티 글(포럼·HN·개인 블로그)은 다른 유형보다 먼저 판별한다
+# (예: discussion.fool.com은 투자 매체가 아니라 이용자 토론 게시판).
 SPEAKER_HINTS = {
+    COMMUNITY_SPEAKER: ("reddit.com", "news.ycombinator.com", "stackoverflow.com", "discussion.", "forum.",
+                        "forums.", "community.", ".github.io", "medium.com", "substack.com", "tistory.com",
+                        "velog.io", "brunch.co.kr", "dev.to", "hashnode."),
     "언론": ("reuters.", "bloomberg.", "cnbc.", "zdnet.", "theelec.", "hankyung.",
              "mk.co.kr", "etnews.", "chosun.", "yna.co.kr", "techcrunch."),
-    "개발자 커뮤니티": ("reddit.com", "news.ycombinator.com", "stackoverflow.com",
-                  "github.com", "huggingface.co"),
-    "기업·기술 블로그": ("medium.com", "blog.", "/blog", "substack.com"),
+    "개발자 공식 저장소": ("github.com", "huggingface.co"),
+    "기업·기술 블로그": ("blog.", "/blog"),
     "기업 공식 발표": ("nvidia.com", "skhynix.com", "samsung.com", "deepseek.com",
                  "micron.com", "intel.com", "amd.com"),
     "투자·애널리스트": ("seekingalpha.com", "morningstar.", "fool.com", "marketwatch."),

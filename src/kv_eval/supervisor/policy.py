@@ -7,17 +7,19 @@
 1) 근거가 없거나 부족하거나 실패한 관점 → 해당 관점만 (재)할당 (재시도 상한 안에서)
 2) 모든 관점이 결론 상태 → 종합 (종합이 특정 관점의 추가 근거를 요구하면 그 관점만 재조사)
 3) 종합 완료 → 보고서 (보고서는 품질 평가 노드를 거쳐 돌아온다)
-4) 평가 결과 → 통과면 종료, 미달이면 원인별 경로(관점 재조사 / 보고서 재작성)
+4) 평가 결과 → 통과면 종료, 미달이면 원인별 경로(원인이 관점이면 그 관점 재조사 / report면 보고서 재작성)
 상한(MAX_STEPS·재시도 한도)은 안전장치다. 도달하면 근거 공백을 기록하고 보고서까지 만든 뒤 종료한다.
+재시도 한도는 둘로 나뉜다. 충분성 재조사(1)는 RETRY_LIMITS, 종합·평가가 요청한 후속 재조사(2·4)는
+FOLLOWUP_LIMITS를 쓴다. 충분성 재조사가 한도를 다 써도 종합·평가가 지목한 관점은 따로 한 번 더 조사할 수 있다.
 """
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
-from ..config import FINALIZE_STEPS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS, recursion_limit_for
-from ..evaluation.quality import REINVESTIGATE_CRITERIA, REWRITE_CRITERIA, evidence_shortfalls
-from ..state import perspective
+from ..config import FINALIZE_STEPS, FOLLOWUP_LIMITS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS, recursion_limit_for
+from ..evaluation.quality import CRITERIA, evidence_shortfalls
+from ..state import followup_key, perspective
 from ..tools import TECH_TOKENS, mentioned_techs
 
 END_NODE = "__end__"
@@ -29,9 +31,13 @@ LABEL = {"tech": "기술 성숙도(TRL)", "market": "시장성", "stakeholder": 
 class Policy:
     max_steps: int = MAX_STEPS
     retry_limits: Mapping[str, int] = field(default_factory=lambda: MappingProxyType(dict(RETRY_LIMITS)))
+    followup_limits: Mapping[str, int] = field(default_factory=lambda: MappingProxyType(dict(FOLLOWUP_LIMITS)))
 
     def limit(self, name: str) -> int:
         return self.retry_limits.get(name, 0)
+
+    def followup_limit(self, name: str) -> int:
+        return self.followup_limits.get(name, 0)
 
     @property
     def recursion_limit(self) -> int:
@@ -67,6 +73,8 @@ EVAL_QUERY_HINTS = (
     ("우려 한쪽뿐", "adoption benefits positive outlook support"),
     ("단일 발행처", "independent analysis industry report"),
     ("고유 출처", "additional independent sources analysis"),
+    ("TRL", "production deployment commercial service availability"),
+    ("상용", "production deployment commercial service availability"),
 )
 GENERIC_EVAL_HINT = "independent sources limitations adoption evidence"
 SHORTFALL_HINT = "additional independent sources analysis"
@@ -144,6 +152,20 @@ class _Builder:
         self.updates["retry_counts"][name] = self.retry[name]
         if feedback is not None:
             self.updates["feedback"][name] = feedback
+
+    def can_followup(self, name: str) -> bool:
+        return self.retry.get(followup_key(name), 0) < self.policy.followup_limit(name)
+
+    def followup(self, names: list[str], feedback_by_name: dict[str, dict]) -> None:
+        """종합·평가가 지목한 관점을 후속 재조사 한도로 다시 보낸다(제외됐던 관점도 다시 조사 대상이 된다)."""
+        for name in names:
+            key = followup_key(name)
+            self.retry[key] = self.retry.get(key, 0) + 1
+            self.updates["retry_counts"][key] = self.retry[key]
+            self.updates["feedback"][name] = feedback_by_name[name]
+            self.updates["perspective_status"][name] = "pending"
+        self.run(*names)
+        self.invalidate_downstream()
 
     def run(self, *names: str) -> None:
         for name in names:
@@ -234,19 +256,19 @@ def _synthesis_step(b: _Builder, finalize: bool) -> Decision | None:
     if status != "done" or finalize:
         return None
     synthesis = state.get("synthesis") or {}
-    # 종합이 특정 관점의 추가 근거를 요구하면 그 관점만 재조사한다(한도 안에서).
+    # 종합이 특정 관점의 추가 근거를 요구하면 그 관점만 재조사한다(후속 재조사 한도 안에서).
     requested = [n for n in synthesis.get("needs_source_agents", []) if n in PERSPECTIVES]
-    rerun = [n for n in requested if classify(state, n) != "excluded" and b.can_retry(n)]
+    rerun = [n for n in requested if b.can_followup(n)]
+    gaps = synthesis.get("evidence_gaps", [])
     for name in requested:
         if name not in rerun:
-            b.gap(f"{name}: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족")
+            reason = next((str(g) for g in gaps if name in str(g)), "")
+            b.gap(f"{name}: 종합 단계에서 추가 근거가 필요하다고 판단했으나 후속 조사 한도 소진"
+                  + (f" — {reason[:160]}" if reason else ""))
     if rerun:
-        gaps = synthesis.get("evidence_gaps", [])
-        for name in rerun:
-            b.bump(name, _sufficiency_feedback([], [g for g in gaps if name in str(g)] or gaps))
-        b.run(*rerun)
-        b.invalidate_downstream()
-        return b.done(rerun, "dispatch:" + ",".join(rerun), "종합이 추가 근거를 요청한 관점만 재조사")
+        b.followup(rerun, {name: _sufficiency_feedback([], [g for g in gaps if name in str(g)] or gaps)
+                           for name in rerun})
+        return b.done(rerun, "dispatch:" + ",".join(rerun), "종합이 추가 근거를 요청한 관점만 재조사(후속 재조사)")
     if synthesis.get("needs_revision") and b.can_retry("synthesis"):
         b.bump("synthesis", {"issues": synthesis.get("evidence_gaps", [])})
         b.run("synthesis")
@@ -301,37 +323,34 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
     if finalize:
         return b.end("end:step_limit", f"단계 상한 도달 — 품질 평가 미달 항목 {failed} 남김", verified=False)
 
-    # (a) 편향 통제·관점 커버리지 미달 → 원인 관점만 재조사
+    # (a) 미달 원인이 관점 에이전트인 항목(편향·커버리지, 또는 에이전트 판정을 옮긴 표의 근거·중립성 결함) → 그 관점만 재조사
     issues_by_agent: dict[str, list[str]] = {}
-    for name in REINVESTIGATE_CRITERIA:
+    for name in CRITERIA:
         c = criteria.get(name, {})
         if c.get("passed"):
             continue
         for agent in c.get("target_agents", []):
             if agent in PERSPECTIVES:
                 own = [i for i in c.get("rule", {}).get("issues", []) if i.startswith(agent)]
-                issues_by_agent.setdefault(agent, []).extend(own or [f"{name}: {c.get('reason', '')[:200]}"])
-    rerun = [a for a in issues_by_agent if classify(state, a) != "excluded" and b.can_retry(a)]
+                issues_by_agent.setdefault(agent, []).extend(own or [f"{name}: {c.get('reason', '')[:300]}"])
+    rerun = [a for a in issues_by_agent if b.can_followup(a)]
     for agent, issues in issues_by_agent.items():
         if agent in rerun:
             continue
         for issue in issues:  # 재조사 불가: 근거 공백으로 명시하고 보고서에 드러낸다
             b.gap(issue if issue.startswith(f"{agent}/") or issue.startswith(f"{agent}:")
-                  else f"{agent}: 품질 평가 미달, 재조사 한도 소진 — {issue[:200]}")
+                  else f"{agent}: 품질 평가 미달, 후속 조사 한도 소진 — {issue[:200]}")
     if rerun:
-        for agent in rerun:
-            b.bump(agent, _eval_feedback(issues_by_agent[agent]))
-        b.run(*rerun)
-        b.invalidate_downstream()
+        b.followup(rerun, {agent: _eval_feedback(issues_by_agent[agent]) for agent in rerun})
         return b.done(rerun, "reinvestigate:" + ",".join(rerun),
-                      "품질 평가 편향·커버리지 미달 → 원인 관점만 재조사: "
+                      "품질 평가 미달 원인 관점만 재조사: "
                       + "; ".join(i for a in rerun for i in issues_by_agent[a])[:300])
 
-    # (b) Groundedness·중립성 미달(또는 새 근거 공백 반영 필요) → 보고서 재작성
+    # (b) 원인이 보고서 서술인 항목(또는 새 근거 공백 반영 필요) → 보고서 재작성
     rewrite_issues = []
-    for name in (*REWRITE_CRITERIA, *REINVESTIGATE_CRITERIA):
+    for name in CRITERIA:
         c = criteria.get(name, {})
-        if not c.get("passed") and (name in REWRITE_CRITERIA or "report" in c.get("target_agents", [])):
+        if not c.get("passed") and "report" in c.get("target_agents", []):
             rewrite_issues.extend(c.get("rule", {}).get("issues", []) or [c.get("reason", "")])
     if b.updates["gaps"]:
         rewrite_issues.append("Supervisor가 새로 기록한 근거 공백을 7장 한계점에 근거 부족으로 명시할 것")

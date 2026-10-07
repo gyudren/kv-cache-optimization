@@ -173,15 +173,60 @@ def evidence_balance_table(state: dict) -> str:
     return "\n".join(rows)
 
 
+GAP_LABEL = {"tech": "기술 성숙도(TRL)", "market": "시장성", "stakeholder": "이해관계자", "domain": "도메인 적용성",
+             "synthesis": "종합", "report": "보고서", "quality_evaluator": "품질 평가"}
+TECH_NAME = {"mla": "MLA", "itme": "ITME"}
+# Supervisor 기록에서 내부 처리 이력(재시도 횟수·한도)은 빼고 "무엇을 확인하지 못했는가"만 남긴다.
+_PROCESS_WORDING = (
+    (r"^[^—]*?재조사 \d+회 후에도 근거 부족 — ", ""),
+    (r"단계 상한\(MAX_STEPS\) 도달로 .+? 추가 조사 중단 — 근거 부족", "조사 단계 상한에 도달해 추가 조사를 멈춤"),
+    (r"종합 단계에서 추가 근거가 필요하다고 판단했으나 후속 조사 한도 소진", "종합 단계에서 추가 근거가 필요하다고 판단됨"),
+    (r"품질 평가 미달, 후속 조사 한도 소진 — ", "품질 평가 지적: "),
+    (r"에이전트 실행 실패로 제외\(.*?\) — 근거 부족", "에이전트 실행 실패로 결과 없음"),
+)
+MAX_GAP_ITEMS = 4  # 관점당 표시 항목 수(나머지는 validation.json의 gaps에 남는다)
+
+
+def readable_gaps(gaps: list[str]) -> dict[str, list[str]]:
+    """Supervisor gaps를 관점별 사람이 읽는 항목으로 묶는다(중복 제거, 내부 처리 문구 제거)."""
+    grouped: dict[str, list[str]] = {}
+    for gap in gaps:
+        match = re.match(r"^(\w+)(?:/(mla|itme))?:\s*(.*)$", str(gap), re.S)
+        name, tech, text = match.groups() if match else ("기타", None, str(gap))
+        for pattern, repl in _PROCESS_WORDING:
+            text = re.sub(pattern, repl, text)
+        for item in (s.strip() for s in text.split(";")):
+            item = re.sub(r"^(\w+)/(mla|itme):\s*", lambda m: f"{TECH_NAME[m.group(2)]}: ", item)
+            if item and item != "근거 부족":
+                grouped.setdefault(name, []).append(f"{TECH_NAME[tech]}: {item}" if tech else item)
+    return {name: list(dict.fromkeys(items)) for name, items in grouped.items()}
+
+
 def gap_section(state: dict) -> str:
     """Supervisor가 재시도 상한·실행 실패로 남긴 근거 공백을 코드가 직접 7장에 적는다.
 
-    LLM 서술에만 맡기면 공백이 빠질 수 있으므로, State의 gaps를 그대로 옮긴다.
+    LLM 서술에만 맡기면 공백이 빠질 수 있으므로 State의 gaps를 옮기되, 내부 로그 문장이 아니라
+    관점별로 묶은 읽을 수 있는 목록으로 적는다.
     """
-    gaps = state.get("gaps") or []
-    if not gaps:
+    grouped = readable_gaps(state.get("gaps") or [])
+    if not grouped:
         return ""
-    return "#### 근거 공백 (Supervisor 기록)\n" + "\n".join(f"- 근거 부족: {_cell(gap)}" for gap in gaps) + "\n\n"
+    lines = []
+    for name, items in grouped.items():
+        more = f" 외 {len(items) - MAX_GAP_ITEMS}건" if len(items) > MAX_GAP_ITEMS else ""
+        lines.append(f"- **{GAP_LABEL.get(name, name)}** — 근거 부족: "
+                     + "; ".join(_cell(i) for i in items[:MAX_GAP_ITEMS]) + more)
+    return "#### 근거 공백 (Supervisor 기록)\n" + "\n".join(lines) + "\n\n"
+
+
+MAX_OPTIONAL_IN_PROMPT = 8  # 관점별 선택 미확인 항목을 프롬프트에 넣는 상한(전체는 final_state에 남는다)
+
+
+def report_view(state: dict, name: str) -> dict:
+    view = prompt_view(perspective(state, name))
+    if view.get("missing_optional"):
+        view = {**view, "missing_optional": view["missing_optional"][:MAX_OPTIONAL_IN_PROMPT]}
+    return view
 
 
 def render_report(state: dict, llm: Any) -> str:
@@ -229,7 +274,11 @@ def render_report(state: dict, llm: Any) -> str:
         "an evidence balance table is appended by code. "
         "No ranking/endorsement. No invented deployment or quantitative results. "
         "Use the EXACT citation strings from the verified source catalog ([n, p.X] or [Wn]) after every supported fact. "
-        "Never cite non-catalog IDs. If evidence is missing, write 근거 부족 and show the gap. Keep design category labels unchanged. "
+        "Never cite non-catalog IDs. Keep design category labels unchanged. "
+        "Write 근거 부족 only for a verdict or required fact that has no supporting source; elsewhere state what WAS confirmed and "
+        "name an unconfirmed point once instead of repeating 근거 부족 in every sentence. Each agent's missing_optional lists details "
+        "it could not confirm; mention them only in limitations as one short grouped list. Never copy internal process wording "
+        "(재조사 횟수, 한도, Supervisor 단계, 종합 단계 요청) into the prose; the code appends the supervisor gap list. "
         "Every number must literally appear in the excerpt of the catalog entry you cite; a figure found only in a web article must be cited "
         "to that [Wn] as a third-party report, never to a paper citation. Do not describe a web source beyond what its excerpt says. "
         "Statements taken from the team design document (selection reasons, non-selected candidates, KV cache scale assumptions) "
@@ -237,8 +286,9 @@ def render_report(state: dict, llm: Any) -> str:
         "The following signal tables are inserted verbatim by the code; your narrative MUST use exactly the same verdicts "
         "(if you believe a verdict is wrong, explain the nuance but do not state a different verdict):\n"
         + "\n\n".join(f"[{k}]\n{v}" for k, v in tables.items()) + "\n"
-        + repr({**{k: prompt_view(perspective(state, k)) for k in PERSPECTIVES}, "synthesis": state.get("synthesis", {})})
-        + "\nEvidence gaps recorded by the supervisor (state them under limitations as 근거 부족): " + repr(state.get("gaps", []))
+        + repr({**{k: report_view(state, k) for k in PERSPECTIVES}, "synthesis": state.get("synthesis", {})})
+        + "\nEvidence gaps recorded by the supervisor (summarise them under limitations as 근거 부족, grouped by perspective): "
+        + repr(readable_gaps(state.get("gaps", [])))
         + "\nVerified source catalog:\n" + repr(citation_context), ReportParts,
     )
     parts = {k: normalize_citations(sanitize_field(v)) for k, v in sections.model_dump().items()}

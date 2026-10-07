@@ -10,7 +10,7 @@ reducer로 병합 규칙을 정한다(reducer가 없으면 InvalidUpdateError �
 """
 from __future__ import annotations
 from typing import Annotated, Any, Literal, TypedDict
-from .config import PERSPECTIVES, RETRY_LIMITS, STATE_EXCERPT_CHARS
+from .config import FOLLOWUP_LIMITS, PERSPECTIVES, RETRY_LIMITS, STATE_EXCERPT_CHARS
 
 NodeStatus = Literal["pending", "running", "done", "failed", "skipped"]  # skipped = 실패 후 한도 소진(공백 기록)
 # 관점별 근거 충분도. excluded = 재시도 상한을 넘겨 근거 공백으로 기록하고 제외한 관점
@@ -28,12 +28,16 @@ def evidence_key(ev: dict) -> tuple[str, str, object]:
 
 
 def merge_evidence(left: list[dict] | None, right: list[dict] | None) -> list[dict]:
-    """dedup-append. 재시도로 같은 근거가 다시 들어와도 한 번만 남기고, 발췌는 STATE_EXCERPT_CHARS로 제한한다.
+    """에이전트 단위 교체 + dedup-append. 발췌는 STATE_EXCERPT_CHARS로 제한한다.
 
+    에이전트가 다시 실행되면 그 에이전트의 이번 결과가 전체 근거다(충분했던 RAG 답은 캐시에서 다시 실려 온다).
+    이전 시도 근거를 남겨 두면 보고서·편향 검사가 지금은 쓰지 않는 근거까지 세므로, 새 쓰기에 `agent`가 있는
+    근거가 들어오면 같은 agent의 기존 근거를 먼저 지운다. agent가 없는 입력(seed·테스트)은 그대로 이어 붙인다.
     원문은 작업 노드 경계(guard)에서 evidence_store로 먼저 옮겨지고 excerpt_ref가 붙는다. 여기의 자르기는
     그 경로를 거치지 않은 입력(초기 seed 등)까지 State 크기를 보장하는 마지막 상한이다.
     """
-    out = list(left or [])
+    replaced = {ev.get("agent") for ev in right or []} - {None}
+    out = [ev for ev in left or [] if ev.get("agent") not in replaced]
     seen = {evidence_key(ev) for ev in out}
     for ev in right or []:
         key = evidence_key(ev)
@@ -78,7 +82,7 @@ def initial_state(query: str, trace_id: str, seed: dict | None = None) -> GraphS
     state: GraphState = {
         "user_query": query, "trace_id": trace_id, "step_count": 0, "next_agents": [],
         "perspective_status": {name: "pending" for name in PERSPECTIVES},
-        "retry_counts": {name: 0 for name in RETRY_LIMITS},
+        "retry_counts": {**{name: 0 for name in RETRY_LIMITS}, **{followup_key(name): 0 for name in FOLLOWUP_LIMITS}},
         "node_status": {name: "pending" for name in (*PERSPECTIVES, "synthesis", "report", "quality_evaluator")},
         "last_error": {}, "feedback": {}, "eval_result": {}, "last_decision": {}, "gaps": [],
         "status": "running",
@@ -90,6 +94,17 @@ def initial_state(query: str, trace_id: str, seed: dict | None = None) -> GraphS
 
 def perspective(state: dict, name: str) -> dict:
     return (state.get("perspectives") or {}).get(name) or {}
+
+
+def followup_key(name: str) -> str:
+    """종합·평가가 요청한 후속 재조사 횟수를 세는 retry_counts 키(충분성 재조사 횟수와 따로 센다)."""
+    return f"{name}:followup"
+
+
+def attempt_of(state: dict, name: str) -> int:
+    """관점 에이전트의 시도 번호 = 충분성 재조사 + 후속 재조사 횟수(Evidence의 attempt 표기용)."""
+    counts = state.get("retry_counts") or {}
+    return int(counts.get(name, 0)) + int(counts.get(followup_key(name), 0))
 
 
 def deduplicate_evidence(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

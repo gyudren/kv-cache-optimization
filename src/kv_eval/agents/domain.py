@@ -9,6 +9,7 @@ from ..tools import rework_note
 from ..schemas import DomainAssessment
 from ..rag import cache as rag_cache
 from ..rag.workflow import answer_with_cache
+from ..state import attempt_of
 
 DIMENSIONS = [
     ("D1", "워크로드 수용 능력", "context and concurrent requests given constrained GPU memory"),
@@ -53,12 +54,32 @@ def normalize_items(items: list[dict], evidence: list[dict]) -> list[dict]:
     return out
 
 
+SINGLE_DOC_NOTE = " (근거가 원문 1편의 저자 보고에 한정되어 '조건부'로 둠)"
+
+
+def downgrade_single_document(items: list[dict], evidence: list[dict]) -> list[dict]:
+    """'적합' 판정의 근거 문서가 1편뿐이면 '조건부'로 낮춘다.
+
+    도메인 평가는 설계상 각 기술의 원문 1편만 근거로 쓴다. 같은 논문의 여러 페이지는 독립 출처가 아니므로,
+    저자 보고 하나로 '적합'을 확정하지 않고 독립 재현이 필요하다는 조건을 판정에 남긴다.
+    """
+    doc_of = {ev["source_id"]: ev.get("doc_id") for ev in evidence}
+    out = []
+    for item in items:
+        docs = {doc_of[cid] for cid in item.get("cited_ids", []) if doc_of.get(cid)}
+        if item.get("verdict") == "적합" and len(docs) <= 1:
+            item = {**item, "verdict": "조건부", "explanation": item.get("explanation", "") + SINGLE_DOC_NOTE}
+        out.append(item)
+    return out
+
+
 def domain_node(state: dict, rag: Any, llm: Any) -> dict:
-    attempt = state["retry_counts"]["domain"]
+    attempt = attempt_of(state, "domain")
     feedback = state.get("feedback", {}).get("domain", {})
     research = []
     evidence = []
-    missing = []
+    missing = []    # 필수 결함(14개 판정 불완전·없는 출처·인용 없는 판정): Supervisor 재조사 대상
+    optional = []   # RAG·LLM이 적은 세부 미확인 항목(GPU 종류·동시 요청 수 등): 보고서 한계점에만 기록
     cache = rag_cache.load(state["trace_id"], "domain")
     tasks = [(tech, code, title, question)
              for tech in ("mla", "itme") for code, title, question in DIMENSIONS]
@@ -69,7 +90,7 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
     for (tech, code, title, question), answer in zip(tasks, answers):
         research.append({"technology": tech, "dimension": f"{code} {title}", "question": question,
                          "answer": answer["answer"], "sufficient": answer["sufficient"]})
-        missing.extend(answer["missing"])
+        optional.extend(answer["missing"])
         evidence.extend({**item, "agent": "domain", "attempt": attempt} for item in answer["evidence"])
     sources = "\n".join(f"{ev['source_id']}: [{ev['citation_number']}, p.{ev['page']}] {ev['excerpt'][:320]}" for ev in evidence)
     assessed = llm.generate_structured(
@@ -80,20 +101,22 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
         DomainAssessment,
     )
     valid_ids = {ev["source_id"] for ev in evidence}
-    items = normalize_items([item.model_dump() for item in assessed.items], evidence)
+    items = downgrade_single_document(normalize_items([item.model_dump() for item in assessed.items], evidence), evidence)
     expected = {(tech, f"{code} {title}") for tech in ("mla", "itme") for code, title, _ in DIMENSIONS}
     actual = {(item["technology"], item["dimension"]) for item in items}
     if actual != expected or len(items) != 14:
-        missing.append("D1~D7 각 기술의 14개 평가 결과 불완전")
+        missing.append("domain: D1~D7 각 기술의 14개 평가 결과 불완전")
     for item in items:
         if any(cid not in valid_ids for cid in item["cited_ids"]):
-            missing.append(f"{item['technology']}/{item['dimension']}: 존재하지 않는 문헌 출처")
+            missing.append(f"domain/{item['technology']}: {item['dimension']} 존재하지 않는 문헌 출처")
         if item["verdict"] != "근거 부족" and not item["cited_ids"]:
-            missing.append(f"{item['technology']}/{item['dimension']}: 판정 근거 인용 없음")
-    missing.extend(assessed.missing)
+            missing.append(f"domain/{item['technology']}: {item['dimension']} 판정 근거 인용 없음")
+    optional.extend(assessed.missing)
+    missing = list(dict.fromkeys(missing))
     cached = {f"{t[0]} {t[1]} {t[2]}: {t[3]}": answer for t, answer in zip(tasks, answers)}
     return {"perspectives": {"domain": {**assessed.model_dump(), "items": items, "attempt": attempt,
-                                        "sufficient": assessed.sufficient and not bool(missing),
-                                        "missing": list(dict.fromkeys(missing))}},
+                                        "llm_sufficient": assessed.sufficient,
+                                        "sufficient": not missing, "missing": missing,
+                                        "missing_optional": list(dict.fromkeys(optional))}},
             "cache_keys": {"domain": rag_cache.save(state["trace_id"], "domain", cached)},
             "evidence": evidence}

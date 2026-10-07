@@ -6,6 +6,7 @@ from hashlib import sha256
 from ..schemas import MarketAssessment
 
 from ..tools import retry_queries, rework_note
+from ..state import attempt_of
 
 # 기준별(M1 시장 규모·성장, M2 상용화·채택, M3 생태계 지지) 검색어. (query, topic)
 # M1은 설계 C-2대로 "기술이 속한 시장"을 본다. M3의 공식 문서·릴리스 노트는 뉴스가 아니라 general로 찾는다.
@@ -27,12 +28,17 @@ MARKET_QUERIES = {
 }
 
 
+# 기준별 판정 필드. 하나라도 근거로 판정했으면 관점 결과가 성립한다(나머지 기준의 공백은 표에 '근거 부족'으로 남는다).
+CRITERION_VERDICTS = ("market_size_growth_verdict", "adoption_verdict", "ecosystem_verdict")
+
+
 def market_node(state: dict, web: Any, llm: Any) -> dict:
-    attempt = state["retry_counts"]["market"]
+    attempt = attempt_of(state, "market")
     feedback = state.get("feedback", {}).get("market", {})
     results: dict = {}
     evidence: list[dict] = []
-    missing: list[str] = []
+    missing: list[str] = []    # 필수 결함(출처·인용·판정 없음): Supervisor 재조사 대상
+    optional: list[str] = []   # LLM이 적은 세부 미확인 항목(CAGR 방법론 등): 보고서 한계점에만 기록
     for tech, name in (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME CXL hybrid memory")):
         found = []
         queries = MARKET_QUERIES[tech] + [(q, "news") for q in retry_queries(name, feedback, tech=tech)]
@@ -43,7 +49,7 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
         raw = [{**r, "source_id": f"web:{tech}:{sha256(r['url'].encode()).hexdigest()[:14]}"} for r in sources.values()]
         valid_ids = {r["source_id"] for r in raw}
         if not raw:
-            missing.append(f"{name}: 시장·채택·생태계 웹 근거 없음")
+            missing.append(f"market/{tech}: 시장·채택·생태계 웹 검색 결과 없음")
             results[tech] = {"sufficient": False, "missing": [missing[-1]], "summary": "근거 부족"}
             continue
         assessment = llm.generate_structured(
@@ -54,21 +60,29 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
             "Per design C-2, M1 judges the market the technology BELONGS TO (MLA: LLM inference serving/optimization; ITME: CXL memory). "
             "M2/M3 may also use family-level evidence (MLA: DeepSeek models built on MLA, serving frameworks with an MLA backend; "
             "ITME: SK hynix/CXL memory products) as long as the text labels it '계열 근거' and keeps it distinct from direct adoption of the exact technology. "
-            "An explicit MLA kernel/backend in vLLM or SGLang is DIRECT ecosystem support for MLA.\n"
+            "An explicit MLA kernel/backend in vLLM or SGLang is DIRECT ecosystem support for MLA. "
+            "MLA is the attention architecture of DeepSeek-V2/V3/R1, so DeepSeek's own API/app serving these models and cloud catalogs "
+            "offering them are DIRECT commercial adoption evidence for MLA (M2), not merely family-level evidence. "
+            "Put only facts you could not confirm in missing; they are reported as limitations.\n"
             + "\n".join(f"{r['source_id']}: {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw) + rework_note(feedback),
             MarketAssessment,
         )
         cited = [r for r in raw if r["source_id"] in set(assessment.cited_ids) & valid_ids]
-        issues = list(assessment.missing)
+        issues = []
         if not cited:
-            issues.append(f"{name}: 검증 가능한 출처 인용 없음")
+            issues.append(f"market/{tech}: 검증 가능한 출처 인용 없음")
+        if not any(getattr(assessment, field) for field in CRITERION_VERDICTS):
+            issues.append(f"market/{tech}: M1~M3 어느 기준도 판정하지 못함")
         missing.extend(issues)
-        results[tech] = {**assessment.model_dump(), "sufficient": assessment.sufficient and bool(cited) and not bool(issues), "missing": issues}
+        optional.extend(assessment.missing)
+        results[tech] = {**assessment.model_dump(), "llm_sufficient": assessment.sufficient,
+                         "sufficient": not issues, "missing": issues}
         evidence.extend({"source_id": r["source_id"], "agent": "market", "attempt": attempt,
                          "claim": f"{name}: 시장·채택·생태계", "excerpt": r["excerpt"],
                          "technology": tech, "source_type": "web", "url": r["url"], "title": r["title"],
                          "publisher": r["publisher"], "published_at": r["published_at"]} for r in cited)
     return {"perspectives": {"market": {"technologies": results, "attempt": attempt,
                                        "sufficient": all(r.get("sufficient", False) for r in results.values()),
-                                       "missing": list(dict.fromkeys(missing))}},
+                                       "missing": list(dict.fromkeys(missing)),
+                                       "missing_optional": list(dict.fromkeys(optional))}},
             "evidence": evidence}

@@ -11,12 +11,12 @@
 1. `groundedness` (Groundedness)
    - 인용된 발췌(excerpt)가 해당 문장의 주장과 수치를 실제로 뒷받침하는가?
    - 웹 기사에만 있는 수치를 논문 인용으로 붙이지 않았는가?
-   - `[D]`는 팀 설계 문서의 전제다. 조사 근거를 요구하지 말고 KV cache 표 산식만 확인한다.
-   - 미달 시 `target_agent = "report"`.
+   - `[D]`는 팀 설계 문서의 전제다. 1·2장의 설계 전제에만 쓸 수 있으며 조사 근거를 요구하지 말고 KV cache 표 산식만 확인한다.
+   - 미달 시 원인을 지목한다. 결함이 4.1 TRL 표, 4.2·4.3 판정표, 4.4 D1-D7 판정표처럼 코드가 에이전트 결과를 그대로 옮긴 부분이거나 그 판정을 되풀이한 서술에 있으면 해당 Agent(`tech`, `market`, `stakeholder`, `domain`)를, 보고서가 새로 쓴 서술의 문제이면 `report`를 `target_agent`로 지정한다. (예: 4.1 TRL 표의 판정·근거가 보고서가 인용한 발췌와 충돌 → `tech`)
 2. `neutrality` (중립성)
    - 순위, 승자, 단일 추천, "더 낫다"류의 암묵적 우열 판정이 없는가?
    - 두 기술을 같은 형식(쟁점/관점 A/관점 B/이유)으로 병기했는가?
-   - 미달 시 `target_agent = "report"`.
+   - 미달 시 원인을 지목한다. 에이전트 판정을 옮긴 표나 그 서술이 원인이면 해당 Agent를, 보고서 서술이면 `report`를 지정한다.
 3. `bias_control` (편향 통제)
    - 긍정 근거와 우려 근거를 모두 보존했는가? 불리한 근거를 빼지 않았는가?
    - 한 기술·한 관점의 판정이 단일 출처나 한쪽 방향 근거에 기대고 있지 않은가?
@@ -53,8 +53,8 @@
 ### 반환 형식
 
 {
-  "groundedness": {"passed": false, "score": 1, "reason": "", "target_agent": "report"},
-  "neutrality": {"passed": false, "score": 1, "reason": "", "target_agent": "report"},
+  "groundedness": {"passed": false, "score": 1, "reason": "", "target_agent": "report | tech | market | stakeholder | domain"},
+  "neutrality": {"passed": false, "score": 1, "reason": "", "target_agent": "report | tech | market | stakeholder | domain"},
   "bias_control": {"passed": false, "score": 1, "reason": "", "target_agent": "market | stakeholder | domain | tech | null"},
   "coverage": {"passed": false, "score": 1, "reason": "", "target_agent": "market | stakeholder | domain | tech | null"}
 }

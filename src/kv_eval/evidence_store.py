@@ -88,10 +88,14 @@ def missing_full_text(evidence: list[dict]) -> int:
 
 
 def source_unit(ev: dict) -> str:
-    """고유 출처 단위: 웹은 URL, 논문은 (문서, 페이지)."""
+    """고유 출처 단위: 웹은 URL(문서 1건), 논문은 문서(doc_id).
+
+    같은 논문의 다른 페이지는 독립 출처가 아니다. 페이지 단위로 세면 논문 1편만으로도 '고유 출처 2개 이상'을
+    통과해 단일 저자 보고에 기댄 판정이 편향 검사를 빠져나간다.
+    """
     if ev.get("source_type") == "web":
         return ev.get("url", "")
-    return f"{ev.get('doc_id')}:{ev.get('page')}"
+    return f"doc:{ev.get('doc_id')}"
 
 
 def source_units(evidence: list[dict]) -> dict[str, list[str]]:

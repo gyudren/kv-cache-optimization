@@ -2,8 +2,8 @@
 
 | 항목 | 규칙 검사(결정적) | LLM Judge | 미달 시 경로 |
 |---|---|---|---|
-| groundedness | validate_report(목차·인용·REFERENCE·10p) + 수치 문장 인용 필수 | 발췌가 주장을 뒷받침하는가 | 보고서 재작성 |
-| neutrality | 우열·추천 표현 탐지(부정·면책 문장은 제외) | 암묵적 우열 판정 | 보고서 재작성 |
+| groundedness | validate_report(목차·인용·REFERENCE·10p) + 수치 문장 인용 필수([D]는 1·2장 설계 전제에만) | 발췌가 주장을 뒷받침하는가 | 보고서 재작성 (결함이 에이전트 판정에서 왔으면 그 관점 재조사) |
+| neutrality | 두 기술 간 비교 우열·추천·지시 표현 탐지(바로 뒤가 부정이면 제외) | 암묵적 우열 판정 | 보고서 재작성 (에이전트 판정에서 왔으면 그 관점 재조사) |
 | bias_control | 기술·관점별 고유 출처 ≥2, 웹 단일 발행처 비중 상한, 긍정·우려 양방향 근거 | 한쪽 근거 편중 | 원인 관점 재조사 |
 | coverage | 4.1~4.4 서술·판정표 존재, 두 기술 모두 기재, 관점 결과 존재 | 4관점 실질 서술 | 원인 관점 재조사 |
 
@@ -25,18 +25,29 @@ from ..schemas import EvalVerdict
 from ..state import deduplicate_evidence, perspective
 
 CRITERIA = ("groundedness", "neutrality", "bias_control", "coverage")
-# 미달 원인별 경로: 보고서 표현 문제는 재작성, 근거 수집 문제는 원인 관점 재조사
+# 항목별 기본 경로(원인 미특정 시): 보고서 표현 문제는 재작성, 근거 수집 문제는 원인 관점 재조사.
+# 실제 경로는 항목이 아니라 원인(target_agents)이 정한다: 관점이면 재조사, report면 재작성.
 REWRITE_CRITERIA = ("groundedness", "neutrality")
 REINVESTIGATE_CRITERIA = ("bias_control", "coverage")
+# 코드가 에이전트 결과를 그대로 옮기는 보고서 부분(Judge가 원인 에이전트를 지목할 때 참고)
+AGENT_SOURCED_SECTIONS = {"4.1 TRL 표": "tech", "4.2 시장성 판정표": "market",
+                          "4.3 이해관계자 판정표": "stakeholder", "4.4 D1-D7 판정표": "domain"}
 TECHS = ("mla", "itme")
 SECTION_PERSPECTIVE = {"4.1": "tech", "4.2": "market", "4.3": "stakeholder", "4.4": "domain"}
 
-# 우열·추천 표현. "추천하지 않는다", "승자 대신" 같은 면책 문장은 NEGATION으로 걸러낸다.
-BANNED_PHRASES = re.compile(r"(추천|우월|우위|승자|우승|더\s*낫|더\s*우수|압도적|최선의\s*선택|최고의|1위|채택해야|도입해야)")
-NEGATION = re.compile(r"(않|아니|없|대신|금지|배제|지양|말고)")
+# 중립성 규칙: 두 평가 대상 사이의 우열·추천·지시만 잡는다. 단어 하나("추천", "1위", "도입해야")로 잡으면
+# "단일 추천을 제시하지 않는다", "HBM 시장 1위 [W3]", "CXL 스위치를 도입해야 한다(전제조건)" 같은 정상 문장을 오탐하고,
+# 문장 어디에든 부정어가 있으면 면제하던 방식은 "MLA가 ITME보다 우수하지만 비용은 확인되지 않았다"를 놓쳤다.
+_TECH = r"(MLA|ITME|SW|HW|소프트웨어|하드웨어)"
+COMPARATIVE = re.compile(rf"{_TECH}\S*\s*보다\s*[^.。|]{{0,20}}?((더\s*)?(우수|우월|뛰어나|낫|효율적|유리|앞서|성숙|적합|빠르))")
+ENDORSEMENT = re.compile(r"(추천한다|추천됨|권장한다|권고한다|승자|우승|압도적|최선의\s*선택|최고의\s*(기술|선택)|능가|우위에\s*있|우위를\s*점)")
+TECH_DIRECTIVE = re.compile(r"((MLA|ITME)\S*\s*(을|를)?\s*(우선\s*)?(채택|도입|선택)(해야|하라|할\s*것을))")
+# 표현 바로 뒤(25자 안)의 부정·유보("우수하다고 단정할 수 없다", "승자를 정하지 않는다")만 면제한다.
+NEARBY_NEGATION = re.compile(r"^[^.。|]{0,25}?(않|아니|없|어렵|판단하지|가리지|정하지)")
 # 단위가 붙은 수치(성능·용량·비율). TRL 같은 등급 숫자나 날짜는 대상이 아니다.
 QUANTITY = re.compile(r"\d[\d,.]*\s*(%|배|×|GB|GiB|TB|TiB|MB|ms|μs|us\b|tokens?\b|토큰|tok/s|req/s|x\b)")
-ANY_CITATION = re.compile(r"\[\d+,\s*p\.\d+\]|\[W\d+\]|\[D\]")
+EVIDENCE_CITATION = re.compile(r"\[\d+,\s*p\.\d+\]|\[W\d+\]")
+DESIGN_CHAPTERS = ("SUMMARY", "1", "2")  # 팀 설계 문서 [D]를 근거로 쓸 수 있는 장(배경·선정, 요약의 설계 전제)
 POSITIVE = {"긍정", "적합"}
 CONCERN = {"우려", "제약"}
 MIXED = {"혼재", "조건부"}  # 조건부 = 조건이 붙은 적합 → 긍정·우려 양쪽 근거를 함께 담은 판정
@@ -48,6 +59,18 @@ VERDICT_FIELDS = {
 
 def _body(report: str) -> str:
     return report.split("\n## REFERENCE", 1)[0]
+
+
+def _chapters(body: str) -> list[tuple[str, str]]:
+    """'## ' 장 단위로 나눈다. 장 키는 SUMMARY 또는 장 번호("1"~"7")."""
+    out = []
+    for block in re.split(r"(?m)^## ", body):
+        if not block.strip():
+            continue
+        heading, _, text = block.partition("\n")
+        number = re.match(r"\s*(\d+)\.", heading)
+        out.append((number.group(1) if number else heading.strip().split()[0] if heading.strip() else "", text))
+    return out
 
 
 def _sentences(text: str) -> list[str]:
@@ -76,6 +99,11 @@ def _acknowledged(state: dict, name: str, tech: str) -> bool:
     return excluded and any(gap.startswith(f"{name}:") for gap in gaps)
 
 
+# 고유 출처 수 규칙을 적용하는 관점. 도메인 평가는 설계상 각 기술의 원문 1편만 근거로 쓰므로(문서 단위로 세면
+# 항상 1개) 이 규칙 대신 '단일 문헌 근거의 적합 → 조건부' 하향으로 단일 출처 위험을 판정에 드러낸다(agents/domain.py).
+SOURCE_RULE_PERSPECTIVES = ("tech", "market", "stakeholder")
+
+
 def evidence_shortfalls(state: dict, name: str) -> list[dict]:
     """관점·기술별 고유 출처 수 결정적 검사(Supervisor 충분성 검증과 편향 규칙이 함께 쓴다).
 
@@ -83,6 +111,8 @@ def evidence_shortfalls(state: dict, name: str) -> list[dict]:
     누적하면 매 시도 1개씩만 찾아도 합쳐서 2개가 되어 통과하므로 누적하지 않는다. source_units가 없는
     이전 형식 State에서만 누적 evidence로 센다.
     """
+    if name not in SOURCE_RULE_PERSPECTIVES:
+        return []
     result = perspective(state, name)
     latest = result.get("source_units")
     evidence = None if latest is not None else deduplicate_evidence(state.get("evidence", []))
@@ -106,24 +136,33 @@ def check_groundedness(state: dict) -> dict:
     validation = validate_report(report, state.get("evidence", []))
     issues = list(validation["issues"])
     static = {line.strip() for line in KV_SCALE_TABLE.splitlines()} | set(_sentences(KV_SCALE_FORMULA))
-    for sentence in _sentences(_body(report)):
-        if sentence in static or not QUANTITY.search(sentence):
-            continue
-        if not ANY_CITATION.search(sentence):
-            issues.append(f"수치 문장에 인용 없음: {sentence[:120]}")
+    for chapter, text in _chapters(_body(report)):
+        design_ok = chapter in DESIGN_CHAPTERS
+        for sentence in _sentences(text):
+            if sentence in static or not QUANTITY.search(sentence):
+                continue
+            # [D](팀 설계 문서)는 1·2장의 설계 전제에만 근거가 된다. 다른 장의 수치를 [D]로 막으면 조사 근거 검사를 우회한다.
+            cited = EVIDENCE_CITATION.search(sentence) or (design_ok and "[D]" in sentence)
+            if not cited:
+                issues.append(f"수치 문장에 인용 없음{'([D]는 1·2장 설계 전제에만 허용)' if '[D]' in sentence else ''}: {sentence[:120]}")
     return {"passed": not issues, "issues": issues, "targets": ["report"] if issues else [],
             "pdf_pages": validation.get("pdf_pages")}
 
 
-def check_neutrality(state: dict) -> dict:
+def neutrality_issues(text: str) -> list[str]:
     issues = []
-    for sentence in _sentences(_body(state.get("report", ""))):
-        match = BANNED_PHRASES.search(sentence)
-        if match and not NEGATION.search(sentence):
-            issues.append(f"우열·추천 표현 '{match.group(1)}': {sentence[:120]}")
+    for sentence in _sentences(text):
+        for pattern in (COMPARATIVE, ENDORSEMENT, TECH_DIRECTIVE):
+            match = pattern.search(sentence)
+            if match and not NEARBY_NEGATION.search(sentence[match.end():]):
+                issues.append(f"우열·추천 표현 '{match.group(0)[:30]}': {sentence[:120]}")
+                break
+    return issues
+
+
+def check_neutrality(state: dict) -> dict:
+    issues = neutrality_issues(_body(state.get("report", "")))
     return {"passed": not issues, "issues": issues, "targets": ["report"] if issues else []}
-
-
 
 
 def _verdicts(state: dict, name: str, tech: str) -> list[str]:
@@ -246,6 +285,8 @@ def judge(state: dict, rules: dict[str, dict], llm: Any, snippets: list[dict] | 
         prompt_template("quality_evaluator") + "\n" + warning +
         f"Today's date (search/verification date): {date.today().isoformat()}.\n"
         f"Deterministic rule results (cannot be overruled): {rule_summary}\n"
+        f"Report parts copied verbatim by code from agent outputs (blame that agent, not report, when the defect is there "
+        f"or in prose that only restates that agent's verdict): {AGENT_SOURCED_SECTIONS}\n"
         f"Evidence gaps recorded by the supervisor: {state.get('gaps', [])}\n"
         f"Verified evidence snippets for every citation used in the report: {repr(snippets)}\n"
         f"Report:\n{state.get('report', '')}",
@@ -260,13 +301,14 @@ def combine(rules: dict[str, dict], verdict: EvalVerdict) -> dict:
         rule = rules[name]
         llm_part = getattr(verdict, name)
         targets = list(rule["targets"])
-        if not llm_part.passed and llm_part.target_agent and llm_part.target_agent not in targets:
-            if name in REWRITE_CRITERIA or llm_part.target_agent in PERSPECTIVES:
-                targets.append(llm_part.target_agent)
-        if name in REWRITE_CRITERIA:
-            targets = ["report"] if (targets or not llm_part.passed) else []
-        elif not targets and not llm_part.passed:
-            targets = ["report"]  # 원인 관점을 특정하지 못하면 보고서 서술 보완으로 처리
+        if not llm_part.passed:
+            # Judge가 지목한 원인을 그대로 따른다. 4.1 TRL 표처럼 코드가 에이전트 판정을 옮긴 부분의 결함은
+            # 보고서를 다시 써도 고쳐지지 않으므로(표는 다시 같은 판정으로 채워진다) 그 관점을 재조사한다.
+            if llm_part.target_agent in (*PERSPECTIVES, "report"):
+                if llm_part.target_agent not in targets:
+                    targets.append(llm_part.target_agent)
+            elif not targets:
+                targets = ["report"]  # 원인을 특정하지 못하면 보고서 서술 보완으로 처리
         score = max(1, min(5, int(llm_part.score)))
         passed = rule["passed"] and llm_part.passed
         criteria[name] = {

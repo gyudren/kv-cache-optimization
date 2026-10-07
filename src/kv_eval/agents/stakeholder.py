@@ -6,6 +6,8 @@ from hashlib import sha256
 from ..schemas import StakeholderAssessment
 
 from ..tools import retry_queries, rework_note
+from ..state import attempt_of
+from ..tools.web_search import COMMUNITY_SPEAKER
 
 # 설계 C-3의 평가 대상별 검색어(경쟁 진영 / 도입 기업·개발자 / 투자 업계)
 STAKEHOLDER_QUERIES = {
@@ -24,10 +26,15 @@ STAKEHOLDER_QUERIES = {
 }
 
 
+# 이해관계자 유형별 판정 필드. 하나라도 근거로 판정했으면 관점 결과가 성립한다.
+CRITERION_VERDICTS = ("competitors_verdict", "developers_adopters_verdict", "investors_verdict")
+
+
 def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
-    attempt = state["retry_counts"]["stakeholder"]
+    attempt = attempt_of(state, "stakeholder")
     feedback = state.get("feedback", {}).get("stakeholder", {})
-    results, evidence, missing = {}, [], []
+    # missing = 필수 결함(자료·인용·판정 없음, 재조사 대상) / optional = LLM이 적은 세부 미확인 발언(한계점에만 기록)
+    results, evidence, missing, optional = {}, [], [], []
     for tech, name in (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME CXL hybrid memory")):
         found = []
         for query in STAKEHOLDER_QUERIES[tech] + retry_queries(name, feedback, tech=tech):
@@ -35,13 +42,16 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
         raw = [{**r, "source_id": f"web:stakeholder:{tech}:{sha256(r['url'].encode()).hexdigest()[:14]}"}
                for r in {x["url"]: x for x in found}.values()]
         if not raw:
-            issue = f"{name}: 이해관계자 웹 자료 없음"
+            issue = f"stakeholder/{tech}: 이해관계자 웹 검색 결과 없음"
             missing.append(issue)
             results[tech] = {"sufficient": False, "missing": [issue], "summary": "근거 부족"}
             continue
         assessment = llm.generate_structured(
-            prompt_template("stakeholder") + "\n" + "Each source line starts with a speaker hint derived from its domain (언론/개발자 커뮤니티/기업 공식 발표/투자·애널리스트/기타); "
+            prompt_template("stakeholder") + "\n" + "Each source line starts with a speaker hint derived from its domain "
+            f"(언론/{COMMUNITY_SPEAKER}/개발자 공식 저장소/기업·기술 블로그/기업 공식 발표/투자·애널리스트/기타); "
             "use it as a candidate only and confirm the actual speaker from the text. "
+            f"Sources marked {COMMUNITY_SPEAKER} (forums, Hacker News, Reddit, personal blogs) are individual opinions: they may support "
+            "ONLY the developers/adopters verdict, labelled '개발자 커뮤니티 의견', never the competitors or investors verdict. "
             "Evaluate ONLY explicitly ATTRIBUTED stakeholder statements by competitors, developers/adopters, investors. "
             "A competitor developing an alternative is not itself proof of a negative judgment. "
             "Record who said what; never attribute anonymous text to an imagined speaker. "
@@ -53,11 +63,21 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
             StakeholderAssessment,
         )
         cited = [r for r in raw if r["source_id"] in set(assessment.cited_ids)]
-        issues = list(assessment.missing)
+        if cited and all(r.get("speaker") == COMMUNITY_SPEAKER for r in cited):
+            # 개인·커뮤니티 글만으로는 경쟁 진영·투자 업계의 반응을 판정하지 않는다(개발자 반응 판정만 유지).
+            held = [f for f in ("competitors_verdict", "investors_verdict") if getattr(assessment, f)]
+            if held:
+                assessment = assessment.model_copy(update={f: None for f in held})
+                optional.append(f"stakeholder/{tech}: 경쟁 진영·투자 업계 반응은 개인·커뮤니티 글뿐이라 판정 보류")
+        issues = []
         if not cited:
-            issues.append(f"{name}: 이해관계자 의견의 검증 가능한 인용 없음")
+            issues.append(f"stakeholder/{tech}: 이해관계자 의견의 검증 가능한 인용 없음")
+        if not any(getattr(assessment, field) for field in CRITERION_VERDICTS):
+            issues.append(f"stakeholder/{tech}: S1~S3 어느 이해관계자 유형도 판정하지 못함")
         missing.extend(issues)
-        results[tech] = {**assessment.model_dump(), "sufficient": assessment.sufficient and bool(cited) and not bool(issues), "missing": issues}
+        optional.extend(assessment.missing)
+        results[tech] = {**assessment.model_dump(), "llm_sufficient": assessment.sufficient,
+                         "sufficient": not issues, "missing": issues}
         evidence.extend({"source_id": r["source_id"], "agent": "stakeholder", "attempt": attempt,
                          "claim": f"{name}: 이해관계자 평가", "excerpt": r["excerpt"],
                          "technology": tech, "source_type": "web", "url": r["url"], "title": r["title"],
@@ -65,5 +85,6 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
                          "speaker": r.get("speaker", "기타")} for r in cited)
     return {"perspectives": {"stakeholder": {"technologies": results, "attempt": attempt,
                                        "sufficient": all(r.get("sufficient", False) for r in results.values()),
-                                       "missing": list(dict.fromkeys(missing))}},
+                                       "missing": list(dict.fromkeys(missing)),
+                                       "missing_optional": list(dict.fromkeys(optional))}},
             "evidence": evidence}

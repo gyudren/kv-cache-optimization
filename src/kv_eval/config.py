@@ -33,8 +33,12 @@ PERSPECTIVES = ("tech", "market", "stakeholder", "domain")
 # 메모리에 올라오므로 동시에 돌리면 최대 메모리가 관점 수만큼 커지고(OOM), MPS 임베딩 경합도 생긴다.
 AGENT_CONCURRENCY = max(1, int(os.getenv("AGENT_CONCURRENCY", "1")))
 # 재작업 상한(안전장치). 근거 충분성·품질 평가 통과가 1차 종료 조건이고, 상한은 무한 루프만 막는다.
+# 관점의 값은 "충분성 재조사"(Supervisor 결정적 검사·필수 결함) 전용이다.
 RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2,
                 "quality_evaluator": 1}
+# 종합 단계 추가 근거 요청·품질 평가 미달로 관점을 다시 부르는 "후속 재조사" 한도(관점별, 충분성 한도와 별도).
+# 충분성 재조사가 한도를 다 써도 종합·평가가 지목한 관점은 한 번 더 조사할 수 있다(retry_counts["<관점>:followup"]).
+FOLLOWUP_LIMITS = {name: 1 for name in ("tech", "market", "stakeholder", "domain")}
 # Supervisor 진입 횟수 상한. 넘으면 조사·재작성을 멈추고 종합→보고서→평가만 마친 뒤 정상 종료한다.
 MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
 # 상한 도달 후 마무리에 필요한 Supervisor 진입 수: 종합 → 보고서 → 평가 → 종료 = 4, 여유 1을 더해 5.
