@@ -10,6 +10,7 @@ from typing import Any
 from ..prompts import prompt_template
 from ..schemas import ReportParts
 from ..config import PERSPECTIVES
+from ..evidence_store import hydrate
 from ..state import deduplicate_evidence, perspective, prompt_view
 from ..reporting.sections import citation_catalog, citeable_evidence, normalize_citations, used_references
 
@@ -184,7 +185,8 @@ def gap_section(state: dict) -> str:
 
 
 def render_report(state: dict, llm: Any) -> str:
-    sources = citeable_evidence(state["evidence"])
+    # 인용 카탈로그에는 발췌 원문이 필요하므로 디스크 저장소에서 되살린다(State에는 축약본만 있음).
+    sources = citeable_evidence(hydrate(state["evidence"]))
     tables = {"4.1": trl_table(state), "4.2": verdict_table(state, "market"),
               "4.3": verdict_table(state, "stakeholder"), "4.4": domain_table(state)}
     citation_context = [{"cite": ev["citation"], "technology": ev.get("technology"), "agent": ev.get("agent"),

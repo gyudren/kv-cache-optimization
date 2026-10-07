@@ -38,7 +38,7 @@ class FakeRAG:
         doc_id, number, tech = DOCS[technology_filter]
         page = int(sha256(question.encode()).hexdigest(), 16) % 40 + 1
         chunk_id = f"{doc_id}#p{page}#{sha256(question.encode()).hexdigest()[:6]}"
-        evidence = [{"source_id": chunk_id, "claim": question, "excerpt": f"{doc_id} page {page} 근거 발췌 " * 5,
+        evidence = [{"source_id": chunk_id, "claim": question, "excerpt": (f"{doc_id} page {page} 근거 발췌 문장. " * 60)[:1200],
                      "doc_id": doc_id, "page": page, "technology": tech, "citation_number": number,
                      "source_type": "paper"}]
         return {"answer": f"{question} 에 대한 근거 기반 답변 [{number}, p.{page}]", "evidence": evidence,
@@ -59,7 +59,7 @@ class FakeWeb:
             self._n += 1
             publisher = self.PUBLISHERS[self._n % len(self.PUBLISHERS)]
             out.append({"url": f"https://{publisher}/a/{self._n}", "title": f"기사 {self._n}",
-                        "excerpt": f"{query} 관련 공개 발표 내용 {self._n}", "publisher": publisher,
+                        "excerpt": (f"{query} 관련 공개 발표 내용 {self._n}. " * 30)[:1000], "publisher": publisher,
                         "published_at": "2026-09-01", "speaker": "언론", "score": 0.9})
         return out
 

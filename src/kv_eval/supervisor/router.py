@@ -20,6 +20,11 @@ def supervisor_node(state: dict, policy: Policy | None = None) -> dict:
     return {**decision.updates, "step_count": step, "next_agents": decision.targets, "last_decision": record}
 
 
+# 관점 에이전트가 읽는 필드만 Send로 넘긴다. State 전체를 넘기면 체크포인트의 대기 작업(Send)마다
+# evidence·보고서까지 복제되어 체크포인트가 fan-out 수만큼 커진다.
+SEND_KEYS = ("user_query", "trace_id", "retry_counts", "feedback", "step_count")
+
+
 def route(state: dict):
     """State의 next_agents만으로 경로를 정한다(라우터 안에서 새 판단을 하지 않는다)."""
     targets = state.get("next_agents") or []
@@ -27,5 +32,6 @@ def route(state: dict):
         return END
     fanout = [name for name in targets if name in PERSPECTIVES]
     if fanout:
-        return [Send(name, state) for name in fanout]
+        payload = {key: state[key] for key in SEND_KEYS if key in state}
+        return [Send(name, payload) for name in fanout]
     return targets[0]

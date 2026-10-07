@@ -10,7 +10,7 @@ reducer로 병합 규칙을 정한다(reducer가 없으면 InvalidUpdateError �
 """
 from __future__ import annotations
 from typing import Annotated, Any, Literal, TypedDict
-from .config import EXCERPT_MAX_CHARS, PERSPECTIVES, RETRY_LIMITS
+from .config import PERSPECTIVES, RETRY_LIMITS, STATE_EXCERPT_CHARS
 
 NodeStatus = Literal["pending", "running", "done", "failed", "skipped"]  # skipped = 실패 후 한도 소진(공백 기록)
 # 관점별 근거 충분도. excluded = 재시도 상한을 넘겨 근거 공백으로 기록하고 제외한 관점
@@ -28,7 +28,11 @@ def evidence_key(ev: dict) -> tuple[str, str, object]:
 
 
 def merge_evidence(left: list[dict] | None, right: list[dict] | None) -> list[dict]:
-    """dedup-append. 재시도로 같은 근거가 다시 들어와도 한 번만 남기고, 발췌는 길이를 제한한다."""
+    """dedup-append. 재시도로 같은 근거가 다시 들어와도 한 번만 남기고, 발췌는 STATE_EXCERPT_CHARS로 제한한다.
+
+    원문은 작업 노드 경계(guard)에서 evidence_store로 먼저 옮겨지고 excerpt_ref가 붙는다. 여기의 자르기는
+    그 경로를 거치지 않은 입력(초기 seed 등)까지 State 크기를 보장하는 마지막 상한이다.
+    """
     out = list(left or [])
     seen = {evidence_key(ev) for ev in out}
     for ev in right or []:
@@ -37,7 +41,7 @@ def merge_evidence(left: list[dict] | None, right: list[dict] | None) -> list[di
             continue
         seen.add(key)
         excerpt = ev.get("excerpt") or ""
-        out.append({**ev, "excerpt": excerpt[:EXCERPT_MAX_CHARS]} if len(excerpt) > EXCERPT_MAX_CHARS else ev)
+        out.append({**ev, "excerpt": excerpt[:STATE_EXCERPT_CHARS]} if len(excerpt) > STATE_EXCERPT_CHARS else ev)
     return out
 
 
@@ -65,7 +69,7 @@ class GraphState(TypedDict, total=False):
     perspectives: Annotated[dict[str, dict], merge_dict]   # tech / market / stakeholder / domain
     synthesis: dict[str, Any]
     report: str
-    evidence: Annotated[list[dict], merge_evidence]
+    evidence: Annotated[list[dict], merge_evidence]        # 축약 발췌(≤300자) + excerpt_ref(원문은 디스크)
     cache_keys: Annotated[dict[str, str], merge_dict]      # RAG 캐시 위치(원문은 디스크)
 
 

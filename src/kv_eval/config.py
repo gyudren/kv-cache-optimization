@@ -38,8 +38,8 @@ MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
 FINALIZE_STEPS = 5
 # Supervisor 1회 = supervisor + 작업 노드 = 2 superstep. LangGraph 상한은 마지막 그물이다.
 RECURSION_LIMIT = (MAX_STEPS + FINALIZE_STEPS) * 2 + 10
-# Evidence 발췌 길이 상한. 원문 전체는 RAG 캐시(디스크)에 있고 State에는 인용 검증에 필요한 만큼만 둔다.
-EXCERPT_MAX_CHARS = 1600
+# State에 남기는 Evidence 발췌 길이. 원문은 evidence_store(디스크)에 두고 excerpt_ref로 참조한다.
+STATE_EXCERPT_CHARS = 300
 # 편향 통제 규칙: 기술·관점별 최소 고유 출처 수, 웹 근거의 단일 발행처 비중 상한
 MIN_DISTINCT_SOURCES = 2
 MAX_SINGLE_SOURCE_SHARE = 0.6
