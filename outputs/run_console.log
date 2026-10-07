@@ -29,3 +29,23 @@ Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF
 [   336s] supervisor#8 → evaluate (보고서 완료(시도 1) → 품질 평가 4항목 판정)
 [   348s] quality_evaluator done
 [   348s] supervisor#9 → rewrite:report (품질 평가 미달(groundedness,bias_control) → 보고서 재작성: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, )
+[   378s] report done
+[   378s] supervisor#10 → evaluate (보고서 완료(시도 2) → 품질 평가 4항목 판정)
+[   386s] quality_evaluator done
+[   386s] supervisor#11 → end:unverified (재작업 한도 소진 — 품질 평가 미달 항목 ['groundedness', 'bias_control'] 남김)
+WARNING: report generated but NOT verified for submission
+{
+  "status": "unverified",
+  "trace_id": "61afa03b-2492-480d-930e-0ba7aecbca42",
+  "verified": false,
+  "issues": [
+    "정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능",
+    "정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능",
+    "품질 평가 groundedness 미달: 정규 형식이 아닌 묶음 인용 [1, p.6-7]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 정규 형식이 아닌 묶음 인용 [1, p.31-32]: [n, p.X] / [Wn] 단위로 나눠야 검증 가능; 수치 문장에 인용 없음: | 저자 보고 효과 | MHA 대비 small MoE KV cache 14%, large MoE 4% | NVMe-oF 기준선 대비 처리량 1.80배 |",
+    "품질 평가 bias_control 미달: 4.4 표와 MLA 단락에서 D3·D4를 각각 “적합”으로 판정하지만, 직접 근거는 사실상 동일 저자 논문의 통제 비교([1, p.31-32])에 집중된다. D4 단락에는 “저자 보고·단일 출처”, “장문맥 정보 보존 직접 평가는 근거 부족”을 뒤이어 적었으나, 판정 위치에서 그 제한을 함께 반영하지 않아 긍정 방향 판정이 과도하게 강하다. 이 결함은 Supervisor가 기록한 domain 품질 공백과도 일치한다."
+  ],
+  "md": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.md",
+  "pdf": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.pdf",
+  "pages": 8,
+  "summary_fits_half_page": true
+}
