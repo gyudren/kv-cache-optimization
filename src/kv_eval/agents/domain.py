@@ -6,6 +6,7 @@ from typing import Any
 from ..config import MAX_PARALLEL_QUESTIONS
 from ..prompts import prompt_template
 from ..schemas import DomainAssessment
+from ..rag import cache as rag_cache
 from ..rag.workflow import answer_with_cache
 
 DIMENSIONS = [
@@ -53,11 +54,11 @@ def normalize_items(items: list[dict], evidence: list[dict]) -> list[dict]:
 
 def domain_node(state: dict, rag: Any, llm: Any) -> dict:
     attempt = state["retry_counts"]["domain"]
-    feedback = state.get("review_feedback", {}).get("domain", {})
+    feedback = state.get("feedback", {}).get("domain", {})
     research = []
     evidence = []
     missing = []
-    cache = state.get("domain_result", {}).get("rag_cache", {})
+    cache = rag_cache.load(state["trace_id"], "domain")
     tasks = [(tech, code, title, question)
              for tech in ("mla", "itme") for code, title, question in DIMENSIONS]
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
@@ -87,9 +88,9 @@ def domain_node(state: dict, rag: Any, llm: Any) -> dict:
         if item["verdict"] != "근거 부족" and not item["cited_ids"]:
             missing.append(f"{item['technology']}/{item['dimension']}: 판정 근거 인용 없음")
     missing.extend(assessed.missing)
-    rag_cache = {f"{t[0]} {t[1]} {t[2]}: {t[3]}": answer for t, answer in zip(tasks, answers)}
-    return {"domain_result": {**assessed.model_dump(), "items": items, "rag_cache": rag_cache,
-                              "sufficient": assessed.sufficient and not bool(missing),
-                              "missing": list(dict.fromkeys(missing))},
-            "evidence": evidence,
-            "logs": [{"node": "domain", "attempt": attempt, "result": "complete", "gate": not bool(missing)}]}
+    cached = {f"{t[0]} {t[1]} {t[2]}: {t[3]}": answer for t, answer in zip(tasks, answers)}
+    return {"perspectives": {"domain": {**assessed.model_dump(), "items": items, "attempt": attempt,
+                                        "sufficient": assessed.sufficient and not bool(missing),
+                                        "missing": list(dict.fromkeys(missing))}},
+            "cache_keys": {"domain": rag_cache.save(state["trace_id"], "domain", cached)},
+            "evidence": evidence}

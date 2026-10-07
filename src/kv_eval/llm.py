@@ -4,10 +4,22 @@ A client with an OpenAI Responses API ``responses.parse`` method is required.
 No invented mock results are emitted on API failures.
 """
 from __future__ import annotations
+import os
 from typing import TypeVar
 from pydantic import BaseModel
 from .config import MODEL_ID
 T = TypeVar("T", bound=BaseModel)
+
+def _traced(client: object) -> object:
+    """LANGSMITH_TRACING=true면 OpenAI 호출도 LangSmith 트레이스에 그래프 노드의 하위 run으로 남긴다."""
+    if os.getenv("LANGSMITH_TRACING", "").strip().lower() != "true":
+        return client
+    try:
+        from langsmith.wrappers import wrap_openai
+    except ImportError:
+        return client
+    return wrap_openai(client)
+
 
 class StructuredLLM:
     def __init__(self, api_key: str, client: object | None = None):
@@ -15,7 +27,7 @@ class StructuredLLM:
             raise ValueError("OPENAI_API_KEY is required")
         if client is None:
             from openai import OpenAI
-            client = OpenAI(api_key=api_key)
+            client = _traced(OpenAI(api_key=api_key))
         self.client = client
         self.model = MODEL_ID
 

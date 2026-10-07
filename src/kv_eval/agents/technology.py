@@ -12,6 +12,7 @@ from typing import Any
 from ..config import MAX_PARALLEL_QUESTIONS
 from ..prompts import prompt_template
 from ..schemas import TechnologyAssessment
+from ..rag import cache as rag_cache
 from ..rag.workflow import answer_with_cache
 
 TECH_QUESTIONS = [
@@ -59,10 +60,10 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     evidence: list[dict] = []
     missing: list[str] = []
     attempt = state["retry_counts"]["tech"]
-    feedback = state.get("review_feedback", {}).get("tech", {})
+    feedback = state.get("feedback", {}).get("tech", {})
     # 질문끼리 독립이므로 병렬로 검색·답변한다(순서는 아래에서 원래대로 복원).
     tasks = [(tech, question) for tech in ("mla", "itme") for question in TECH_QUESTIONS]
-    cache = state.get("tech_result", {}).get("rag_cache", {})
+    cache = rag_cache.load(state["trace_id"], "tech")
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_QUESTIONS) as pool:
         answers_by_task = list(pool.map(
             lambda item: answer_with_cache(rag, cache, f"[{item[0]}] {item[1]}", item[0], feedback), tasks))
@@ -114,9 +115,10 @@ def technology_node(state: dict, rag: Any, llm: Any, web: Any) -> dict:
     if not all(getattr(result.trl, tech).strip() and getattr(result.trl_basis, tech).strip()
                for tech in ("mla", "itme")):
         missing.append("MLA/ITME의 독립적 TRL 근거 미기재")
-    rag_cache = {f"[{tech}] {question}": response for (tech, question), response in zip(tasks, answers_by_task)}
-    rag_cache[BASELINE_QUESTION] = baseline
-    return {"tech_result": {**result.model_dump(), "details": findings, "rag_cache": rag_cache,
-                            "sufficient": result.sufficient and not bool(missing), "missing": list(dict.fromkeys(missing))},
-            "evidence": evidence,
-            "logs": [{"node": "technology", "attempt": attempt, "result": "complete", "gate": not bool(missing)}]}
+    cached = {f"[{tech}] {question}": response for (tech, question), response in zip(tasks, answers_by_task)}
+    cached[BASELINE_QUESTION] = baseline
+    return {"perspectives": {"tech": {**result.model_dump(), "details": findings, "attempt": attempt,
+                                      "sufficient": result.sufficient and not bool(missing),
+                                      "missing": list(dict.fromkeys(missing))}},
+            "cache_keys": {"tech": rag_cache.save(state["trace_id"], "tech", cached)},
+            "evidence": evidence}

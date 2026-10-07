@@ -29,7 +29,7 @@ MARKET_QUERIES = {
 
 def market_node(state: dict, web: Any, llm: Any) -> dict:
     attempt = state["retry_counts"]["market"]
-    feedback = state.get("review_feedback", {}).get("market", {})
+    feedback = state.get("feedback", {}).get("market", {})
     results: dict = {}
     evidence: list[dict] = []
     missing: list[str] = []
@@ -68,6 +68,7 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
                          "claim": f"{name}: 시장·채택·생태계", "excerpt": r["excerpt"],
                          "technology": tech, "source_type": "web", "url": r["url"], "title": r["title"],
                          "publisher": r["publisher"], "published_at": r["published_at"]} for r in cited)
-    return {"market_result": {"technologies": results, "sufficient": all(r.get("sufficient", False) for r in results.values()),
-                              "missing": list(dict.fromkeys(missing))}, "evidence": evidence,
-            "logs": [{"node": "market", "attempt": attempt, "result": "complete", "gate": not bool(missing)}]}
+    return {"perspectives": {"market": {"technologies": results, "attempt": attempt,
+                                       "sufficient": all(r.get("sufficient", False) for r in results.values()),
+                                       "missing": list(dict.fromkeys(missing))}},
+            "evidence": evidence}

@@ -26,8 +26,28 @@ MIN_RELEVANT = 2
 RAG_REWRITES = 2
 # 질문 단위 RAG 호출 동시 실행 수. 질문끼리 독립이라 결과는 같고 대기 시간만 줄어든다.
 MAX_PARALLEL_QUESTIONS = int(os.getenv("MAX_PARALLEL_QUESTIONS", "12"))
-RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2}
-REPORT_STEM = "RAG-Output_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"
+# 4관점(기술 성숙도·시장성·이해관계자·도메인). Supervisor가 State를 보고 이 중 필요한 것만 고른다.
+PERSPECTIVES = ("tech", "market", "stakeholder", "domain")
+# 재작업 상한(안전장치). 근거 충분성·품질 평가 통과가 1차 종료 조건이고, 상한은 무한 루프만 막는다.
+RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2,
+                "quality_evaluator": 1}
+# Supervisor 진입 횟수 상한. 넘으면 조사·재작성을 멈추고 종합→보고서→평가만 마친 뒤 정상 종료한다.
+MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
+# 상한 도달 후 마무리(종합·보고서·평가)에 필요한 Supervisor 진입 수
+FINALIZE_STEPS = 4
+# Supervisor 1회 = supervisor·하위 노드·평가 노드 최대 3 superstep. LangGraph 상한은 마지막 그물이다.
+RECURSION_LIMIT = (MAX_STEPS + FINALIZE_STEPS) * 3 + 10
+# Evidence 발췌 길이 상한. 원문 전체는 RAG 캐시(디스크)에 있고 State에는 인용 검증에 필요한 만큼만 둔다.
+EXCERPT_MAX_CHARS = 1600
+# 편향 통제 규칙: 기술·관점별 최소 고유 출처 수, 웹 근거의 단일 발행처 비중 상한
+MIN_DISTINCT_SOURCES = 2
+MAX_SINGLE_SOURCE_SHARE = 0.6
+MAX_REPORT_PAGES = 10
+REPORT_STEM = "Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"
+# 이전 과제(RAG) 산출물 파일명. 덮어쓰지 않도록 구분만 해 둔다.
+LEGACY_REPORT_STEM = "RAG-Output_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리"
+LANGSMITH_RUN_NAME = "kv-eval-supervisor"
+LANGSMITH_TAGS = ["pattern:supervisor", "kv-cache-eval"]
 
 @dataclass(frozen=True)
 class Settings:

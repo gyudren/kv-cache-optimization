@@ -9,7 +9,8 @@ from collections import Counter
 from typing import Any
 from ..prompts import prompt_template
 from ..schemas import ReportParts
-from ..state import deduplicate_evidence, prompt_view
+from ..config import PERSPECTIVES
+from ..state import deduplicate_evidence, perspective, prompt_view
 from ..reporting.sections import citation_catalog, citeable_evidence, normalize_citations, used_references
 
 TECHS = (("mla", "DeepSeek-V2 MLA"), ("itme", "ITME"))
@@ -114,7 +115,7 @@ def _web_citations(ids: list[str], evidence: list[dict]) -> str:
 
 
 def trl_table(state: dict) -> str:
-    tech = state.get("tech_result", {})
+    tech = perspective(state, "tech")
     rows = ["| 기술 | TRL 추정(공개 정보 기반) | 판단 근거 요약 |", "|---|---|---|"]
     for key, label in TECHS:
         rows.append(f"| {label} | {_cell((tech.get('trl') or {}).get(key) or '근거 부족')} | "
@@ -122,11 +123,11 @@ def trl_table(state: dict) -> str:
     return "\n".join(rows)
 
 
-def verdict_table(state: dict, perspective: str) -> str:
-    result = state.get(f"{perspective}_result", {}).get("technologies", {})
+def verdict_table(state: dict, name: str) -> str:
+    result = (state.get("perspectives") or {}).get(name, {}).get("technologies", {})
     evidence = deduplicate_evidence(state["evidence"])
     rows = ["| 평가 대상 | DeepSeek-V2 MLA | ITME |", "|---|---|---|"]
-    for label, field in VERDICT_FIELDS[perspective]:
+    for label, field in VERDICT_FIELDS[name]:
         rows.append(f"| {label} | " + " | ".join(
             (result.get(key, {}).get(field) or "근거 부족") for key, _ in TECHS) + " |")
     rows.append("| 근거 | " + " | ".join(
@@ -136,7 +137,7 @@ def verdict_table(state: dict, perspective: str) -> str:
 
 
 def domain_table(state: dict) -> str:
-    items = state.get("domain_result", {}).get("items", [])
+    items = perspective(state, "domain").get("items", [])
     evidence = deduplicate_evidence(state["evidence"])
     by_key = {(item["technology"], item["dimension"]): item for item in items}
     dimensions = list(dict.fromkeys(item["dimension"] for item in items)) or []
@@ -171,6 +172,17 @@ def evidence_balance_table(state: dict) -> str:
     return "\n".join(rows)
 
 
+def gap_section(state: dict) -> str:
+    """Supervisor가 재시도 상한·실행 실패로 남긴 근거 공백을 코드가 직접 7장에 적는다.
+
+    LLM 서술에만 맡기면 공백이 빠질 수 있으므로, State의 gaps를 그대로 옮긴다.
+    """
+    gaps = state.get("gaps") or []
+    if not gaps:
+        return ""
+    return "#### 근거 공백 (Supervisor 기록)\n" + "\n".join(f"- 근거 부족: {_cell(gap)}" for gap in gaps) + "\n\n"
+
+
 def render_report(state: dict, llm: Any) -> str:
     sources = citeable_evidence(state["evidence"])
     tables = {"4.1": trl_table(state), "4.2": verdict_table(state, "market"),
@@ -179,8 +191,8 @@ def render_report(state: dict, llm: Any) -> str:
                          "claim": ev.get("claim", ""), "excerpt": ev.get("excerpt", "")[:900],
                          "url": ev.get("url", "")}
                         for ev in sources]
-    feedback = state.get("review_feedback", {}).get("report", {}).get("issues", [])
-    revision = ("\nPREVIOUS DRAFT WAS REJECTED BY THE REPORT GATE. Fix every issue below:\n- "
+    feedback = state.get("feedback", {}).get("report", {}).get("issues", [])
+    revision = ("\nPREVIOUS DRAFT WAS REJECTED BY THE QUALITY EVALUATOR. Fix every issue below:\n- "
                 + "\n- ".join(feedback) + "\n") if feedback else ""
     sections = llm.generate_structured(
         prompt_template("report") + "\n" + DESIGN_CONTEXT + revision
@@ -219,7 +231,8 @@ def render_report(state: dict, llm: Any) -> str:
         "The following signal tables are inserted verbatim by the code; your narrative MUST use exactly the same verdicts "
         "(if you believe a verdict is wrong, explain the nuance but do not state a different verdict):\n"
         + "\n\n".join(f"[{k}]\n{v}" for k, v in tables.items()) + "\n"
-        + repr({k: prompt_view(state.get(k, {})) for k in ("tech_result", "market_result", "stakeholder_result", "domain_result", "synthesis_result")})
+        + repr({**{k: prompt_view(perspective(state, k)) for k in PERSPECTIVES}, "synthesis": state.get("synthesis", {})})
+        + "\nEvidence gaps recorded by the supervisor (state them under limitations as 근거 부족): " + repr(state.get("gaps", []))
         + "\nVerified source catalog:\n" + repr(citation_context), ReportParts,
     )
     parts = {k: normalize_citations(sanitize_field(v)) for k, v in sections.model_dump().items()}
@@ -235,7 +248,7 @@ def render_report(state: dict, llm: Any) -> str:
         f"### 4.4 도메인 적용성(D1-D7)\n{tables['4.4']}\n\n{parts['perspective_domain']}",
         f"## 5. 종합 의견\n{parts['synthesis']}",
         f"## 6. 시사점\n{parts['implications']}",
-        f"## 7. 한계점\n**자료 기준 시점**: 웹 자료 검색·검증일 {AS_OF} (Tavily 검색 결과 기준). 이후 공개된 발표·제품 정보는 반영되지 않았다.\n\n{parts['limitations']}\n\n#### 표 7. 증거 균형표 (중복 제거 후 수집·검증된 Evidence 수)\n{evidence_balance_table(state)}",
+        f"## 7. 한계점\n**자료 기준 시점**: 웹 자료 검색·검증일 {AS_OF} (Tavily 검색 결과 기준). 이후 공개된 발표·제품 정보는 반영되지 않았다.\n\n{parts['limitations']}\n\n{gap_section(state)}#### 표 7. 증거 균형표 (중복 제거 후 수집·검증된 Evidence 수)\n{evidence_balance_table(state)}",
     ])
     refs, _ = used_references(report, state["evidence"])
     if "[D]" in report:
@@ -245,6 +258,4 @@ def render_report(state: dict, llm: Any) -> str:
 
 
 def report_node(state: dict, llm: Any) -> dict:
-    report = render_report(state, llm)
-    return {"report_draft": report,
-            "logs": [{"node": "report", "attempt": state["retry_counts"]["report"], "result": "complete"}]}
+    return {"report": render_report(state, llm)}

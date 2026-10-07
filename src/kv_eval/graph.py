@@ -1,60 +1,48 @@
-"""One Master role, six task Agents; Send fan-out joins selected workers only."""
+"""Supervisor 패턴 그래프 (DEV_PLAN §3).
+
+    START → supervisor ─(단일 add_conditional_edges: State 기반 라우팅)→ {tech, market, stakeholder, domain}
+                                                                        (Send 동적 fan-out)
+                       → synthesis / report / quality_evaluator / END
+    하위 에이전트 → supervisor (하위 에이전트끼리 잇는 엣지 없음)
+    report → quality_evaluator → supervisor (평가 노드는 Supervisor 측 품질 게이트)
+"""
 from __future__ import annotations
 from functools import partial
 from typing import Any
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send
-from .agents import master, technology, market, stakeholder, domain, synthesis, report
+from .agents import technology, market, stakeholder, domain, synthesis, report
+from .evaluation.quality import quality_evaluator_node
 from .state import GraphState
+from .supervisor.guard import guarded
+from .supervisor.policy import Policy
+from .supervisor.router import route, supervisor_node
+
+# 하위 에이전트(작업자). 모두 실행 후 supervisor로만 돌아간다(report는 평가 노드를 거쳐 돌아간다).
+AGENT_NODES = ("tech", "market", "stakeholder", "domain", "synthesis", "report")
+CONTROL_NODES = ("supervisor", "quality_evaluator")
 
 
-def build_graph(rag: Any, web: Any, llm: Any):
+def build_graph(rag: Any, web: Any, llm: Any, checkpointer: Any = None, policy: Policy | None = None):
     graph = StateGraph(GraphState)
-    graph.add_node("master_init", master.master_init_node)
-    graph.add_node("technology", partial(technology.technology_node, rag=rag, llm=llm, web=web))
-    graph.add_node("master_tech_gate", master.master_tech_gate_node)
-    graph.add_node("master_query_rewrite", master.master_query_rewrite_node)
-    graph.add_node("master_dispatch", master.master_dispatch_node)
-    graph.add_node("market", partial(market.market_node, web=web, llm=llm))
-    graph.add_node("stakeholder", partial(stakeholder.stakeholder_node, web=web, llm=llm))
-    graph.add_node("domain", partial(domain.domain_node, rag=rag, llm=llm))
-    graph.add_node("master_join", master.master_join_node)
-    graph.add_node("master_retry", master.master_retry_node)
-    graph.add_node("synthesis", partial(synthesis.synthesis_node, llm=llm))
-    graph.add_node("master_synthesis_gate", master.master_synthesis_gate_node)
-    graph.add_node("report", partial(report.report_node, llm=llm))
-    graph.add_node("master_report_gate", partial(master.master_report_gate_node, llm=llm))
+    graph.add_node("supervisor", partial(supervisor_node, policy=policy or Policy()))
+    agents = {
+        "tech": partial(technology.technology_node, rag=rag, llm=llm, web=web),
+        "market": partial(market.market_node, web=web, llm=llm),
+        "stakeholder": partial(stakeholder.stakeholder_node, web=web, llm=llm),
+        "domain": partial(domain.domain_node, rag=rag, llm=llm),
+        "synthesis": partial(synthesis.synthesis_node, llm=llm),
+        "report": partial(report.report_node, llm=llm),
+    }
+    for name, fn in agents.items():
+        graph.add_node(name, guarded(name, fn))
+    graph.add_node("quality_evaluator", guarded("quality_evaluator", partial(quality_evaluator_node, llm=llm)))
 
-    graph.add_edge(START, "master_init")
-    graph.add_edge("master_init", "technology")
-    graph.add_edge("technology", "master_tech_gate")
-    # SUP_TECH -- 부족(최대 2회) --> QUERY_REWRITE --> TECH / -- 충분 --> SUP_FANOUT
-    graph.add_conditional_edges("master_tech_gate", master.route_tech,
-                                {"master_query_rewrite": "master_query_rewrite",
-                                 "master_dispatch": "master_dispatch"})
-    graph.add_edge("master_query_rewrite", "technology")
-
-    def dispatch_routes(state: GraphState):
-        selected = state["next_agents"]
-        if not selected or not set(selected) <= {"market", "stakeholder", "domain"}:
-            raise ValueError("Invalid selected perspective fan-out")
-        # Each selected Agent writes only its own result plus reducer lists.
-        return [Send(name, state) for name in selected]
-
-    # 도달 가능한 노드를 명시해야 그래프 구조가 설계 D-2의 관점별 병렬 평가와 일치한다.
-    graph.add_conditional_edges("master_dispatch", dispatch_routes,
-                                ["market", "stakeholder", "domain"])
-    for name in ("market", "stakeholder", "domain"):
-        graph.add_edge(name, "master_join")
-    # RESULT_GATE -- 미완료·근거 부족 --> RETRY --> 부족한 Agent만 재할당 / -- 완료 --> SYNTHESIS
-    graph.add_conditional_edges("master_join", master.route_join,
-                                {"master_retry": "master_retry", "synthesis": "synthesis"})
-    graph.add_edge("master_retry", "master_dispatch")
-    graph.add_edge("synthesis", "master_synthesis_gate")
-    # SUP_SYNTHESIS -- 부족(최대 1회) --> SYNTHESIS / -- 충분 --> REPORT (설계 D-2에 없는 경로는 두지 않는다)
-    graph.add_conditional_edges("master_synthesis_gate", master.route_synthesis,
-                                {"synthesis": "synthesis", "report": "report"})
-    graph.add_edge("report", "master_report_gate")
-    graph.add_conditional_edges("master_report_gate", master.route_report,
-                                {"report": "report", "end": END})
-    return graph.compile()
+    graph.add_edge(START, "supervisor")
+    # 라우팅은 이 한 곳뿐이다. 실행 순서는 엣지가 아니라 State(policy.decide)가 정한다.
+    graph.add_conditional_edges("supervisor", route, [*AGENT_NODES, "quality_evaluator", END])
+    for name in AGENT_NODES:
+        if name != "report":
+            graph.add_edge(name, "supervisor")
+    graph.add_edge("report", "quality_evaluator")
+    graph.add_edge("quality_evaluator", "supervisor")
+    return graph.compile(checkpointer=checkpointer)
