@@ -54,7 +54,7 @@
 ### 사용 가능한 검증 Evidence
 {{validated_evidence}}
 
-### Master 피드백
+### Supervisor 재작업 지시
 {{review_feedback}}
 
 ### 반환 형식

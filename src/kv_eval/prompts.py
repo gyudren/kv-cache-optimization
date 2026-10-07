@@ -1,16 +1,17 @@
-"""Load the common contract and role system prompts from the project root."""
+"""Load the common contract and role system prompts from the project root.
+
+Supervisor는 LLM을 쓰지 않는 결정적 정책이라 프롬프트가 없다(명세: docs/SUPERVISOR_POLICY.md).
+"""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPT_FILES = {
-    "master": "01_master_agent.md",
     "technology": "02_technical_research_agent.md",
     "market": "03_market_evaluation_agent.md",
     "stakeholder": "04_stakeholder_evaluation_agent.md",
     "domain": "05_domain_evaluation_agent.md",
     "synthesis": "06_synthesis_agent.md",
     "report": "07_report_agent.md",
-    "validator": "08_result_validator.md",
     "quality_evaluator": "09_quality_evaluator.md",
 }
 ALLOWED = frozenset(PROMPT_FILES)

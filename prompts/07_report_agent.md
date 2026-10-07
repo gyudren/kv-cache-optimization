@@ -97,7 +97,7 @@
 ### 사용 가능한 Evidence
 {{validated_evidence}}
 
-### Master 피드백
+### Supervisor 재작업 지시
 {{review_feedback}}
 
 한국어 Markdown 보고서 본문만 반환하라. 작성 후 내부적으로 필수 목차, 인용 연결, 승자 선정 금지, 근거 없는 수치 금지를 점검한 뒤 최종 본문을 출력하라.

@@ -108,7 +108,7 @@
 ### 시도 번호
 {{attempt}}
 
-### Master 피드백
+### Supervisor 재작업 지시
 {{review_feedback}}
 
 ### 검색된 선정 기술 PDF 문맥

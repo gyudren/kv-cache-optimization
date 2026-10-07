@@ -14,14 +14,12 @@ PROMPT_DIR = ROOT / "prompts"
 
 PROMPT_FILES = [
     "00_common_contract.md",
-    "01_master_agent.md",
     "02_technical_research_agent.md",
     "03_market_evaluation_agent.md",
     "04_stakeholder_evaluation_agent.md",
     "05_domain_evaluation_agent.md",
     "06_synthesis_agent.md",
     "07_report_agent.md",
-    "08_result_validator.md",
     "09_quality_evaluator.md",
 ]
 
@@ -37,12 +35,7 @@ ALLOWED_PLACEHOLDERS = {
     "validated_evidence",
     "perspective_results",
     "as_of_date",
-    "state_json",
     "synthesis_result",
-    "target_agent",
-    "retry_limit",
-    "agent_result",
-    "evidence",
     "rule_results",
     "evidence_gaps",
     "report_draft",

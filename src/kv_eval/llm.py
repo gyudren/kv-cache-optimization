@@ -1,4 +1,4 @@
-"""Single GPT-5.6 Sol structured-output channel for Generator and Judge.
+"""Single gpt-5.6-terra (config.MODEL_ID) structured-output channel for Generator and Judge.
 
 A client with an OpenAI Responses API ``responses.parse`` method is required.
 No invented mock results are emitted on API failures.
@@ -43,5 +43,5 @@ class StructuredLLM:
             raise RuntimeError("Install a recent OpenAI SDK with responses.parse support") from exc
         parsed = response.output_parsed
         if parsed is None:
-            raise RuntimeError("GPT-5.6 Sol returned no parseable structured output")
+            raise RuntimeError(f"{self.model} returned no parseable structured output")
         return parsed

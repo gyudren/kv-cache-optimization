@@ -54,7 +54,7 @@
 ### 시도 번호
 {{attempt}}
 
-### Master 피드백
+### Supervisor 재작업 지시
 {{review_feedback}}
 
 ### Tavily 검색 결과
