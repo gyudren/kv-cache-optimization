@@ -1,85 +1,77 @@
 {
-  "passed": false,
-  "issues": [
-    "품질 평가 groundedness 미달: 4.1 TRL 및 5장 매트릭스의 “실제 서비스 운영 또는 상용 채택은 확인되지 않는다”는 서술은 제공 발췌문 [1, p.16]의 “actually deployed DeepSeek-V2” 및 실제 배포된 DeepSeek 67B 서비스의 길이 분포를 사용했다는 설명과 충돌하거나, 적어도 저자 보고 기준의 서비스 배포 근거를 누락한다. 독립 검증·외부 고객 채택이 없다고 한정해야 한다. 또한 MLA의 “TRL 4-6” 범위는 구현·내부 평가 근거와 연결되지만, 제시된 자료에는 해당 숫자 범위를 매핑하는 TRL 기준 자체가 없다."
-  ],
+  "passed": true,
+  "issues": [],
   "warnings": [],
   "used_references": [
-    "[1] DeepSeek-AI (2024). DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model. arXiv preprint arXiv:2405.04434, p.1, p.4, p.5, p.6, p.7, p.8, p.12, p.15, p.16, p.21, p.28.",
-    "[2] Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix) (2026). ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories. arXiv preprint arXiv:2606.12556, p.1, p.2, p.4, p.7, p.9, p.10, p.11.",
-    "[3] Lee, W., Lee, J., Seo, J., & Sim, J. (Seoul National University) (2024). InfiniGen: Efficient Generative Inference of Large Language Models with Dynamic KV Cache Management. arXiv preprint arXiv:2406.19707, p.4.",
-    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.4.",
-    "[W5] docs.vllm.ai (게시일 미확인). mla_attention - vLLM. docs.vllm.ai, https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/attention/mla_attention",
-    "[W6] docs.vllm.ai (게시일 미확인). Attention Backend Feature Support - vLLM. docs.vllm.ai, https://docs.vllm.ai/en/stable/design/attention_backends",
-    "[W21] mordorintelligence.com (Tue, 28 Jul 2026 00:00:00 GMT). CXL Memory Controller IC Market Size, Share & 2031 Growth Trends Report. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/cxl-memory-controller-ic-market",
-    "[W1] computeexpresslink.org (게시일 미확인). Breaking Boundaries in Memory: Highlights from AI Infra Summit and SDC 2025 - Compute Express Link. computeexpresslink.org, https://computeexpresslink.org/blog/breaking-boundaries-in-memory-highlights-from-ai-infra-summit-and-sdc-2025-4198",
-    "[W9] github.com (Wed, 09 Sep 2026 12:00:00 GMT). GitHub - deepseek-ai/FlashMLA: FlashMLA: Efficient Multi-head Latent Attention Kernels · GitHub. github.com, https://github.com/deepseek-ai/FlashMLA",
-    "[W17] gminsights.com (Thu, 01 Oct 2026 10:00:00 GMT). Enterprise LLM Market Size, Forecasts Report 2026-2035. gminsights.com, https://www.gminsights.com/industry-analysis/enterprise-llm-market",
-    "[W22] mordorintelligence.com (Fri, 11 Sep 2026 00:00:00 GMT). Large Language Model Market Size, Growth & Outlook | Industry Report 2031. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/large-language-model-llm-market",
-    "[W19] lmsys.org (게시일 미확인). SGLang v0.3 Release: 7x Faster DeepSeek MLA, 1.5x Faster torch.compile, Multi-Image/Video LLaVA-OneVision - LMSYS Org. lmsys.org, https://www.lmsys.org/blog/2024-09-04-sglang-v0-3",
-    "[W25] penguinsolutions.com (게시일 미확인). CXL 3.0 vs. CXL 2.0: Advancing Composable AI Infrastructure. penguinsolutions.com, https://www.penguinsolutions.com/en-us/resources/blog/cxl-30-vs-cxl-20-key-differences-and-benefits",
+    "[1] DeepSeek-AI (2024). DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model. arXiv preprint arXiv:2405.04434, p.1, p.4, p.6, p.7, p.8, p.13, p.32.",
+    "[2] Jang, H., Min, Y., Kim, S., Ahn, T., Kim, H., Joo, Y., Kim, H., & Kim, J. (SK hynix) (2026). ITME: Inference Tiered Memory Expansion with Disaggregated CXL-Hybrid Memories. arXiv preprint arXiv:2606.12556, p.2, p.3, p.8, p.9, p.10, p.11.",
+    "[4] Kim, D., Lee, M., Kim, J., Kwon, H., Jeong, H., Park, S.-S., et al. (Hanyang University, Samsung Electronics) (2025). Scalable Processing-Near-Memory for 1M-Token LLM Inference: CXL-Enabled KV-Cache Management Beyond GPU Limits. arXiv preprint arXiv:2511.00321, p.4, p.10.",
+    "[W4] docs.vllm.ai (게시일 미확인). mla_attention - vLLM. docs.vllm.ai, https://docs.vllm.ai/en/latest/api/vllm/model_executor/layers/attention/mla_attention",
+    "[W5] docs.vllm.ai (게시일 미확인). Attention Backend Feature Support - vLLM. docs.vllm.ai, https://docs.vllm.ai/en/stable/design/attention_backends",
+    "[W22] lmsys.org (게시일 미확인). SGLang v0.3 Release: 7x Faster DeepSeek MLA, 1.5x Faster torch.compile, Multi-Image/Video LLaVA-OneVision - LMSYS Org. lmsys.org, https://www.lmsys.org/blog/2024-09-04-sglang-v0-3",
+    "[W2] computeexpresslink.org (게시일 미확인). Breaking Boundaries in Memory: Highlights from AI Infra Summit and SDC 2025 - Compute Express Link. computeexpresslink.org, https://computeexpresslink.org/blog/breaking-boundaries-in-memory-highlights-from-ai-infra-summit-and-sdc-2025-4198",
+    "[W12] news.skhynix.com (Thu, 01 Oct 2026 23:00:00 GMT). SK hynix Presents a Full Lineup of Memory Solutions Optimized for AI Infrastructure at DTF 2026 – SK hynix Newsroom. news.skhynix.com, https://news.skhynix.com/en/dtf-2026",
+    "[W17] esa.int (게시일 미확인). ESA - Technology Readiness Levels (TRL). esa.int, https://www.esa.int/Enabling_Support/Space_Engineering_Technology/Shaping_the_Future/Technology_Readiness_Levels_TRL",
+    "[W25] mordorintelligence.com (Fri, 11 Sep 2026 00:00:00 GMT). Large Language Model Market Size, Growth & Outlook | Industry Report 2031. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/large-language-model-llm-market",
+    "[W3] docs.dynatrace.com (Fri, 28 Aug 2026 00:00:00 GMT). AI Observability integrations — Dynatrace Docs. docs.dynatrace.com, https://docs.dynatrace.com/docs/observe/dynatrace-for-ai-observability/integrations",
+    "[W19] forbes.com (Tue, 25 Aug 2026 00:00:00 GMT). CXL Growth Shown At The 2026 FMS Conference - Forbes. forbes.com, https://www.forbes.com/sites/tomcoughlin/2026/08/25/cxl-growth-shown-at-the-2026-fms-conference/",
+    "[W24] mordorintelligence.com (Tue, 28 Jul 2026 00:00:00 GMT). CXL Memory Controller IC Market Size, Share & 2031 Growth Trends Report. mordorintelligence.com, https://www.mordorintelligence.com/industry-reports/cxl-memory-controller-ic-market",
+    "[W14] rocm.docs.amd.com (게시일 미확인). MLA decoding kernel of the AITER library to accelerate LLM inference — Tutorials for AI developers 5.1. rocm.docs.amd.com, https://rocm.docs.amd.com/projects/ai-developer-hub/en/v5.1/notebooks/gpu_dev_optimize/aiter_mla_decode_kernel.html",
     "[W13] news.ycombinator.com (게시일 미확인). DeepSeek Open Source FlashMLA – MLA Decoding Kernel for Hopper GPUs | Hacker News. news.ycombinator.com, https://news.ycombinator.com/item?id=43155023",
-    "[W11] liorsinai.github.io (게시일 미확인). DeepSeek's Multi-Head Latent Attention - Lior Sinai. liorsinai.github.io, https://liorsinai.github.io/machine-learning/2025/02/22/mla.html",
-    "[W14] semiconductor.samsung.com (게시일 미확인). Breaking AI Memory Limits with CXL Memory Pooling. semiconductor.samsung.com, https://semiconductor.samsung.com/news-events/tech-blog/breaking-ai-memory-limits-with-cxl-memory-pooling",
-    "[W23] networkworld.com (게시일 미확인). Chip wafer shortage will run through 2030 as AI demand overwhelms supply: SK Hynix chief | Network World. networkworld.com, https://www.networkworld.com/article/4146270/chip-wafer-shortage-will-run-through-2030-as-ai-demand-overwhelms-supply-sk-hynix-chief.html"
+    "[W23] marvell.com (게시일 미확인). Marvell Structera™ X, A and S: A Comprehensive CXL Portfolio Powering AI Memory Innovation. marvell.com, https://www.marvell.com/blogs/marvell-structera-cxl-portfolio.html",
+    "[W20] hpcwire.com (게시일 미확인). What Hyperscalers Should Know About CXL. hpcwire.com, https://www.hpcwire.com/2026/08/20/what-hyperscalers-should-know-about-cxl",
+    "[W27] networkworld.com (게시일 미확인). Chip wafer shortage will run through 2030 as AI demand overwhelms supply: SK Hynix chief | Network World. networkworld.com, https://www.networkworld.com/article/4146270/chip-wafer-shortage-will-run-through-2030-as-ai-demand-overwhelms-supply-sk-hynix-chief.html"
   ],
-  "pdf_pages": 8,
+  "pdf_pages": 7,
   "page_check": "checked",
   "quality_eval": {
     "groundedness": {
-      "passed": false,
-      "score": 3,
-      "reason": "4.1 TRL 및 5장 매트릭스의 “실제 서비스 운영 또는 상용 채택은 확인되지 않는다”는 서술은 제공 발췌문 [1, p.16]의 “actually deployed DeepSeek-V2” 및 실제 배포된 DeepSeek 67B 서비스의 길이 분포를 사용했다는 설명과 충돌하거나, 적어도 저자 보고 기준의 서비스 배포 근거를 누락한다. 독립 검증·외부 고객 채택이 없다고 한정해야 한다. 또한 MLA의 “TRL 4-6” 범위는 구현·내부 평가 근거와 연결되지만, 제시된 자료에는 해당 숫자 범위를 매핑하는 TRL 기준 자체가 없다.",
-      "target_agents": [
-        "report"
-      ]
+      "passed": true,
+      "score": 4,
+      "reason": "대부분의 수치와 저자 보고 성능은 해당 논문 발췌 및 조건부 한계와 함께 제시된다. 다만 3절 ITME 서술의 “cache miss 조건에서는 성능 저하 가능성이 보고된다”는 인용 [2, p.10-11]이 직접 보여 주는 것은 FPGA 구현의 하드웨어 오버헤드 및 극심한 경합 시 대역폭 저하이며, cache miss 자체의 성능 저하를 직접 보고한 것은 아니다.",
+      "target_agents": []
     },
     "neutrality": {
       "passed": true,
       "score": 5,
-      "reason": "요약, 3장, 5장 및 6장에서 두 기술을 서로 다른 작동 계층의 보완 가능 접근으로 서술하며, “우승”, 순위, 단일 추천 또는 직접적 우열 판정은 확인되지 않는다. 상충표도 두 기술에 동일한 쟁점·관점 A·관점 B·이유 형식으로 제시됐다.",
+      "reason": "요약, 4장, 5장에서 두 기술을 서로 다른 작동 계층의 접근으로 병기하고, 보완 가능성도 결합 효과를 단정하지 않는 조건부 표현으로 제한했다. 최종 승자·순위·단일 추천 또는 암묵적 우열 판정은 확인되지 않았다.",
       "target_agents": []
     },
     "bias_control": {
       "passed": true,
-      "score": 4,
-      "reason": "각 기술에 대해 긍정 신호와 제한을 함께 보존했다. 예를 들어 MLA는 생태계 지원과 KV 축소 근거를, 동시에 MLA 단독 효과·품질·운영 근거 공백을 병기했고, ITME는 처리량·메모리 효율 저자 보고와 원격 지연·경합·제품화 공백을 함께 제시했다. 다만 4.3 MLA의 ‘개발자·도입 기업 관점: 혼재’는 실제 도입기업 근거가 없고 커뮤니티 경험 및 비판적 기술 블로그에 주로 의존하므로 표현의 근거 폭은 제한적이다.",
+      "score": 5,
+      "reason": "MLA에는 저자 보고 KV·처리량 개선과 서비스 지연·동시성·운영 근거 부족을 함께, ITME에는 처리량·용량 확장 근거와 원격 지연·프리페치·경합·TCO 미측정을 함께 보존했다. 저자 보고값의 독립 재현 부재와 CXL 계열 근거와 ITME 개별 근거의 차이도 7장에 명시했다.",
       "target_agents": []
     },
     "coverage": {
       "passed": true,
       "score": 5,
-      "reason": "4.1 TRL, 4.2 시장성, 4.3 이해관계자, 4.4 D1-D7 도메인 적용성이 두 기술 모두에 대해 실질적으로 서술되어 있다. 확인되지 않은 시장·채택·독립 재현·D1 동시성 등 공백도 7장과 Supervisor 근거 공백 목록에서 ‘근거 부족’으로 명시했다.",
+      "reason": "4.1 TRL, 4.2 시장성, 4.3 이해관계자, 4.4 D1-D7 도메인 적용성이 MLA와 ITME 모두에 대해 표와 후속 설명으로 실질적으로 다뤄졌으며, Supervisor가 기록한 미해소 근거 공백도 없다.",
       "target_agents": []
     }
   },
-  "gaps": [
-    "tech: 기술 성숙도(TRL) 재조사 2회 후에도 근거 부족 — 제공된 발췌문에는 ‘메모리 계층(memory hierarchy)’ 자체의 계층 구조, 저장 장치 간 데이터 이동, 또는 관리 정책에 대한 설명은 없습니다.; 제공된 발췌문에는 온라인 RL 프레임워크의 구체적 알고리즘, 하이퍼파라미터, 하드웨어 구성, 데이터셋 규모, 학습 단계 수 및 재현 가능한 실행 설정이 없습니다.; 제공된 발췌문에는 표준 벤치마크 평가의 전체 결과 수치 및 각 벤치마크의 상세 프롬프트·샷 설정이 완전하게 ",
-    "market: 시장성 재조사 2회 후에도 근거 부족 — MLA가 속한 LLM 추론 서빙·추론 최적화 시장을 직접 정의하는 신뢰 가능한 시장조사기관 웹 자료(조사기관, 기준연도, 전망연도, 단위, CAGR 포함); ITME가 속한 CXL 메모리 시장의 시장조사기관 웹 자료(조사기관별 기준연도, 전망연도, 단위, CAGR 포함); DeepSeek-V2 MLA 자체를 명시하는 유료 서비스, 독립 고객사 도입 또는 실제 운영 사례",
-    "stakeholder: 이해관계자 재조사 2회 후에도 근거 부족 — ITME 이해관계자 관련 고유 출처 최소 2개 및 최신 시도 기준의 직접 근거; OpenAI, Google, Anthropic, Meta 등 경쟁 진영의 MLA 또는 DeepSeek MLA 계열에 대한 식별 가능한 직접 발언; ITME 자체에 대한 경쟁사 또는 경쟁 기술 제공자의 대안·한계·병행 가능성 관련 명시적 발언",
-    "domain: 도메인 적용성 재조사 2회 후에도 근거 부족 — ‘D1 워크로드’의 정의 및 해당 워크로드의 모델/서빙 구성; 제한된 GPU 메모리의 구체적 용량과 GPU 종류; GPU 메모리 제약별 수용 가능한 동시 요청 수",
-    "tech: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족",
-    "market: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족",
-    "stakeholder: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족",
-    "domain: 종합 단계에서 추가 근거 요청, 재조사 한도 소진 — 근거 부족"
-  ],
-  "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-  "status": "unverified",
-  "supervisor_steps": 11,
+  "gaps": [],
+  "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+  "status": "completed",
+  "supervisor_steps": 12,
   "retry_counts": {
-    "tech": 2,
+    "tech": 0,
     "market": 2,
     "stakeholder": 2,
-    "domain": 2,
+    "domain": 1,
     "synthesis": 0,
-    "report": 2,
-    "quality_evaluator": 0
+    "report": 0,
+    "quality_evaluator": 0,
+    "tech:followup": 0,
+    "market:followup": 1,
+    "stakeholder:followup": 0,
+    "domain:followup": 0
   },
   "evidence_store": {
-    "items": 199,
+    "items": 112,
     "missing_full_text": 0,
     "evaluator": {
-      "cited": 150,
+      "cited": 86,
       "cited_missing_full_text": 0
     }
   }

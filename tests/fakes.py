@@ -106,13 +106,14 @@ class FakeLLM:
     - crash_on:     {agent: N}  SimulatedCrash (프로세스 중단 흉내, 재개 테스트용)
     - banned_report: N          보고서에 우열 표현 삽입(중립성 규칙 미달 유도)
     - judge_fail:   {criterion: (N, target_agent)}  LLM Judge 미달
+    - judge_reason_varies: True  Judge 사유 문장이 실행마다 달라진다(실제 LLM처럼 같은 지적을 다른 문장으로)
     - needs_source: [agent]     종합이 추가 근거를 요청할 관점(처음 needs_source_runs회 종합 실행에서)
     - cite_limit:   {agent: {tech: n}}  인용 출처 수 제한(cite_limit_runs={agent: N}이면 처음 N회만, 없으면 매 시도)
     """
 
     def __init__(self, insufficient=None, one_sided=None, raise_on=None, crash_on=None,
                  banned_report=0, judge_fail=None, needs_source=None, cite_limit=None, optional_only=None,
-                 needs_source_runs=1, cite_limit_runs=None):
+                 needs_source_runs=1, cite_limit_runs=None, judge_reason_varies=False):
         self.insufficient = insufficient or {}
         self.optional_only = optional_only or {}
         self.one_sided = one_sided or {}
@@ -120,6 +121,7 @@ class FakeLLM:
         self.crash_on = crash_on or {}
         self.banned_report = banned_report
         self.judge_fail = judge_fail or {}
+        self.judge_reason_varies = judge_reason_varies
         self.needs_source = needs_source or []
         self.needs_source_runs = needs_source_runs
         self.cite_limit = cite_limit or {}  # {agent: {tech: n}} 인용 출처 수 제한
@@ -211,12 +213,19 @@ class FakeLLM:
         cite = " ".join(paper + web)
         banned = "\n\nMLA가 ITME보다 더 우수하다." if run <= self.banned_report else ""
         para = lambda topic: f"MLA와 ITME의 {topic}을 근거와 함께 서술한다 {cite}. 두 기술은 관점에 따라 평가가 달라진다."
+        # 판정 한계 명시 지시가 있으면 그 절 서술 첫 문장을 '한계:'로 쓴다(실제 LLM이 지시를 따른 경우를 흉내)
+        limited = set(re.findall(r"^- 4\.[1-4] \((perspective_\w+)\):", prompt.split("VERDICT LIMITATIONS", 1)[-1], re.M)
+                      if "VERDICT LIMITATIONS" in prompt else [])
+        lead = lambda field: "한계: 품질 평가가 지적한 근거 결함 때문에 위 표의 판정은 수집된 근거 범위 안에서만 유효하다.\n" \
+            if field in limited else ""
         return ReportParts(
             summary=f"- MLA와 ITME의 TRL은 공개 정보 기반 추정이다 {paper[0]}.\n- 관점별 평가가 엇갈린다 {web[0]}.",
             background=para("배경"), selection=para("선정 사유"),
             technology_overview="| 항목 | MLA | ITME |\n|---|---|---|\n| 계층 | 모델 | 메모리 |\n\n" + para("개요"),
-            perspective_trl=para("기술 성숙도"), perspective_market=para("시장성") + banned,
-            perspective_stakeholder=para("이해관계자 반응"), perspective_domain=para("도메인 적용성"),
+            perspective_trl=lead("perspective_trl") + para("기술 성숙도"),
+            perspective_market=lead("perspective_market") + para("시장성") + banned,
+            perspective_stakeholder=lead("perspective_stakeholder") + para("이해관계자 반응"),
+            perspective_domain=lead("perspective_domain") + para("도메인 적용성"),
             synthesis=para("종합"), implications=para("시사점"), limitations=para("한계"))
 
     def _judge(self, prompt, run, insufficient):
@@ -224,8 +233,9 @@ class FakeLLM:
         for name in ("groundedness", "neutrality", "bias_control", "coverage"):
             runs, target = self.judge_fail.get(name, (0, None))
             failed = run <= runs
+            reason = f"{name} 판정" + (f" (실행 {run}회차 표현)" if self.judge_reason_varies else "")
             verdicts[name] = CriterionVerdict(passed=not failed, score=2 if failed else 5,
-                                              reason=f"{name} 판정", target_agent=target if failed else None)
+                                              reason=reason, target_agent=target if failed else None)
         return EvalVerdict(**verdicts)
 
 

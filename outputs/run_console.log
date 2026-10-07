@@ -1,48 +1,43 @@
-[trace] trace_id=bdb9d055-1130-41f7-bde3-a3a6fe5e4391 · LangSmith ON (project=kv-cache-supervisor) · 에이전트 동시 실행 1
+[trace] trace_id=a523cc6b-91e7-4c0e-bed8-5356adf38bf1 · LangSmith ON (project=kv-cache-supervisor) · 에이전트 동시 실행 1
 [     0s] 청크 359개 적재 · 색인 생성 중(FAISS + BM25)...
 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Loading weights:   0%|          | 0/310 [00:00<?, ?it/s]Loading weights: 100%|██████████| 310/310 [00:00<00:00, 7895.09it/s]
-[     9s] 색인 완료(저장된 문서 임베딩 재사용) · 그래프 실행 시작
-[     9s] supervisor#1 → dispatch:tech,market,stakeholder,domain (tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집)
-[    72s] tech done
-[   103s] market done
-[   127s] stakeholder done
-[   170s] domain done
-[   170s] supervisor#2 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 1/2 (제공된 인용문에는 일반적인 의미의 ‘메모리 계층(memory hierarchy)’ 구조나 캐시 계층 간 데이터 이동 방식은 설명되어 있지 않습니다.; 제공된 발췌문에는 구체적인 하드 벤치마크의 이름, Table 8)
-[   222s] tech done
-[   279s] market done
-[   321s] stakeholder done
-[   380s] domain done
-[   380s] supervisor#3 → dispatch:tech,market,stakeholder,domain (tech: 근거 부족 재조사 2/2 (처리량(throughput)의 정량 결과 및 측정 조건; 지연시간(latency)의 정량 결과 및 측정 조건); market: 근거 부족 재조사 2/2 (MLA가 속한 LLM 추론 서빙/최적화 시장을 직접 정의한 )
-[   442s] tech done
-[   494s] market done
-[   530s] stakeholder done
-[   581s] domain done
-[   581s] supervisor#4 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
-[   604s] synthesis done
-[   604s] supervisor#5 → report (종합 완료 → 보고서 작성)
-[   636s] report done
-[   636s] supervisor#6 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
-[   649s] quality_evaluator done
-[   649s] supervisor#7 → rewrite:report (품질 평가 미달(groundedness) → 보고서 재작성: 수치 문장에 인용 없음: 저자 보고 기준 ITME는 재계산 기준 대비 5턴에서 1.81배 속도 향상, NVMe-oF 기준선 대비 1.80배 처리량 향상을 보고했다.)
-[   682s] report done
-[   682s] supervisor#8 → evaluate (보고서 완료(시도 1) → 품질 평가 4항목 판정)
-[   691s] quality_evaluator done
-[   691s] supervisor#9 → rewrite:report (품질 평가 미달(groundedness) → 보고서 재작성: 수치 문장에 인용 없음: | 저자 보고 효과 | KV cache 축소 및 효율적 추론을 목표로 제시 | NVMe-oF 기준선 대비 처리량 **1.80배** 향상 보고 |; 수치 문장에 인용 )
-[   722s] report done
-[   722s] supervisor#10 → evaluate (보고서 완료(시도 2) → 품질 평가 4항목 판정)
-[   736s] quality_evaluator done
-[   736s] supervisor#11 → end:unverified (재작업 한도 소진 — 품질 평가 미달 항목 ['groundedness'] 남김)
-WARNING: report generated but NOT verified for submission
+Loading weights:   0%|          | 0/310 [00:00<?, ?it/s]Loading weights: 100%|██████████| 310/310 [00:00<00:00, 8937.30it/s]
+[    11s] 색인 완료(저장된 문서 임베딩 재사용) · 그래프 실행 시작
+[    11s] supervisor#1 → dispatch:tech,market,stakeholder,domain (tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집)
+[    68s] tech done
+[   136s] market done
+[   179s] stakeholder done
+[   227s] domain done
+[   227s] supervisor#2 → dispatch:market,stakeholder,domain (market: 근거 부족 재조사 1/2 (market/itme: M1~M3 어느 기준도 판정하지 못함); stakeholder: 근거 부족 재조사 1/2 (stakeholder/itme: 고유 출처 1개(<2, 최신 시도 기준)); domain: 근거)
+[   274s] market done
+[   317s] stakeholder done
+[   372s] domain done
+[   372s] supervisor#3 → dispatch:stakeholder (stakeholder: 근거 부족 재조사 2/2 (stakeholder/itme: 고유 출처 1개(<2, 최신 시도 기준)))
+[   422s] stakeholder done
+[   422s] supervisor#4 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
+[   459s] synthesis done
+[   459s] supervisor#5 → report (종합 완료 → 보고서 작성)
+[   490s] report done
+[   490s] supervisor#6 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
+[   500s] quality_evaluator done
+[   500s] supervisor#7 → reinvestigate:market (품질 평가 미달 원인 관점만 재조사: groundedness: 4.2 시장성의 MLA ‘상용화·채택 현황: 긍정’은 [W3]의 Amazon Bedrock상 DeepSeek R1·V3 관측 지원을 근거로 하나, 해당 발췌는 DeepSeek 모델 지원만 )
+[   543s] market done
+[   543s] supervisor#8 → dispatch:market (market: 근거 부족 재조사 2/2 (market/itme: M1~M3 어느 기준도 판정하지 못함))
+[   590s] market done
+[   590s] supervisor#9 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
+[   615s] synthesis done
+[   615s] supervisor#10 → report (종합 완료 → 보고서 작성)
+[   646s] report done
+[   646s] supervisor#11 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
+[   662s] quality_evaluator done
+[   662s] supervisor#12 → end:passed (품질 평가 4항목 통과)
 {
-  "status": "unverified",
-  "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-  "verified": false,
-  "issues": [
-    "품질 평가 groundedness 미달: 4.1 TRL 및 5장 매트릭스의 “실제 서비스 운영 또는 상용 채택은 확인되지 않는다”는 서술은 제공 발췌문 [1, p.16]의 “actually deployed DeepSeek-V2” 및 실제 배포된 DeepSeek 67B 서비스의 길이 분포를 사용했다는 설명과 충돌하거나, 적어도 저자 보고 기준의 서비스 배포 근거를 누락한다. 독립 검증·외부 고객 채택이 없다고 한정해야 한다. 또한 MLA의 “TRL 4-6” 범위는 구현·내부 평가 근거와 연결되지만, 제시된 자료에는 해당 숫자 범위를 매핑하는 TRL 기준 자체가 없다."
-  ],
+  "status": "completed",
+  "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+  "verified": true,
+  "issues": [],
   "md": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.md",
   "pdf": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.pdf",
-  "pages": 8,
+  "pages": 7,
   "summary_fits_half_page": true
 }

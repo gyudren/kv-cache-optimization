@@ -7,7 +7,9 @@
 1) 근거가 없거나 부족하거나 실패한 관점 → 해당 관점만 (재)할당 (재시도 상한 안에서)
 2) 모든 관점이 결론 상태 → 종합 (종합이 특정 관점의 추가 근거를 요구하면 그 관점만 재조사)
 3) 종합 완료 → 보고서 (보고서는 품질 평가 노드를 거쳐 돌아온다)
-4) 평가 결과 → 통과면 종료, 미달이면 원인별 경로(원인이 관점이면 그 관점 재조사 / report면 보고서 재작성)
+4) 평가 결과 → 통과면 종료, 미달이면 원인별 경로(원인이 관점이면 그 관점 재조사 / report면 보고서 재작성).
+   원인이 관점인데 후속 재조사 한도가 소진됐으면 그 이슈 원문을 보고서 재작성 지시에 넣어 해당 판정표 아래에
+   '한계:'로 명시하게 하고, 그 재작성 후에도 같은 항목이 같은 사유로 미달이면 재작성을 멈추고 미검증으로 끝낸다.
 상한(MAX_STEPS·재시도 한도)은 안전장치다. 도달하면 근거 공백을 기록하고 보고서까지 만든 뒤 종료한다.
 재시도 한도는 둘로 나뉜다. 충분성 재조사(1)는 RETRY_LIMITS, 종합·평가가 요청한 후속 재조사(2·4)는
 FOLLOWUP_LIMITS를 쓴다. 충분성 재조사가 한도를 다 써도 종합·평가가 지목한 관점은 따로 한 번 더 조사할 수 있다.
@@ -18,13 +20,28 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 from ..config import FINALIZE_STEPS, FOLLOWUP_LIMITS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS, recursion_limit_for
-from ..evaluation.quality import CRITERIA, evidence_shortfalls
+from ..evaluation.quality import CRITERIA, SECTION_PERSPECTIVE, evidence_shortfalls
 from ..state import followup_key, perspective
 from ..tools import TECH_TOKENS, mentioned_techs
 
 END_NODE = "__end__"
 DOWNSTREAM = ("synthesis", "report", "quality_evaluator")
 LABEL = {"tech": "기술 성숙도(TRL)", "market": "시장성", "stakeholder": "이해관계자", "domain": "도메인 적용성"}
+SECTION_OF = {name: number for number, name in SECTION_PERSPECTIVE.items()}  # 관점 → 판정표가 있는 보고서 절(4.1~4.4)
+EVAL_GAP = "품질 평가 미달, 후속 조사 한도 소진"
+
+
+@dataclass(frozen=True)
+class _AgentIssue:
+    """원인이 관점 에이전트인 평가 미달 1건. key는 '같은 항목·같은 사유'를 판정하는 비교 키다."""
+    agent: str
+    criterion: str
+    text: str
+    reason_key: str
+
+    @property
+    def key(self) -> str:
+        return f"{self.criterion}|{self.agent}|{self.reason_key}"
 
 
 @dataclass(frozen=True)
@@ -189,6 +206,9 @@ class _Builder:
         if text not in (self.state.get("gaps") or []) and text not in self.updates["gaps"]:
             self.updates["gaps"].append(text)
 
+    def has_gap(self, prefix: str) -> bool:
+        return any(g.startswith(prefix) for g in [*(self.state.get("gaps") or []), *self.updates["gaps"]])
+
     def done(self, targets: list[str], decision: str, reason: str, **extra) -> Decision:
         updates = {k: v for k, v in self.updates.items() if v}
         updates.update(extra)
@@ -333,38 +353,57 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
         return b.end("end:step_limit", f"단계 상한 도달 — 품질 평가 미달 항목 {failed} 남김", verified=False)
 
     # (a) 미달 원인이 관점 에이전트인 항목(편향·커버리지, 또는 에이전트 판정을 옮긴 표의 근거·중립성 결함) → 그 관점만 재조사
-    issues_by_agent: dict[str, list[str]] = {}
+    issues_by_agent: dict[str, list[_AgentIssue]] = {}
     for name in CRITERIA:
         c = criteria.get(name, {})
         if c.get("passed"):
             continue
         for agent in c.get("target_agents", []):
             if agent in PERSPECTIVES:
-                own = [i for i in c.get("rule", {}).get("issues", []) if i.startswith(agent)]
-                issues_by_agent.setdefault(agent, []).extend(own or [f"{name}: {c.get('reason', '')[:300]}"])
+                own = [_AgentIssue(agent, name, i, i) for i in c.get("rule", {}).get("issues", []) if i.startswith(agent)]
+                # Judge 사유는 실행마다 문장이 달라지므로 "같은 사유"는 (항목, 원인 관점)으로 본다.
+                judged = _AgentIssue(agent, name, f"{name}: {c.get('reason', '')[:300]}", "judge")
+                issues_by_agent.setdefault(agent, []).extend(own or [judged])
     rerun = [a for a in issues_by_agent if b.can_followup(a)]
+    carried: list[_AgentIssue] = []  # 후속 한도 소진으로 재조사하지 못한 관점 원인 이슈 → 보고서에서 판정의 한계로 명시
     for agent, issues in issues_by_agent.items():
         if agent in rerun:
             continue
         for issue in issues:  # 재조사 불가: 근거 공백으로 명시하고 보고서에 드러낸다
-            b.gap(issue if issue.startswith(f"{agent}/") or issue.startswith(f"{agent}:")
-                  else f"{agent}: 품질 평가 미달, 후속 조사 한도 소진 — {issue[:200]}")
+            carried.append(issue)
+            if issue.text.startswith((f"{agent}/", f"{agent}:")):
+                b.gap(issue.text)
+            elif not b.has_gap(f"{agent}: {EVAL_GAP} — {issue.criterion}:"):  # 같은 항목은 사유 문장이 달라도 한 번만
+                b.gap(f"{agent}: {EVAL_GAP} — {issue.text[:200]}")
     if rerun:
-        b.followup(rerun, {agent: _eval_feedback(issues_by_agent[agent]) for agent in rerun})
+        b.followup(rerun, {agent: _eval_feedback([i.text for i in issues_by_agent[agent]]) for agent in rerun})
         return b.done(rerun, "reinvestigate:" + ",".join(rerun),
                       "품질 평가 미달 원인 관점만 재조사: "
-                      + "; ".join(i for a in rerun for i in issues_by_agent[a])[:300])
+                      + "; ".join(i.text for a in rerun for i in issues_by_agent[a])[:300])
 
-    # (b) 원인이 보고서 서술인 항목(또는 새 근거 공백 반영 필요) → 보고서 재작성
+    # 재조사하지 못한 관점 원인 이슈로 이미 한 번 재작성했는데 같은 항목이 같은 사유로 또 미달이면 재작성을 멈춘다.
+    # 판정의 한계를 명시한 보고서로도 해소되지 않는 결함이라 재작성을 반복해도 통과할 수 없다(무의미한 루프 방지).
+    carried_keys = sorted({issue.key for issue in carried})
+    previous = (state.get("feedback") or {}).get("report") or {}
+    if carried_keys and set(carried_keys) <= set(previous.get("carried_keys", [])):
+        return b.end("end:unverified",
+                     "재조사할 수 없는 관점 원인 미달이 판정 한계를 명시한 재작성 후에도 같은 사유로 반복 → 재작성 중단: "
+                     + "; ".join(i.text for i in carried)[:240], verified=False)
+
+    # (b) 원인이 보고서 서술인 항목, 재조사하지 못한 관점 원인 항목(해당 표 아래 판정 한계 명시), 새 근거 공백 → 보고서 재작성
     rewrite_issues = []
     for name in CRITERIA:
         c = criteria.get(name, {})
         if not c.get("passed") and "report" in c.get("target_agents", []):
             rewrite_issues.extend(c.get("rule", {}).get("issues", []) or [c.get("reason", "")])
+    verdict_limits = [{"perspective": i.agent, "section": SECTION_OF[i.agent], "criterion": i.criterion, "issue": i.text}
+                      for i in carried]
+    rewrite_issues += [f"[{limit['section']} 판정 한계 명시] {limit['issue']}" for limit in verdict_limits]
     if b.updates["gaps"]:
         rewrite_issues.append("Supervisor가 새로 기록한 근거 공백을 7장 한계점에 근거 부족으로 명시할 것")
     if rewrite_issues and b.can_retry("report"):
-        b.bump("report", {"issues": [i for i in rewrite_issues if i][:12]})
+        b.bump("report", {"issues": [i for i in rewrite_issues if i][:12],
+                          "verdict_limits": verdict_limits, "carried_keys": carried_keys})
         b.run("report")
         b.updates["node_status"]["quality_evaluator"] = "pending"
         return b.done(["report"], "rewrite:report",

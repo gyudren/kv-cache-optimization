@@ -223,6 +223,28 @@ def gap_section(state: dict) -> str:
 
 
 MAX_OPTIONAL_IN_PROMPT = 8  # 관점별 선택 미확인 항목을 프롬프트에 넣는 상한(전체는 final_state에 남는다)
+# 판정표 바로 아래에 오는 서술 필드(코드가 '### 4.x' 제목·표 다음에 이 필드를 붙인다)
+SECTION_FIELD = {"4.1": "perspective_trl", "4.2": "perspective_market",
+                 "4.3": "perspective_stakeholder", "4.4": "perspective_domain"}
+
+
+def verdict_limit_note(limits: list[dict]) -> str:
+    """재조사하지 못한 관점 원인 평가 미달을 판정표 아래의 '한계:' 문장으로 드러내라는 지시.
+
+    표는 에이전트 판정을 코드가 그대로 옮기므로 보고서가 판정을 바꿀 수 없다. 대신 판정의 제약을 표 바로 아래에
+    밝히고, 표 판정과 충돌하거나 근거 범위를 넘는 서술을 근거 범위로 좁히게 한다.
+    """
+    if not limits:
+        return ""
+    return ("VERDICT LIMITATIONS: the quality evaluator found the defects below in an agent verdict that the code copies into a 4.x "
+            "table, and that agent can no longer be re-investigated. For EACH item, the narrative field of that section must START with "
+            "one Korean sentence beginning with '한계: ' that states how the defect constrains the verdict in the table directly above "
+            "(e.g. only one direction of evidence was found, the verdict rests on a single source, the cited excerpt does not confirm the "
+            "TRL basis). Do not change or contradict the table verdict, and add no new numbers. Narrow every sentence in that field, the "
+            "summary and the synthesis that states more than the cited evidence supports, or that conflicts with the table verdict, "
+            "to what the evidence actually covers.\n- "
+            + "\n- ".join(f"{limit['section']} ({SECTION_FIELD.get(limit['section'], limit['section'])}): {limit['issue']}"
+                          for limit in limits) + "\n")
 
 
 def report_view(state: dict, name: str) -> dict:
@@ -241,9 +263,11 @@ def render_report(state: dict, llm: Any) -> str:
                          "claim": ev.get("claim", ""), "excerpt": ev.get("excerpt", "")[:900],
                          "url": ev.get("url", "")}
                         for ev in sources]
-    feedback = state.get("feedback", {}).get("report", {}).get("issues", [])
+    report_feedback = state.get("feedback", {}).get("report", {})
+    feedback = report_feedback.get("issues", [])
     revision = ("\nPREVIOUS DRAFT WAS REJECTED BY THE QUALITY EVALUATOR. Fix every issue below:\n- "
                 + "\n- ".join(feedback) + "\n") if feedback else ""
+    revision += verdict_limit_note(report_feedback.get("verdict_limits", []))
     sections = llm.generate_structured(
         prompt_template("report") + "\n" + DESIGN_CONTEXT + revision
         + "Write a Korean evidence-based multi-perspective evaluation report of DeepSeek-V2 MLA and ITME for "

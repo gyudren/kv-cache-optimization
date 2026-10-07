@@ -1,11 +1,11 @@
 [
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 1,
     "node": "supervisor",
     "decision": "dispatch:tech,market,stakeholder,domain",
     "reason": "tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집",
-    "ts": "2026-10-07T05:22:57+00:00",
+    "ts": "2026-10-07T06:11:13+00:00",
     "targets": [
       "tech",
       "market",
@@ -14,159 +14,152 @@
     ]
   },
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 2,
     "node": "supervisor",
-    "decision": "dispatch:tech,market,stakeholder,domain",
-    "reason": "tech: 근거 부족 재조사 1/2 (제공된 인용문에는 일반적인 의미의 ‘메모리 계층(memory hierarchy)’ 구조나 캐시 계층 간 데이터 이동 방식은 설명되어 있지 않습니다.; 제공된 발췌문에는 구체적인 하드 벤치마크의 이름, Table 8·); market: 근거 부족 재조사 1/2 (ITME가 속한 CXL 메모리 시장의 조사기관별 기준연도·전망연도·단위·CAGR이 포함된 웹 시장자료; ITME 개별 기술의 제품 상태, 공급사 공식 발표, 고객 샘플·출시·실운영 사례); stakeholder: 근거 부족 재조사 1/2 (stakeholder/itme: 고유 출처 1개(<2, 최신 시도 기준); S1 판단을 위한 OpenAI, Google, Anthropic, Meta 등 경쟁 진영의 MLA 또는 DeepSeek MLA 계열에 관한 ); domain: 근거 부족 재조사 1/2 (제한된 GPU 메모리의 구체적 용량; 동시 요청 수(concurrent requests)를 계산하기 위한 배치 크기·요청별 컨텍스트 길이·런타임/모델 메모리 사용량)",
-    "ts": "2026-10-07T05:25:38+00:00",
+    "decision": "dispatch:market,stakeholder,domain",
+    "reason": "market: 근거 부족 재조사 1/2 (market/itme: M1~M3 어느 기준도 판정하지 못함); stakeholder: 근거 부족 재조사 1/2 (stakeholder/itme: 고유 출처 1개(<2, 최신 시도 기준)); domain: 근거 부족 재조사 1/2 (domain/mla: D1 워크로드 수용 능력 존재하지 않는 문헌 출처; domain/mla: D2 서비스 성능 존재하지 않는 문헌 출처)",
+    "ts": "2026-10-07T06:14:49+00:00",
     "targets": [
-      "tech",
       "market",
       "stakeholder",
       "domain"
     ]
   },
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 3,
     "node": "supervisor",
-    "decision": "dispatch:tech,market,stakeholder,domain",
-    "reason": "tech: 근거 부족 재조사 2/2 (처리량(throughput)의 정량 결과 및 측정 조건; 지연시간(latency)의 정량 결과 및 측정 조건); market: 근거 부족 재조사 2/2 (MLA가 속한 LLM 추론 서빙/최적화 시장을 직접 정의한 신뢰 가능한 웹 시장자료(조사기관, 기준연도, 전망연도, 단위, CAGR 포함); ITME가 속한 CXL 메모리 시장의 웹 시장자료(조사기관별 기준연도·전망); stakeholder: 근거 부족 재조사 2/2 (stakeholder/mla: 고유 출처 1개(<2, 최신 시도 기준); ITME 이해관계자 관련 고유 출처 최소 2개와 최신 시도 기준의 직접 근거); domain: 근거 부족 재조사 2/2 (D1 워크로드의 정의 또는 모델 구성; GPU 종류 및 사용 가능 메모리 용량)",
-    "ts": "2026-10-07T05:29:09+00:00",
+    "decision": "dispatch:stakeholder",
+    "reason": "stakeholder: 근거 부족 재조사 2/2 (stakeholder/itme: 고유 출처 1개(<2, 최신 시도 기준))",
+    "ts": "2026-10-07T06:17:14+00:00",
     "targets": [
-      "tech",
-      "market",
-      "stakeholder",
-      "domain"
+      "stakeholder"
     ]
   },
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 4,
     "node": "supervisor",
     "decision": "synthesis",
     "reason": "4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합",
-    "ts": "2026-10-07T05:32:29+00:00",
+    "ts": "2026-10-07T06:18:04+00:00",
     "targets": [
       "synthesis"
     ]
   },
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 5,
     "node": "supervisor",
     "decision": "report",
     "reason": "종합 완료 → 보고서 작성",
-    "ts": "2026-10-07T05:32:53+00:00",
+    "ts": "2026-10-07T06:18:41+00:00",
     "targets": [
       "report"
     ]
   },
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 6,
     "node": "supervisor",
     "decision": "evaluate",
     "reason": "보고서 완료(시도 0) → 품질 평가 4항목 판정",
-    "ts": "2026-10-07T05:33:25+00:00",
+    "ts": "2026-10-07T06:19:12+00:00",
     "targets": [
       "quality_evaluator"
     ]
   },
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 6,
     "node": "quality_evaluator",
-    "decision": "fail:groundedness",
-    "reason": "groundedness: 수치 문장에 인용 없음: 저자 보고 기준 ITME는 재계산 기준 대비 5턴에서 1.81배 속도 향상, NVMe-oF 기준선 대비 1.80배 처리량 향상을 보고했다.",
-    "ts": "2026-10-07T05:33:37+00:00",
-    "scores": {
-      "groundedness": 2,
-      "neutrality": 5,
-      "bias_control": 4,
-      "coverage": 5
-    }
-  },
-  {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-    "step": 7,
-    "node": "supervisor",
-    "decision": "rewrite:report",
-    "reason": "품질 평가 미달(groundedness) → 보고서 재작성: 수치 문장에 인용 없음: 저자 보고 기준 ITME는 재계산 기준 대비 5턴에서 1.81배 속도 향상, NVMe-oF 기준선 대비 1.80배 처리량 향상을 보고했다.",
-    "ts": "2026-10-07T05:33:37+00:00",
-    "targets": [
-      "report"
-    ]
-  },
-  {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-    "step": 8,
-    "node": "supervisor",
-    "decision": "evaluate",
-    "reason": "보고서 완료(시도 1) → 품질 평가 4항목 판정",
-    "ts": "2026-10-07T05:34:10+00:00",
-    "targets": [
-      "quality_evaluator"
-    ]
-  },
-  {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-    "step": 8,
-    "node": "quality_evaluator",
-    "decision": "fail:groundedness",
-    "reason": "groundedness: 수치 문장에 인용 없음: | 저자 보고 효과 | KV cache 축소 및 효율적 추론을 목표로 제시 | NVMe-oF 기준선 대비 처리량 **1.80배** 향상 보고 |; 수치 문장에 인용 없음: 저자 보고 기준 ITME는 재계산 기준 대비 5턴에서 TTFT **1.81배** 속도 향상",
-    "ts": "2026-10-07T05:34:19+00:00",
-    "scores": {
-      "groundedness": 2,
-      "neutrality": 5,
-      "bias_control": 4,
-      "coverage": 5
-    }
-  },
-  {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-    "step": 9,
-    "node": "supervisor",
-    "decision": "rewrite:report",
-    "reason": "품질 평가 미달(groundedness) → 보고서 재작성: 수치 문장에 인용 없음: | 저자 보고 효과 | KV cache 축소 및 효율적 추론을 목표로 제시 | NVMe-oF 기준선 대비 처리량 **1.80배** 향상 보고 |; 수치 문장에 인용 없음: 저자 보고 기준 ITME는 재계산 기준 대비 5턴에서 TTFT **1.81배** 속도 향상, NVMe-oF 기준선 대비 처리량 **1.80배** 향상을 보고했다.",
-    "ts": "2026-10-07T05:34:19+00:00",
-    "targets": [
-      "report"
-    ]
-  },
-  {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-    "step": 10,
-    "node": "supervisor",
-    "decision": "evaluate",
-    "reason": "보고서 완료(시도 2) → 품질 평가 4항목 판정",
-    "ts": "2026-10-07T05:34:50+00:00",
-    "targets": [
-      "quality_evaluator"
-    ]
-  },
-  {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
-    "step": 10,
-    "node": "quality_evaluator",
-    "decision": "fail:groundedness",
-    "reason": "groundedness: 4.1 TRL 및 5장 매트릭스의 “실제 서비스 운영 또는 상용 채택은 확인되지 않는다”는 서술은 제공 발췌문 [1, p.16]의 “actually deployed DeepSeek-V2” 및 실제 배포된 DeepSeek 67B 서비스의 길이 분포를 사용했다는 설명과 충돌하거나, 적어도 ",
-    "ts": "2026-10-07T05:35:04+00:00",
+    "decision": "fail:groundedness,bias_control",
+    "reason": "groundedness: 4.2 시장성의 MLA ‘상용화·채택 현황: 긍정’은 [W3]의 Amazon Bedrock상 DeepSeek R1·V3 관측 지원을 근거로 하나, 해당 발췌는 DeepSeek 모델 지원만 말할 뿐 MLA 기능 자체의 채택·상용 운용을 직접 뒷받침하지 않는다. 본문이 뒤에서 ‘MLA 기능; bias_control: market/mla: 판정이 긍정 한쪽뿐(반대 방향 근거 미탐색)",
+    "ts": "2026-10-07T06:19:21+00:00",
     "scores": {
       "groundedness": 3,
       "neutrality": 5,
-      "bias_control": 4,
+      "bias_control": 2,
       "coverage": 5
     }
   },
   {
-    "trace_id": "bdb9d055-1130-41f7-bde3-a3a6fe5e4391",
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+    "step": 7,
+    "node": "supervisor",
+    "decision": "reinvestigate:market",
+    "reason": "품질 평가 미달 원인 관점만 재조사: groundedness: 4.2 시장성의 MLA ‘상용화·채택 현황: 긍정’은 [W3]의 Amazon Bedrock상 DeepSeek R1·V3 관측 지원을 근거로 하나, 해당 발췌는 DeepSeek 모델 지원만 말할 뿐 MLA 기능 자체의 채택·상용 운용을 직접 뒷받침하지 않는다. 본문이 뒤에서 ‘MLA 기능 자체의 고객 사용 규모를 증명하지는 않는다’고 한정한 점도 표의 긍정 판정과 긴장된다.; market/mla: 판정이 긍정 한쪽뿐(반대 방향 근거 미탐색)",
+    "ts": "2026-10-07T06:19:21+00:00",
+    "targets": [
+      "market"
+    ]
+  },
+  {
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+    "step": 8,
+    "node": "supervisor",
+    "decision": "dispatch:market",
+    "reason": "market: 근거 부족 재조사 2/2 (market/itme: M1~M3 어느 기준도 판정하지 못함)",
+    "ts": "2026-10-07T06:20:05+00:00",
+    "targets": [
+      "market"
+    ]
+  },
+  {
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+    "step": 9,
+    "node": "supervisor",
+    "decision": "synthesis",
+    "reason": "4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합",
+    "ts": "2026-10-07T06:20:52+00:00",
+    "targets": [
+      "synthesis"
+    ]
+  },
+  {
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+    "step": 10,
+    "node": "supervisor",
+    "decision": "report",
+    "reason": "종합 완료 → 보고서 작성",
+    "ts": "2026-10-07T06:21:17+00:00",
+    "targets": [
+      "report"
+    ]
+  },
+  {
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
     "step": 11,
     "node": "supervisor",
-    "decision": "end:unverified",
-    "reason": "재작업 한도 소진 — 품질 평가 미달 항목 ['groundedness'] 남김",
-    "ts": "2026-10-07T05:35:04+00:00",
+    "decision": "evaluate",
+    "reason": "보고서 완료(시도 0) → 품질 평가 4항목 판정",
+    "ts": "2026-10-07T06:21:48+00:00",
+    "targets": [
+      "quality_evaluator"
+    ]
+  },
+  {
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+    "step": 11,
+    "node": "quality_evaluator",
+    "decision": "pass",
+    "reason": "4항목 통과",
+    "ts": "2026-10-07T06:22:04+00:00",
+    "scores": {
+      "groundedness": 4,
+      "neutrality": 5,
+      "bias_control": 5,
+      "coverage": 5
+    }
+  },
+  {
+    "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
+    "step": 12,
+    "node": "supervisor",
+    "decision": "end:passed",
+    "reason": "품질 평가 4항목 통과",
+    "ts": "2026-10-07T06:22:04+00:00",
     "targets": [
       "__end__"
     ]
