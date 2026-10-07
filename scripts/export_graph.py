@@ -6,7 +6,7 @@
 API 키·색인 없이 노드/엣지 구조만 컴파일한다. PNG 렌더링(draw_mermaid_png)은 mermaid.ink
 원격 API를 쓰므로 네트워크가 막힌 환경에서는 실패할 수 있다. 그때는 컴파일된 그래프의 실제 노드·엣지를
 Pillow(reportlab 의존성으로 함께 설치됨)로 직접 그린다. 둘 다 안 되면 Mermaid 원문(.mmd)만 남긴다.
-점선 = Supervisor의 conditional edge(State 기반 라우팅), 실선 = 고정 엣지(에이전트 → Supervisor 복귀).
+점선 = Supervisor의 conditional edge(State 기반 라우팅), 실선 = 고정 엣지(모든 작업 노드 → Supervisor 복귀).
 """
 from __future__ import annotations
 import sys
@@ -76,7 +76,7 @@ def _local_png(drawable, path: Path) -> None:
         draw.text((x, y), label, fill="#111111", font=font, anchor="mm")
     draw.text((20, height - 50), "dashed = supervisor add_conditional_edges (State-based routing, Send fan-out)",
               fill="#6842a6", font=small)
-    draw.text((20, height - 28), "solid = fixed edge (every agent returns to supervisor; report -> quality_evaluator -> supervisor)",
+    draw.text((20, height - 28), "solid = fixed edge (every worker incl. report and quality_evaluator returns only to supervisor)",
               fill="#20789d", font=small)
     image.save(path)
 
