@@ -1,43 +1,43 @@
-[trace] trace_id=a523cc6b-91e7-4c0e-bed8-5356adf38bf1 · LangSmith ON (project=kv-cache-supervisor) · 에이전트 동시 실행 1
+[trace] trace_id=77cb99ef-dca7-4e3e-9624-cae001856406 · LangSmith ON (project=kv-cache-supervisor) · 에이전트 동시 실행 1
 [     0s] 청크 359개 적재 · 색인 생성 중(FAISS + BM25)...
 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Loading weights:   0%|          | 0/310 [00:00<?, ?it/s]Loading weights: 100%|██████████| 310/310 [00:00<00:00, 8937.30it/s]
-[    11s] 색인 완료(저장된 문서 임베딩 재사용) · 그래프 실행 시작
-[    11s] supervisor#1 → dispatch:tech,market,stakeholder,domain (tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집)
-[    68s] tech done
-[   136s] market done
-[   179s] stakeholder done
-[   227s] domain done
-[   227s] supervisor#2 → dispatch:market,stakeholder,domain (market: 근거 부족 재조사 1/2 (market/itme: M1~M3 어느 기준도 판정하지 못함); stakeholder: 근거 부족 재조사 1/2 (stakeholder/itme: 고유 출처 1개(<2, 최신 시도 기준)); domain: 근거)
-[   274s] market done
-[   317s] stakeholder done
-[   372s] domain done
-[   372s] supervisor#3 → dispatch:stakeholder (stakeholder: 근거 부족 재조사 2/2 (stakeholder/itme: 고유 출처 1개(<2, 최신 시도 기준)))
-[   422s] stakeholder done
-[   422s] supervisor#4 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
-[   459s] synthesis done
-[   459s] supervisor#5 → report (종합 완료 → 보고서 작성)
-[   490s] report done
-[   490s] supervisor#6 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
-[   500s] quality_evaluator done
-[   500s] supervisor#7 → reinvestigate:market (품질 평가 미달 원인 관점만 재조사: groundedness: 4.2 시장성의 MLA ‘상용화·채택 현황: 긍정’은 [W3]의 Amazon Bedrock상 DeepSeek R1·V3 관측 지원을 근거로 하나, 해당 발췌는 DeepSeek 모델 지원만 )
-[   543s] market done
-[   543s] supervisor#8 → dispatch:market (market: 근거 부족 재조사 2/2 (market/itme: M1~M3 어느 기준도 판정하지 못함))
-[   590s] market done
-[   590s] supervisor#9 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
-[   615s] synthesis done
-[   615s] supervisor#10 → report (종합 완료 → 보고서 작성)
-[   646s] report done
-[   646s] supervisor#11 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
-[   662s] quality_evaluator done
-[   662s] supervisor#12 → end:passed (품질 평가 4항목 통과)
+Loading weights:   0%|          | 0/310 [00:00<?, ?it/s]Loading weights: 100%|██████████| 310/310 [00:00<00:00, 10621.53it/s]
+[    10s] 색인 완료(저장된 문서 임베딩 재사용) · 그래프 실행 시작
+[    10s] supervisor#1 → dispatch:tech,market,stakeholder,domain (tech: 미수집; market: 미수집; stakeholder: 미수집; domain: 미수집)
+[    71s] tech done
+[   100s] market done
+[   129s] stakeholder done
+[   179s] domain done
+[   179s] supervisor#2 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
+[   211s] synthesis done
+[   211s] supervisor#3 → dispatch:market,stakeholder (종합이 추가 근거를 요청한 관점만 재조사(후속 재조사))
+[   259s] market done
+[   289s] stakeholder done
+[   289s] supervisor#4 → synthesis (4관점이 결론 상태(충분 또는 근거 공백 기록) → 종합)
+[   311s] synthesis done
+[   311s] supervisor#5 → report (종합 완료 → 보고서 작성)
+[   347s] report done
+[   347s] supervisor#6 → evaluate (보고서 완료(시도 0) → 품질 평가 4항목 판정)
+[   360s] quality_evaluator done
+[   360s] supervisor#7 → rewrite:report (품질 평가 미달(groundedness,bias_control) → 보고서 재작성: [4.2 판정 한계 명시] groundedness: 4.2 시장성 표에서 MLA의 ‘상용화·채택 현황’을 ‘긍정’으로 판정한 근거 [W3]·[W17]은 DeepSeek)
+[   399s] report done
+[   399s] supervisor#8 → evaluate (보고서 완료(시도 1) → 품질 평가 4항목 판정)
+[   411s] quality_evaluator done
+[   411s] supervisor#9 → rewrite:report (품질 평가 미달(groundedness,bias_control) → 보고서 재작성: [4.2 판정 한계 명시] groundedness: 4.2 시장성 표의 MLA ‘상용화·채택 현황: 긍정’은 [W3]·[W17]이 DeepSeek R1/V3 모델의 관)
+[   450s] report done
+[   450s] supervisor#10 → evaluate (보고서 완료(시도 2) → 품질 평가 4항목 판정)
+[   458s] quality_evaluator done
+[   458s] supervisor#11 → end:unverified (재조사할 수 없는 관점 원인 미달이 판정 한계를 명시한 재작성 후에도 같은 사유로 반복 → 재작성 중단: bias_control: 4.2 시장성 표에서 MLA의 ‘시장 규모·성장성’, ‘상용화·채택 현황’, ‘생태계 지지’를 모두 ‘긍정’으로 판정했지)
+WARNING: report generated but NOT verified for submission
 {
-  "status": "completed",
-  "trace_id": "a523cc6b-91e7-4c0e-bed8-5356adf38bf1",
-  "verified": true,
-  "issues": [],
+  "status": "unverified",
+  "trace_id": "77cb99ef-dca7-4e3e-9624-cae001856406",
+  "verified": false,
+  "issues": [
+    "품질 평가 bias_control 미달: 4.2 시장성 표에서 MLA의 ‘시장 규모·성장성’, ‘상용화·채택 현황’, ‘생태계 지지’를 모두 ‘긍정’으로 판정했지만, 해당 하위 판정에 반대 방향 근거가 없다. 7장은 “MLA: 판정이 긍정 한쪽뿐(반대 방향 근거 미탐색)”이라고 공백을 명시하고 종합을 ‘근거 부족’으로 낮췄으나, 하위 판정의 한쪽 방향 근거 의존은 해소되지 않았다. 특히 ‘상용화·채택 현황’의 [W3]·[W17]은 R1/V3 모델 관측·호스팅 신호이지 DeepSeek-V2 MLA 기능의 고객 채택 근거가 아니다."
+  ],
   "md": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.md",
   "pdf": "outputs/Agent_판교_9반_김민정_김태동_임동건_김동욱_이재겸_박규리.pdf",
-  "pages": 7,
+  "pages": 8,
   "summary_fits_half_page": true
 }

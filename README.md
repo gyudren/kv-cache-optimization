@@ -92,12 +92,12 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(IT
 2. **관측성 위치** : 결정 로그 본문은 `outputs/decisions_{trace_id}.jsonl`과 LangSmith에 두고, State에는 직전 결정(`last_decision`)만 둔다. State에 쌓으면 체크포인트마다 전체 이력이 복제된다.
 3. **지속성 비용** : RAG 캐시와 Evidence 발췌 원문은 `data/cache/{trace_id}/`에 두고 State에는 160자 축약본과 참조만 둔다. 보고서·평가는 원문을 `hydrate()`로 읽는다. `Send` 페이로드에도 에이전트가 읽는 제어 필드만 넘긴다. 에이전트를 다시 실행하면 이전 시도의 근거는 교체한다.
 
-   | 실측 (실제 실행 1회, trace `a523cc6b`) | 크기 |
+   | 실측 (실제 실행 1회, trace `77cb99ef`) | 크기 |
    |---|---|
-   | 최종 State (`final_state.json`) | 198 KB |
-   | 그중 `evidence` 112건 | 66 KB |
-   | 디스크 저장소 (`data/cache/{trace_id}/`, 원문·RAG 캐시) | 346 KB |
-   | 체크포인트 25개 누적 (`checkpoints.sqlite`) | 3.58 MB |
+   | 최종 State (`final_state.json`) | 213 KB |
+   | 그중 `evidence` 119건 | 70 KB |
+   | 디스크 저장소 (`data/cache/{trace_id}/`, 원문·RAG 캐시) | 317 KB |
+   | 체크포인트 23개 누적 (`checkpoints.sqlite`) | 3.38 MB |
 
    원문을 State에 두면 evidence만 약 490 KB가 되고 체크포인트마다 그대로 복제된다. `python scripts/measure_state_size.py`로 Fake 실행 기준 크기를 다시 잴 수 있다. 원문 저장소가 없는 환경(새로 clone)에서는 축약 발췌만 남는데, 이때는 `excerpt_truncated`를 표시하고 Judge 프롬프트와 `validation.json`에 경고를 남긴다. `--report-only`는 원문이 없으면 즉시 실패한다.
 4. **상관** : uuid4 `trace_id` 하나를 LangGraph `thread_id`, LangSmith metadata, 결정 로그 파일명에 같이 쓴다. 세 저장소를 손으로 맞출 일이 없다.
@@ -139,24 +139,25 @@ flowchart TD
     class EVAL gate;
 ```
 
-실제 실행 경로 (`outputs/run_logs.json`, trace `a523cc6b`, 12단계, 품질 평가 통과):
+실제 실행 경로 (`outputs/run_logs.json`, trace `77cb99ef`, 커밋 `9a6b5bf`, 11단계):
+
+(LangSmith metadata의 `revision_id`가 `9a6b5bf-dirty`인 것은 코드 변경이 아니라, 실행 시작 시 `tee`가 git이 추적하는 `outputs/run_console.log`를 덮어썼기 때문이다.)
 
 ```
 #1  dispatch:tech,market,stakeholder,domain   4관점 미수집
-#2  dispatch:market,stakeholder,domain        tech 충분. market ITME 판정 불가, stakeholder ITME 출처 1개, domain 인용 오류
-#3  dispatch:stakeholder                      stakeholder ITME 출처 1개 (재조사 2/2)
+#2  synthesis                                 4관점 모두 충분
+#3  dispatch:market,stakeholder               종합이 추가 근거를 요청한 관점만 후속 재조사
 #4  synthesis
 #5  report
 #6  evaluate                                  groundedness·bias_control 미달, 원인 = market (4.2 표)
-#7  reinvestigate:market                      후속 재조사
-#8  dispatch:market                           ITME 판정 불가 (재조사 2/2)
-#9  synthesis
-#10 report
-#11 evaluate                                  4항목 통과
-#12 end:passed
+#7  rewrite:report                            market 후속 재조사 한도 소진 → 4.2 표 아래 판정 한계 명시
+#8  evaluate                                  같은 항목 미달
+#9  rewrite:report
+#10 evaluate                                  bias_control만 미달 (groundedness 통과)
+#11 end:unverified                            같은 원인으로 반복 → 재작성 중단
 ```
 
-관점 재조사는 4개 → 3개 → 1개로 줄고, 평가 미달은 보고서 재작성이 아니라 원인 관점(market) 재조사로 이어진다. 같은 경로를 Fake로 재현하는 테스트는 `tests/test_scenarios.py`, `tests/test_review_fixes.py`에 있다.
+종합이 4관점 중 market·stakeholder만 골라 다시 조사했고, 평가 미달은 원인 관점(market)을 지목했다. market은 후속 재조사 한도를 이미 썼기 때문에 Supervisor는 재조사 대신 4.2 표 아래에 판정 한계를 적게 하는 재작성으로 보냈고, 같은 원인으로 다시 미달하자 무한 재작성 없이 미검증으로 끝냈다. 남은 미달은 market이 MLA의 시장성 판정 3개를 모두 '긍정'으로 내리면서 반대 방향 근거를 찾지 않은 것(편향 통제 3점)으로, 7장 근거 공백에 그대로 적혀 있다. 부족한 관점만 재조사해 통과하는 경로는 `tests/test_scenarios.py`, `tests/test_review_fixes.py`가 Fake로 재현한다.
 
 ## 설계 결정
 
@@ -171,7 +172,7 @@ flowchart TD
 - **출처 단위** : 논문은 문서 단위로 센다. 페이지 단위로 세면 논문 1편으로도 '고유 출처 2개'를 통과한다.
 - **설계 문서 `[D]`** : 1·2장의 설계 조건에만 쓴다. 기술 사실의 근거는 허용 논문과 웹 출처뿐이다.
 - **순차 실행** : 4관점을 동시에 돌리면 메모리 사용량이 관점 수만큼 커지고 MPS 임베딩 모델을 여러 스레드가 동시에 불러 중단된다. 할당은 한 번에 하고 실행만 하나씩 한다.
-- **재시도 한도** : 관점 2회, 후속 1회, 보고서 2회, 종합 1회. `MAX_STEPS`는 20으로, 정상 경로(5단계)와 재작업이 많은 경로(12단계)를 끝까지 보내고 그 이상은 마무리 모드로 끊는다.
+- **재시도 한도** : 관점 2회, 후속 1회, 보고서 2회, 종합 1회. `MAX_STEPS`는 20으로, 정상 경로(5단계)와 재작업이 많은 경로(11~12단계)를 끝까지 보내고 그 이상은 마무리 모드로 끊는다.
 
 ## Data Preprocessing
 
@@ -251,7 +252,7 @@ python app.py --report-only          # 직전 결과로 보고서 → 품질 평
 python app.py --export-only          # LLM 호출 없이 검증·Markdown/PDF 내보내기만
 ```
 
-첫 실행은 문서 임베딩을 계산해 `data/cache/index/`에 저장하고, 이후 실행은 저장된 임베딩을 읽는다. 실행 중에는 노드별 진행과 Supervisor 결정 사유가 출력된다(`supervisor#3 → dispatch:stakeholder (stakeholder: 근거 부족 재조사 2/2 ...)`). `LANGSMITH_TRACING=true`와 키가 있으면 LangSmith에 같은 `trace_id`로 기록된다. 1회 실행은 10~13분 걸린다.
+첫 실행은 문서 임베딩을 계산해 `data/cache/index/`에 저장하고, 이후 실행은 저장된 임베딩을 읽는다. 실행 중에는 노드별 진행과 Supervisor 결정 사유가 출력된다(`supervisor#3 → dispatch:market,stakeholder (종합이 추가 근거를 요청한 관점만 재조사 ...)`). `LANGSMITH_TRACING=true`와 키가 있으면 LangSmith에 같은 `trace_id`로 기록된다. 1회 실행은 10~13분 걸린다.
 
 | 산출물 (`outputs/`) | 내용 |
 |---|---|

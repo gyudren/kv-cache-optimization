@@ -16,8 +16,10 @@ cp .env.example .env                     # 아래 값 입력
 ## 1. 실행
 
 ```bash
-python app.py 2>&1 | tee outputs/run_console.log
+python app.py 2>&1 | tee /tmp/run_console.log && cp /tmp/run_console.log outputs/run_console.log
 ```
+
+로그를 저장소 밖에 먼저 쓰는 이유: `outputs/run_console.log`는 git이 추적하는 파일이라 실행 시작과 함께 덮어쓰면 LangSmith의 `revision_id`에 `-dirty`가 붙는다.
 
 - 첫 줄 `[trace] trace_id=<UUID> · LangSmith ON (project=kv-cache-supervisor)`의 **trace_id를 기록**한다. OFF로 나오면 키 설정을 확인하고 다시 실행한다.
 - 진행 중 `supervisor#N → dispatch:... / evaluate / rewrite:report / reinvestigate:...` 줄이 결정 로그(`outputs/decisions_<trace_id>.jsonl`)와 같은지 확인한다.
