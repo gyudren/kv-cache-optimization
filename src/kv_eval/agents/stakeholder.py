@@ -9,13 +9,14 @@ from ..tools import retry_queries, rework_note
 from ..state import attempt_of
 from ..tools.web_search import COMMUNITY_SPEAKER
 
-# 평가 대상(경쟁 진영, 도입 기업·개발자, 투자 업계)별 검색어
+# 평가 대상(경쟁 진영, 도입 기업·개발자, 투자 업계)별 검색어. 각 기술에 반대 방향(비판·우려) 검색어를 하나씩 둔다.
 STAKEHOLDER_QUERIES = {
     "mla": [
         "DeepSeek multi-head latent attention competitors response OpenAI Meta Google",
         "MLA vs GQA latent attention KV cache engineers analysis",
         "vLLM SGLang developers DeepSeek MLA kernel performance experience",
         "DeepSeek efficiency analysts investors reaction Nvidia inference cost",
+        "DeepSeek MLA criticism skepticism engineers concerns accuracy compatibility",
     ],
     "itme": [
         "Samsung Micron CXL memory expansion AI inference competition SK hynix",
@@ -57,6 +58,8 @@ def stakeholder_node(state: dict, web: Any, llm: Any) -> dict:
             "Record who said what; never attribute anonymous text to an imagined speaker. "
             "Set separate verdicts for competitors, developers/adopters and investors only with explicit support (otherwise null). "
             "Use only provided source IDs in cited_ids; absence of information means missing. "
+            "Keep attributed critical or skeptical statements as well as supportive ones; when both exist for a stakeholder type, "
+            "cite both and use 혼재. "
             "Statements about the technology family (MLA: DeepSeek's MLA-based models and MLA serving kernels; ITME: SK hynix/CXL memory expansion) "
             "may support a verdict when the speaker is identified and the text labels them '계열·간접 반응', distinct from reactions to the exact technology.\n"
             + "\n".join(f"{r['source_id']}: [{r.get('speaker', '기타')}] {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw) + rework_note(feedback),

@@ -18,8 +18,11 @@ def decisions(state: dict) -> list[str]:
 
 
 def evaluated_state(failing: dict[str, list[str]] | None = None, retry: dict | None = None,
-                    followup: dict | None = None, **extra) -> dict:
-    """평가까지 끝난 State. failing={평가 항목: 원인 에이전트 목록}."""
+                    followup: dict | None = None, reinvestigate: dict | None = None, **extra) -> dict:
+    """평가까지 끝난 State. failing={평가 항목: 원인 에이전트 목록}.
+
+    followup = 종합 요청 후속 재조사 횟수, reinvestigate = 평가 요청 재조사 횟수.
+    """
     failing = failing or {}
     base = initial_state("q", "t-followup")
     evidence = [{"agent": p, "technology": t, "source_type": "web", "url": f"https://x/{p}/{t}/{i}", "claim": "c",
@@ -33,6 +36,7 @@ def evaluated_state(failing: dict[str, list[str]] | None = None, retry: dict | N
             "synthesis": {"needs_source_agents": [], "evidence_gaps": []}, "report": "## SUMMARY\n본문",
             "retry_counts": {**base["retry_counts"], **(retry or {})},
             "followup_counts": {**base["followup_counts"], **(followup or {})},
+            "reinvestigate_counts": {**base["reinvestigate_counts"], **(reinvestigate or {})},
             "eval_result": {"passed": not failing, "criteria": criteria}, **extra}
 
 
@@ -40,7 +44,8 @@ def test_policy_judge_blames_tech_after_sufficiency_retries_exhausted():
     state = evaluated_state({"groundedness": ["tech"]}, retry={"tech": RETRY_LIMITS["tech"]})
     decision = decide(state)
     assert decision.decision == "reinvestigate:tech" and decision.targets == ["tech"]
-    assert decision.updates["followup_counts"] == {"tech": 1} and "retry_counts" not in decision.updates
+    assert decision.updates["reinvestigate_counts"] == {"tech": 1} and "retry_counts" not in decision.updates
+    assert "followup_counts" not in decision.updates  # 종합 후속 재조사 한도는 쓰지 않는다
     assert decision.updates["node_status"]["tech"] == "running"
     assert {decision.updates["node_status"][n] for n in ("synthesis", "report", "quality_evaluator")} == {"pending"}
 
@@ -52,7 +57,7 @@ def test_judge_blames_tech_reinvestigates_even_when_sufficiency_retries_used_up(
     log = decisions(state)
     assert log[:limit + 1] == ["dispatch:tech,market,stakeholder,domain", *["dispatch:tech"] * limit]
     assert log[log.index("evaluate") + 1] == "reinvestigate:tech"
-    assert state["retry_counts"]["tech"] == limit and state["followup_counts"]["tech"] == 1
+    assert state["retry_counts"]["tech"] == limit and state["reinvestigate_counts"]["tech"] == 1
     assert llm.runs["tech"] == limit + 2
     assert all(llm.runs[name] == 1 for name in ("market", "stakeholder", "domain"))
     assert log[-1] == "end:passed" and state["status"] == "completed"
@@ -138,7 +143,7 @@ def test_merge_evidence_replaces_same_agent_and_appends_agentless_seed():
 
 
 def test_reinvestigation_leaves_only_latest_attempt_evidence(run_graph):
-    state = run_graph(FakeLLM(one_sided={"market": 1}))
+    state = run_graph(FakeLLM(judge_fail={"bias_control": (1, "market")}))
     assert "reinvestigate:market" in decisions(state)
     attempts = {}
     for ev in state["evidence"]:
@@ -173,3 +178,31 @@ def test_report_agent_always_failing_ends_within_max_steps_with_gap(run_graph):
     state = run_graph(FakeLLM(raise_on={"report": INF}))
     assert decisions(state)[-1] == "end:report_failed" and state["step_count"] <= Policy().max_steps
     assert any(g["perspective"] == "report" for g in state["gaps"]) and state["status"] == "unverified"
+
+
+def test_report_only_policy_never_reinvestigates():
+    # --report-only는 새 검색을 하지 않는다: 평가가 관점을 지목해도 재조사 대신 판정 한계를 적는 재작성으로 간다
+    policy = Policy(retry_limits={**RETRY_LIMITS, **{name: 0 for name in PERSPECTIVES}, "synthesis": 0},
+                    followup_limits={name: 0 for name in PERSPECTIVES},
+                    reinvestigate_limits={name: 0 for name in PERSPECTIVES})
+    decision = decide(evaluated_state({"bias_control": ["market"]}), policy)
+    assert decision.decision == "rewrite:report"
+    assert decision.updates["feedback"]["report"]["verdict_limits"][0]["section"] == "4.2"
+
+
+def test_one_sided_gap_only_when_counter_direction_was_actually_searched():
+    # 출처 부족으로 재시도를 다 쓴 뒤 마지막 시도에서 처음 한쪽 판정이 나오면 반대 방향은 탐색하지 않았다.
+    # 이때는 "재검색했으나 없음"(one_sided)이 아니라 일반 근거 부족으로 남겨야 한다.
+    one_sided = {"technologies": {t: {"market_size_growth_verdict": "긍정", "adoption_verdict": "긍정"}
+                                  for t in ("mla", "itme")}, "sufficient": True, "missing": [],
+                 "source_units": {"mla": ["a", "b"], "itme": ["c", "d"]}}
+    base = evaluated_state(retry={"market": RETRY_LIMITS["market"]})
+    base["node_status"].update(synthesis="pending", report="pending", quality_evaluator="pending")
+    base["perspectives"] = {**base["perspectives"], "market": one_sided}
+    not_searched = decide({**base, "feedback": {"market": {"queries_by_tech": {"mla": ["additional independent sources analysis"]}}}})
+    kinds = {(g["kind"], g["technology"]) for g in not_searched.updates["gaps"] if g["perspective"] == "market"}
+    assert ("one_sided", "mla") not in kinds and ("insufficient", "mla") in kinds
+    searched = decide({**base, "feedback": {"market": {"queries_by_tech": {
+        "mla": ["limitations risks concerns criticism"], "itme": ["limitations risks concerns criticism"]}}}})
+    kinds = {(g["kind"], g["technology"]) for g in searched.updates["gaps"] if g["perspective"] == "market"}
+    assert {("one_sided", "mla"), ("one_sided", "itme")} <= kinds

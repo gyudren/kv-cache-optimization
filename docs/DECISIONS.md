@@ -28,7 +28,11 @@ Supervisor 패턴으로 옮기면서 정한 것과 그 이유를 적는다. 항�
 - 평가 방식 — 형식 검사만으로는 근거가 주장을 뒷받침하는지 볼 수 없고 Judge만 쓰면 판정이 흔들리므로, 규칙 검사를 하드 게이트로 두고 LLM Judge는 규칙 실패를 뒤집지 못하게 한다. `evaluation/quality.py::combine`
 - 미달 경로 — 코드가 에이전트 판정을 옮긴 표는 보고서를 다시 써도 같은 값으로 채워지므로, 항목이 아니라 원인(`target_agents`)으로 나눠 관점이면 재조사하고 `report`면 재작성한다. `supervisor/policy.py::_report_and_eval_step`
 - 후속 재조사 한도 — 종합·평가 요청을 충분성 재조사와 같은 한도로 세면 그 전에 한도가 바닥나 재조사 경로가 실행되지 않으므로, `FOLLOWUP_LIMITS`를 따로 두고 `excluded` 관점도 대상에 넣는다. `config.py`, `state.py::followup_counts`
-- 재시도 상한 — 0~1회면 일시적 부족도 공백이 되고 3회 이상이면 같은 자료만 반복 검색하므로, 관점 2회·후속 1회·종합 1회·보고서 2회·평가 노드 1회로 둔다. `config.py::RETRY_LIMITS`
+- 평가 재조사 한도 — 종합 요청과 평가 요청이 같은 후속 카운터를 쓰면 종합이 먼저 한도를 써서, 평가가 원인으로 지목한 관점을 재조사하지 못하고 보고서 재작성으로만 다루다 미검증으로 끝나므로(실제 실행 `77cb99ef`: 종합이 market을 재조사한 뒤 평가가 market 편향을 지목), `REINVESTIGATE_LIMITS`와 `reinvestigate_counts`를 따로 둔다. `config.py`, `supervisor/policy.py::_report_and_eval_step`
+- 판정 방향 검사 위치 — '판정이 긍정·우려 한쪽뿐' 검사를 평가 규칙에만 두면 충분성 단계는 통과했다가 코드가 옮겨 넣은 판정표 때문에 보고서 재작성으로 고칠 수 없는 미달이 나므로, 같은 함수 `direction_shortfalls`를 Supervisor 충분성 검사에도 쓰고 재조사 지시에 반대 방향 검색 힌트를 붙인다. `evaluation/quality.py`, `supervisor/policy.py::classify`
+- 반대 방향 근거 부재 처리 — 반대 방향을 다시 찾아도 없을 때 미달로만 두면 실제 공개 자료가 한쪽뿐인 경우 영원히 통과할 수 없고, 숨기면 편향이므로, 공백 `one_sided`(무엇을 찾았으나 없었는지)로 남기고 코드가 해당 판정표 아래에 `한계:` 문장을 적는다. 편향 규칙과 Judge는 '찾지 않음'과 '찾았으나 없음'을 구분한다. `agents/report.py::one_sided_notes`, `prompts/09_quality_evaluator.md`
+- 반대 방향 기본 검색어 — 시장·이해관계자 검색어가 모두 긍정·중립 방향이면 첫 수집부터 근거가 한쪽으로 쏠리므로, 기술마다 제약·비판 방향 검색어를 하나씩 넣고 반대 근거가 있으면 `혼재`로 판정하게 했다. `agents/market.py`, `agents/stakeholder.py`
+- 재시도 상한 — 0~1회면 일시적 부족도 공백이 되고 3회 이상이면 같은 자료만 반복 검색하므로, 관점 2회·종합 후속 1회·평가 재조사 1회·종합 1회·보고서 2회·평가 노드 1회로 둔다. `config.py::RETRY_LIMITS`
 - 단계 상한 — `recursion_limit`만 두면 예외로 죽어 보고서가 없으므로, `MAX_STEPS`를 넘으면 조사를 멈추고 공백을 기록한 뒤 종합·보고서·평가까지 마치고 종료한다. `supervisor/policy.py::decide`
 - 출처 단위 — 논문을 (문서, 페이지)로 세면 논문 한 편이 '고유 출처 2개'가 되므로 문서 단위로 세고, 기술당 원문 1편이 설계인 도메인 평가는 이 규칙 대신 단일 문헌 '적합'을 '조건부'로 낮춘다. `evidence_store.py::source_unit`, `agents/domain.py::downgrade_single_document`
 - 편향 임계값 — 고유 출처 1개면 단일 기사로 판정이 굳고 3개 이상이면 자료가 적은 ITME가 늘 공백이 되므로 `MIN_DISTINCT_SOURCES=2`, 단일 발행처 비중은 3개 중 2개부터 걸리는 `0.6`으로 둔다. `config.py`

@@ -1,4 +1,4 @@
-"""후속 재조사 한도를 다 쓴 관점이 평가에서 계속 미달일 때의 처리 테스트."""
+"""평가 재조사 한도를 다 쓴 관점이 평가에서 계속 미달일 때의 처리 테스트."""
 from __future__ import annotations
 
 from fakes import INF, FakeLLM
@@ -21,7 +21,7 @@ def narrative_after_table(report: str, section: str) -> str:
 
 
 def test_exhausted_perspective_issue_is_carried_into_rewrite_with_original_text():
-    state = evaluated_state({"groundedness": ["tech"]}, followup={"tech": 1})
+    state = evaluated_state({"groundedness": ["tech"]}, reinvestigate={"tech": 1})
     decision = decide(state)
     assert decision.decision == "rewrite:report"
     feedback = decision.updates["feedback"]["report"]
@@ -34,9 +34,9 @@ def test_exhausted_perspective_issue_is_carried_into_rewrite_with_original_text(
 
 
 def test_same_item_same_reason_after_carried_rewrite_ends_unverified():
-    first = decide(evaluated_state({"groundedness": ["tech"]}, followup={"tech": 1}))
+    first = decide(evaluated_state({"groundedness": ["tech"]}, reinvestigate={"tech": 1}))
     # 사유 문장만 다른 같은 지적으로 다시 미달
-    again = evaluated_state({"groundedness": ["tech"]}, retry={"report": 1}, followup={"tech": 1},
+    again = evaluated_state({"groundedness": ["tech"]}, retry={"report": 1}, reinvestigate={"tech": 1},
                             feedback={"report": first.updates["feedback"]["report"]},
                             gaps=first.updates["gaps"])
     again["eval_result"]["criteria"]["groundedness"]["reason"] = "다른 문장으로 쓴 같은 지적"
@@ -48,9 +48,9 @@ def test_same_item_same_reason_after_carried_rewrite_ends_unverified():
 
 
 def test_new_carried_item_after_rewrite_still_gets_one_rewrite():
-    first = decide(evaluated_state({"groundedness": ["tech"]}, followup={"tech": 1}))
+    first = decide(evaluated_state({"groundedness": ["tech"]}, reinvestigate={"tech": 1}))
     other = evaluated_state({"groundedness": ["tech"], "bias_control": ["market"]},
-                            retry={"report": 1}, followup={"tech": 1, "market": 1},
+                            retry={"report": 1}, reinvestigate={"tech": 1, "market": 1},
                             feedback={"report": first.updates["feedback"]["report"]})
     decision = decide(other)
     assert decision.decision == "rewrite:report"
@@ -84,14 +84,18 @@ def test_judge_blaming_tech_forever_rewrites_once_with_limit_then_stops(run_grap
     assert state["status"] == "unverified"
 
 
-def test_rule_issue_of_exhausted_perspective_is_stated_under_table_and_passes(run_graph):
-    # 시장 판정이 계속 한쪽뿐이어도 4.2에 한계를 적으면 공백으로 인정돼 통과한다
+def test_one_sided_after_counter_search_is_stated_under_table_and_passes(run_graph):
+    # 시장 판정이 반대 방향을 다시 찾아도 계속 한쪽뿐이면, 보고서 전에 공백(one_sided)으로 남기고
+    # 코드가 4.2 판정표 아래에 한계를 적는다. 평가 단계에서 다시 미달·재작성하지 않고 통과한다.
     llm = FakeLLM(one_sided={"market": INF})
     state = run_graph(llm)
     log = [d["decision"] for d in decisions(state)]
-    assert log.count("reinvestigate:market") == 1 and log.count("rewrite:report") == 1
-    assert any(i.startswith("[4.2 판정 한계 명시] market/mla: ") and "한쪽뿐" in i for i in state["feedback"]["report"]["issues"])
-    assert narrative_after_table(state["report"], "4.2").startswith("한계:")
+    limit = RETRY_LIMITS["market"]
+    assert log[:limit + 1] == ["dispatch:tech,market,stakeholder,domain", *["dispatch:market"] * limit]
+    assert "rewrite:report" not in log and not any(d.startswith("reinvestigate") for d in log)
+    one_sided = [g for g in state["gaps"] if g["kind"] == "one_sided"]
+    assert {(g["perspective"], g["technology"]) for g in one_sided} == {("market", "mla"), ("market", "itme")}
+    assert narrative_after_table(state["report"], "4.2").startswith("한계: MLA — 우려 방향 근거를 재검색했으나")
     assert narrative_after_table(state["report"], "4.1").startswith("한계:") is False
     assert log[-1] == "end:passed" and state["status"] == "completed_with_gaps"
 

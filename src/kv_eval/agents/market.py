@@ -8,7 +8,9 @@ from ..schemas import MarketAssessment
 from ..tools import retry_queries, rework_note
 from ..state import attempt_of
 
-# 기준별(M1 시장 규모·성장, M2 상용화·채택, M3 생태계 지지) 검색어와 topic
+# 기준별(M1 시장 규모·성장, M2 상용화·채택, M3 생태계 지지) 검색어와 topic.
+# 각 기술의 마지막 검색어는 반대 방향(제약·우려) 근거용이다. 긍정 방향 검색어만 두면 판정이 처음부터 한쪽으로
+# 쏠리고(확증편향), 품질 평가의 편향 통제에서 미달한다.
 MARKET_QUERIES = {
     "mla": [
         ("LLM inference serving optimization market size growth forecast", "news"),
@@ -16,6 +18,7 @@ MARKET_QUERIES = {
         ("DeepSeek V3 R1 available AWS Bedrock NVIDIA NIM Azure", "news"),
         ("vLLM MLA multi-head latent attention backend DeepSeek support", "general"),
         ("SGLang DeepSeek MLA optimization FlashMLA release", "general"),
+        ("multi-head latent attention MLA limitations serving compatibility hardware support challenges", "general"),
     ],
     "itme": [
         ("CXL memory market size forecast AI servers", "news"),
@@ -23,6 +26,7 @@ MARKET_QUERIES = {
         ("SK hynix ITME CXL hybrid memory LLM inference", "news"),
         ("CXL memory tiering KV cache LLM inference deployment", "general"),
         ("CXL consortium 3.0 memory pooling standard AI data center adoption", "general"),
+        ("CXL memory adoption challenges latency cost concerns AI inference", "news"),
     ],
 }
 
@@ -63,6 +67,9 @@ def market_node(state: dict, web: Any, llm: Any) -> dict:
             "An explicit MLA kernel/backend in vLLM or SGLang is DIRECT ecosystem support for MLA. "
             "MLA is the attention architecture of DeepSeek-V2/V3/R1, so DeepSeek's own API/app serving these models and cloud catalogs "
             "offering them are DIRECT commercial adoption evidence for MLA (M2), not merely family-level evidence. "
+            "Observability, monitoring or integration documentation is NOT adoption evidence. "
+            "Weigh supporting AND opposing sources for every criterion: if any supplied source reports a limitation, risk, barrier "
+            "or slow adoption for that criterion, cite it and use 혼재 (or 우려) instead of 긍정; never drop an opposing source. "
             "Put only facts you could not confirm in missing; they are reported as limitations.\n"
             + "\n".join(f"{r['source_id']}: {r['title']} | {r['url']} | {r['excerpt'][:1400]}" for r in raw) + rework_note(feedback),
             MarketAssessment,

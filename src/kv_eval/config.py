@@ -29,8 +29,11 @@ AGENT_CONCURRENCY = max(1, int(os.getenv("AGENT_CONCURRENCY", "1")))
 # 무한 루프를 막는 재작업 상한. 관점 값은 충분성 재조사에만 쓴다.
 RETRY_LIMITS = {"tech": 2, "market": 2, "stakeholder": 2, "domain": 2, "synthesis": 1, "report": 2,
                 "quality_evaluator": 1}
-# 종합·평가가 관점을 다시 부를 때 쓰는 후속 재조사 한도. RETRY_LIMITS와 따로 센다.
+# 종합이 관점을 다시 부를 때 쓰는 후속 재조사 한도. RETRY_LIMITS와 따로 센다.
 FOLLOWUP_LIMITS = {name: 1 for name in ("tech", "market", "stakeholder", "domain")}
+# 품질 평가가 미달 원인으로 관점을 지목해 다시 부를 때 쓰는 한도. 종합 요청과 같은 카운터를 쓰면
+# 종합이 먼저 한도를 써 버려 평가 미달의 원인 관점을 재조사하지 못하고 unverified로 끝나므로 따로 센다.
+REINVESTIGATE_LIMITS = {name: 1 for name in ("tech", "market", "stakeholder", "domain")}
 # Supervisor 진입 상한. 넘으면 추가 조사를 멈추고 보고서까지 마무리한 뒤 끝낸다.
 MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
 # 상한 도달 후 마무리(종합, 보고서, 평가, 종료 4회)에 재개 직후 재진입 여유 1회를 더한 값.

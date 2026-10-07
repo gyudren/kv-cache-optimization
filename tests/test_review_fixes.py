@@ -44,8 +44,8 @@ def test_groundedness_defect_in_agent_table_reinvestigates_agent(run_graph):
     log = decisions(state)
     assert "reinvestigate:tech" in log
     assert "rewrite:report" not in log[:log.index("reinvestigate:tech")]
-    assert llm.runs["tech"] == 2 and state["followup_counts"]["tech"] == 1
-    assert state["retry_counts"]["tech"] == 0  # 충분성 재조사 한도는 그대로
+    assert llm.runs["tech"] == 2 and state["reinvestigate_counts"]["tech"] == 1
+    assert state["retry_counts"]["tech"] == 0 and state["followup_counts"]["tech"] == 0  # 다른 한도는 그대로
     assert state["status"] == "completed"
 
 

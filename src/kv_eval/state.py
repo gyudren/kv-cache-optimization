@@ -6,7 +6,7 @@ Send로 여러 관점이 한 superstep에 동시에 쓰는 필드는 모두 redu
 from __future__ import annotations
 import re
 from typing import Annotated, Any, Literal, TypedDict
-from .config import FOLLOWUP_LIMITS, PERSPECTIVES, RETRY_LIMITS, STATE_EXCERPT_CHARS
+from .config import FOLLOWUP_LIMITS, PERSPECTIVES, REINVESTIGATE_LIMITS, RETRY_LIMITS, STATE_EXCERPT_CHARS
 
 NodeStatus = Literal["pending", "running", "done", "failed", "skipped"]  # skipped: 실패 후 한도를 넘겨 건너뜀
 # excluded: 재시도 한도를 넘겨 근거 공백으로 남기고 제외한 관점
@@ -45,7 +45,9 @@ def merge_unique(left: list | None, right: list | None) -> list:
     return list(dict.fromkeys([*(left or []), *(right or [])]))
 
 
-GapKind = Literal["insufficient", "agent_failed", "step_limit", "followup_exhausted", "evaluation", "node_failed"]
+# one_sided = 반대 방향 근거를 재검색했지만 찾지 못해 한쪽 방향 판정만 남은 관점·기술
+GapKind = Literal["insufficient", "one_sided", "agent_failed", "step_limit", "followup_exhausted", "evaluation",
+                  "node_failed"]
 
 
 class Gap(TypedDict):
@@ -101,7 +103,8 @@ class GraphState(TypedDict, total=False):
     next_agents: list[str]              # 라우터가 읽는 직전 결정
     perspective_status: Annotated[dict[str, str], merge_dict]
     retry_counts: Annotated[dict[str, int], merge_dict]      # 충분성 재조사·실행 실패 재시도
-    followup_counts: Annotated[dict[str, int], merge_dict]   # 종합·평가가 요청한 후속 재조사
+    followup_counts: Annotated[dict[str, int], merge_dict]   # 종합이 요청한 후속 재조사
+    reinvestigate_counts: Annotated[dict[str, int], merge_dict]  # 품질 평가가 원인으로 지목한 재조사
     node_status: Annotated[dict[str, str], merge_dict]
     last_error: Annotated[dict[str, str], merge_dict]
     feedback: Annotated[dict[str, dict], merge_dict]         # 에이전트에 넘기는 재작업 지시
@@ -124,6 +127,7 @@ def initial_state(query: str, trace_id: str, seed: dict | None = None) -> GraphS
         "perspective_status": {name: "pending" for name in PERSPECTIVES},
         "retry_counts": {name: 0 for name in RETRY_LIMITS},
         "followup_counts": {name: 0 for name in FOLLOWUP_LIMITS},
+        "reinvestigate_counts": {name: 0 for name in REINVESTIGATE_LIMITS},
         "node_status": {name: "pending" for name in (*PERSPECTIVES, "synthesis", "report", "quality_evaluator")},
         "last_error": {}, "feedback": {}, "eval_result": {}, "last_decision": {}, "gaps": [],
         "status": "running",
@@ -138,8 +142,9 @@ def perspective(state: dict, name: str) -> dict:
 
 
 def attempt_of(state: dict, name: str) -> int:
-    """충분성 재조사와 후속 재조사를 합친 시도 번호."""
-    return int((state.get("retry_counts") or {}).get(name, 0)) + int((state.get("followup_counts") or {}).get(name, 0))
+    """충분성 재조사, 종합 후속 재조사, 평가 재조사를 합친 시도 번호."""
+    return sum(int((state.get(field) or {}).get(name, 0))
+               for field in ("retry_counts", "followup_counts", "reinvestigate_counts"))
 
 
 def legacy_gaps(gaps: list) -> list[Gap]:

@@ -229,6 +229,25 @@ def verdict_limit_note(limits: list[dict]) -> str:
                           for limit in limits) + "\n")
 
 
+SECTION_OF = {"tech": "4.1", "market": "4.2", "stakeholder": "4.3", "domain": "4.4"}
+
+
+def one_sided_notes(state: dict) -> dict[str, str]:
+    """반대 방향 근거를 재검색했으나 찾지 못한 판정(공백 kind=one_sided)을 절별 '한계:' 문장으로 만든다.
+
+    LLM 서술에 맡기면 빠지거나 표현이 흔들려 평가가 '한쪽 근거 편중'으로 다시 미달시킨다. 판정은 그대로 두고
+    "탐색했으나 없음"을 판정표 바로 아래에 코드가 적어, 확증편향(탐색하지 않음)과 구분되게 한다.
+    """
+    lines: dict[str, list[str]] = {}
+    for gap in state.get("gaps") or []:
+        if gap.get("kind") != "one_sided" or gap["perspective"] not in SECTION_OF:
+            continue
+        name = TECH_NAME.get(gap.get("technology") or "", "두 기술")
+        lines.setdefault(SECTION_OF[gap["perspective"]], []).append(
+            f"한계: {name} — {gap['detail']}. 표의 {name} 판정은 한쪽 방향 근거만 반영하므로 그 범위로 읽어야 한다.")
+    return {section: "\n".join(dict.fromkeys(items)) + "\n\n" for section, items in lines.items()}
+
+
 def report_view(state: dict, name: str) -> dict:
     view = prompt_view(perspective(state, name))
     if view.get("missing_optional"):
@@ -241,6 +260,7 @@ def render_report(state: dict, llm: Any) -> str:
     sources = citeable_evidence(hydrate(state["evidence"]))
     tables = {"4.1": trl_table(state), "4.2": verdict_table(state, "market"),
               "4.3": verdict_table(state, "stakeholder"), "4.4": domain_table(state)}
+    limits = one_sided_notes(state)
     citation_context = [{"cite": ev["citation"], "technology": ev.get("technology"), "agent": ev.get("agent"),
                          "claim": ev.get("claim", ""), "excerpt": ev.get("excerpt", "")[:900],
                          "url": ev.get("url", "")}
@@ -317,10 +337,10 @@ def render_report(state: dict, llm: Any) -> str:
         f"## 2. 기술 선정\n{parts['selection']}\n\n#### 표 2. 비선정 후보와 사유 (설계 단계 팀 판단 — 설계 산출물 A-4) [D]\n{UNSELECTED_TABLE}",
         f"## 3. 기술 개요\n{parts['technology_overview']}",
         "## 4. 관점별 평가\n"
-        f"### 4.1 기술 성숙도(TRL)\n{tables['4.1']}\n\n{parts['perspective_trl']}\n\n"
-        f"### 4.2 시장성\n{tables['4.2']}\n\n{parts['perspective_market']}\n\n"
-        f"### 4.3 이해관계자\n{tables['4.3']}\n\n{parts['perspective_stakeholder']}\n\n"
-        f"### 4.4 도메인 적용성(D1-D7)\n{tables['4.4']}\n\n{parts['perspective_domain']}",
+        f"### 4.1 기술 성숙도(TRL)\n{tables['4.1']}\n\n{limits.get('4.1', '')}{parts['perspective_trl']}\n\n"
+        f"### 4.2 시장성\n{tables['4.2']}\n\n{limits.get('4.2', '')}{parts['perspective_market']}\n\n"
+        f"### 4.3 이해관계자\n{tables['4.3']}\n\n{limits.get('4.3', '')}{parts['perspective_stakeholder']}\n\n"
+        f"### 4.4 도메인 적용성(D1-D7)\n{tables['4.4']}\n\n{limits.get('4.4', '')}{parts['perspective_domain']}",
         f"## 5. 종합 의견\n{parts['synthesis']}",
         f"## 6. 시사점\n{parts['implications']}",
         f"## 7. 한계점\n**자료 기준 시점**: 웹 자료 검색·검증일 {AS_OF} (Tavily 검색 결과 기준). 이후 공개된 발표·제품 정보는 반영되지 않았다.\n\n{parts['limitations']}\n\n{gap_section(state)}#### 표 7. 증거 균형표 (중복 제거 후 수집·검증된 Evidence 수)\n{evidence_balance_table(state)}",

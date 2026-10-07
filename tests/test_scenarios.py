@@ -51,8 +51,24 @@ def test_eval_neutrality_failure_rewrites_report_only(run_graph):
     assert "우열" in str(state["feedback"]["report"]["issues"])
 
 
-def test_eval_bias_failure_reinvestigates_responsible_perspective(run_graph):
+def test_one_sided_verdict_is_reworked_before_report(run_graph):
+    # 판정이 긍정 한쪽뿐이면 보고서를 쓰기 전에 충분성 단계에서 그 관점만 반대 방향으로 재조사한다
     llm = FakeLLM(one_sided={"market": 1})
+    state = run_graph(llm)
+    assert decisions(state)[:3] == ["dispatch:tech,market,stakeholder,domain", "dispatch:market", "synthesis"]
+    assert llm.runs["market"] == 2
+    assert all(llm.runs[name] == 1 for name in ("tech", "stakeholder", "domain"))
+    # 보고서 전에 고쳤으므로 평가 미달·재작성 없이 한 번에 통과한다
+    assert llm.runs["synthesis"] == 1 and llm.runs["report"] == 1 and llm.runs["judge"] == 1
+    assert state["eval_result"]["passed"] is True and state["retry_counts"]["market"] == 1
+    # 긍정 일색이었으니 재조사는 우려 쪽 근거를 찾는다
+    feedback = state["feedback"]["market"]
+    assert "concerns" in " ".join(feedback["rewritten_queries"])
+    assert any("우려 방향 근거를 찾아" in m for m in feedback["missing"])
+
+
+def test_eval_bias_failure_reinvestigates_responsible_perspective(run_graph):
+    llm = FakeLLM(judge_fail={"bias_control": (1, "market")})
     state = run_graph(llm)
     assert "reinvestigate:market" in decisions(state)
     assert llm.runs["market"] == 2
@@ -60,8 +76,20 @@ def test_eval_bias_failure_reinvestigates_responsible_perspective(run_graph):
     # 관점이 바뀌었으므로 종합·보고서·평가는 다시 만든다
     assert llm.runs["synthesis"] == 2 and llm.runs["report"] == 2 and llm.runs["judge"] == 2
     assert state["eval_result"]["passed"] is True
-    # 긍정 일색이었으니 재조사는 우려 쪽 근거를 찾는다
-    assert "concerns" in " ".join(state["feedback"]["market"]["rewritten_queries"])
+
+
+def test_eval_reinvestigation_still_available_after_synthesis_followup(run_graph):
+    # 실제 실행 77cb99ef의 실패 경로: 종합이 market 후속 재조사를 먼저 쓰고, 평가가 market을 원인으로 지목했다.
+    # 두 한도가 같은 카운터였을 때는 재조사하지 못하고 재작성만 반복하다 unverified로 끝났다.
+    llm = FakeLLM(needs_source=["market"], judge_fail={"bias_control": (1, "market")})
+    state = run_graph(llm)
+    log = decisions(state)
+    first_synthesis = log.index("synthesis")
+    assert log[first_synthesis + 1] == "dispatch:market"          # 종합 요청 후속 재조사
+    assert "reinvestigate:market" in log[log.index("evaluate"):]   # 평가 요청 재조사도 가능
+    assert state["followup_counts"]["market"] == 1 and state["reinvestigate_counts"]["market"] == 1
+    assert "rewrite:report" not in log
+    assert log[-1] == "end:passed" and state["status"] == "completed"
 
 
 def test_llm_judge_groundedness_failure_rewrites_report(run_graph):

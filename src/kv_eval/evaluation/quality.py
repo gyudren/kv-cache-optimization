@@ -186,10 +186,34 @@ def _verdicts(state: dict, name: str, tech: str) -> list[str]:
     return []  # TRL은 긍정/우려 판정이 아니라 등급이다
 
 
+def direction_shortfalls(state: dict, name: str) -> list[dict]:
+    """관점·기술별 판정이 긍정 또는 우려 한쪽뿐인지 검사한다.
+
+    Supervisor 충분성 검사와 편향 규칙이 같이 쓴다. 평가 단계에서만 보면 충분성 단계는 통과했다가 보고서를 쓴 뒤에야
+    편향으로 걸리고, 그때는 판정표를 코드가 옮겨 넣어 보고서 재작성으로 고칠 수 없다. 그래서 보고서 전에 같은 기준으로
+    걸러 반대 방향 근거를 다시 찾게 한다. side는 지금 판정의 방향, opposite는 더 찾아야 할 방향이다.
+    """
+    out = []
+    for tech in TECHS:
+        verdicts = set(_verdicts(state, name, tech))
+        if not verdicts:
+            continue
+        has_positive = bool(verdicts & (POSITIVE | MIXED))
+        has_concern = bool(verdicts & (CONCERN | MIXED))
+        if has_positive and has_concern:
+            continue
+        side = "긍정" if has_positive else "우려"
+        out.append({"perspective": name, "technology": tech, "side": side,
+                    "opposite": "우려" if side == "긍정" else "긍정",
+                    "reason": f"{name}/{tech}: 판정이 {side} 한쪽뿐(반대 방향 근거 미탐색)"})
+    return out
+
+
 def check_bias(state: dict) -> dict:
     evidence = deduplicate_evidence(state.get("evidence", []))
     found = []
     for name in PERSPECTIVES:
+        one_sided = {x["technology"]: x for x in direction_shortfalls(state, name)}
         for tech in TECHS:
             if _acknowledged(state, name, tech):
                 continue
@@ -203,13 +227,8 @@ def check_bias(state: dict) -> dict:
                 publisher, count = Counter(ev.get("publisher") or ev.get("url", "") for ev in web).most_common(1)[0]
                 if count / len(web) > MAX_SINGLE_SOURCE_SHARE:
                     problems.append(f"단일 발행처 {publisher} 비중 {count / len(web):.0%}(>{MAX_SINGLE_SOURCE_SHARE:.0%})")
-            verdicts = set(_verdicts(state, name, tech))
-            if verdicts:
-                has_positive = bool(verdicts & (POSITIVE | MIXED))
-                has_concern = bool(verdicts & (CONCERN | MIXED))
-                if not (has_positive and has_concern):
-                    side = "긍정" if has_positive else "우려"
-                    problems.append(f"판정이 {side} 한쪽뿐(반대 방향 근거 미탐색)")
+            if tech in one_sided:
+                problems.append(f"판정이 {one_sided[tech]['side']} 한쪽뿐(반대 방향 근거 미탐색)")
             if problems:
                 found.append(_item(name, tech, ", ".join(problems)))
     return _result(found)

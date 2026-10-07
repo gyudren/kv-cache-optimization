@@ -1,15 +1,17 @@
 """Supervisor 결정 정책. State 제어 필드만 보고 다음 노드를 고르는 순수 함수다.
 
 매 진입마다 관점 조사, 종합, 보고서, 품질 평가 순으로 지금 할 일을 고른다.
-충분성 재조사는 RETRY_LIMITS, 종합·평가가 요청한 후속 재조사는 FOLLOWUP_LIMITS로 따로 센다.
+충분성 재조사는 RETRY_LIMITS, 종합이 요청한 후속 재조사는 FOLLOWUP_LIMITS, 품질 평가가 원인으로 지목한
+재조사는 REINVESTIGATE_LIMITS로 따로 센다.
 """
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
-from ..config import FINALIZE_STEPS, FOLLOWUP_LIMITS, MAX_STEPS, PERSPECTIVES, RETRY_LIMITS, recursion_limit_for
-from ..evaluation.quality import CRITERIA, SECTION_PERSPECTIVE, evidence_shortfalls
+from ..config import (FINALIZE_STEPS, FOLLOWUP_LIMITS, MAX_STEPS, PERSPECTIVES, REINVESTIGATE_LIMITS, RETRY_LIMITS,
+                      recursion_limit_for)
+from ..evaluation.quality import CRITERIA, SECTION_PERSPECTIVE, direction_shortfalls, evidence_shortfalls
 from ..state import Gap, make_gap, perspective, split_scope
 from ..tools import TECH_TOKENS, mentioned_techs
 
@@ -38,12 +40,17 @@ class Policy:
     max_steps: int = MAX_STEPS
     retry_limits: Mapping[str, int] = field(default_factory=lambda: MappingProxyType(dict(RETRY_LIMITS)))
     followup_limits: Mapping[str, int] = field(default_factory=lambda: MappingProxyType(dict(FOLLOWUP_LIMITS)))
+    reinvestigate_limits: Mapping[str, int] = field(
+        default_factory=lambda: MappingProxyType(dict(REINVESTIGATE_LIMITS)))
 
     def limit(self, name: str) -> int:
         return self.retry_limits.get(name, 0)
 
     def followup_limit(self, name: str) -> int:
         return self.followup_limits.get(name, 0)
+
+    def reinvestigate_limit(self, name: str) -> int:
+        return self.reinvestigate_limits.get(name, 0)
 
     @property
     def recursion_limit(self) -> int:
@@ -67,8 +74,10 @@ def classify(state: dict, name: str) -> str:
         return "failed"
     if status != "done":
         return "pending"  # 재개 직후 running으로 남은 경우도 포함
-    # 에이전트의 자기 보고와 별개로 출처 수를 다시 확인한다.
-    if not perspective(state, name).get("sufficient") or evidence_shortfalls(state, name):
+    # 에이전트의 자기 보고와 별개로 출처 수와 판정 방향(긍정·우려 한쪽뿐인가)을 다시 확인한다.
+    # 방향 검사는 품질 평가의 편향 규칙과 같은 함수다. 보고서 전에 걸러야 반대 방향 근거를 재조사할 수 있다.
+    if (not perspective(state, name).get("sufficient") or evidence_shortfalls(state, name)
+            or direction_shortfalls(state, name)):
         return "insufficient"
     return "sufficient"
 
@@ -83,6 +92,8 @@ EVAL_QUERY_HINTS = (
     ("상용", "production deployment commercial service availability"),
 )
 GENERIC_EVAL_HINT = "independent sources limitations adoption evidence"
+# 판정이 한쪽뿐일 때 반대 방향을 찾는 검색 힌트(지금 판정 방향 → 찾을 방향의 검색어)
+DIRECTION_HINTS = {"긍정": "limitations risks concerns criticism", "우려": "adoption benefits positive outlook support"}
 SHORTFALL_HINT = "additional independent sources analysis"
 TECHS = ("mla", "itme")
 
@@ -120,13 +131,16 @@ def _rework(items: list[tuple[list[str], str, str]]) -> dict:
             "rewritten_queries": list(dict.fromkeys(q for qs in by_tech.values() for q in qs))}
 
 
-def _sufficiency_feedback(shortfalls: list[dict], missing: list[str], optional: list[str] = ()) -> dict:
+def _sufficiency_feedback(shortfalls: list[dict], missing: list[str], optional: list[str] = (),
+                          directions: list[dict] = ()) -> dict:
     """충분성 재조사 지시를 만든다.
 
     필수 결함 문장은 검색어로 쓸 수 없어 사유로만 넘기고, 검색 힌트는 선택 항목에서 만든다.
-    힌트가 하나도 없는 기술에는 일반 힌트를 붙인다.
+    판정이 한쪽뿐인 기술에는 반대 방향 검색 힌트를 붙인다. 힌트가 하나도 없는 기술에는 일반 힌트를 붙인다.
     """
     items = [([x["technology"]], x["reason"], SHORTFALL_HINT) for x in shortfalls]
+    items += [([x["technology"]], f"{x['reason']} — {x['opposite']} 방향 근거를 찾아 판정에 반영할 것",
+               DIRECTION_HINTS[x["side"]]) for x in directions]
     items += [(_item_tech(m), str(m), "") for m in missing if str(m).strip()]
     items += [(_item_tech(o), "", _agent_missing_query(o)) for o in optional if str(o).strip()]
     hinted = {tech for techs, _, query in items if query for tech in techs}
@@ -152,8 +166,9 @@ class _Builder:
         self.state, self.policy = state, policy
         self.retry = dict(state.get("retry_counts") or {})
         self.followups = dict(state.get("followup_counts") or {})
-        self.updates: dict[str, Any] = {"retry_counts": {}, "followup_counts": {}, "feedback": {}, "node_status": {},
-                                        "perspective_status": {}, "gaps": []}
+        self.reinvestigations = dict(state.get("reinvestigate_counts") or {})
+        self.updates: dict[str, Any] = {"retry_counts": {}, "followup_counts": {}, "reinvestigate_counts": {},
+                                        "feedback": {}, "node_status": {}, "perspective_status": {}, "gaps": []}
 
     def can_retry(self, name: str) -> bool:
         return self.retry.get(name, 0) < self.policy.limit(name)
@@ -167,11 +182,18 @@ class _Builder:
     def can_followup(self, name: str) -> bool:
         return self.followups.get(name, 0) < self.policy.followup_limit(name)
 
-    def followup(self, names: list[str], feedback_by_name: dict[str, dict]) -> None:
-        """종합·평가가 지목한 관점을 후속 재조사로 다시 보낸다. 제외됐던 관점도 pending으로 되돌린다."""
+    def can_reinvestigate(self, name: str) -> bool:
+        return self.reinvestigations.get(name, 0) < self.policy.reinvestigate_limit(name)
+
+    def followup(self, names: list[str], feedback_by_name: dict[str, dict], counter: str = "followup_counts") -> None:
+        """종합(followup_counts)·평가(reinvestigate_counts)가 지목한 관점을 다시 보낸다.
+
+        제외됐던 관점도 pending으로 되돌린다.
+        """
+        counts = self.followups if counter == "followup_counts" else self.reinvestigations
         for name in names:
-            self.followups[name] = self.followups.get(name, 0) + 1
-            self.updates["followup_counts"][name] = self.followups[name]
+            counts[name] = counts.get(name, 0) + 1
+            self.updates[counter][name] = counts[name]
             self.updates["feedback"][name] = feedback_by_name[name]
             self.updates["perspective_status"][name] = "pending"
         self.run(*names)
@@ -218,7 +240,9 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
             reasons.append(f"{name}: 미수집")
             continue
         shortfalls = evidence_shortfalls(state, name)
-        missing = [*(x["reason"] for x in shortfalls), *perspective(state, name).get("missing", [])]
+        directions = direction_shortfalls(state, name)
+        missing = [*(x["reason"] for x in shortfalls), *perspective(state, name).get("missing", []),
+                   *(x["reason"] for x in directions)]
         error = (state.get("last_error") or {}).get(name, "")
         if not finalize and b.can_retry(name):
             if status == "failed":
@@ -227,7 +251,8 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
                 reasons.append(f"{name}: 실행 실패 재시도 {b.retry[name]}/{policy.limit(name)} ({error[:80]})")
             else:
                 result = perspective(state, name)
-                b.bump(name, _sufficiency_feedback(shortfalls, result.get("missing", []), result.get("missing_optional", [])))
+                b.bump(name, _sufficiency_feedback(shortfalls, result.get("missing", []), result.get("missing_optional", []),
+                                                   directions))
                 reasons.append(f"{name}: 근거 부족 재조사 {b.retry[name]}/{policy.limit(name)} "
                                f"({'; '.join(map(str, missing[:2]))[:120]})")
             to_run.append(name)
@@ -239,7 +264,17 @@ def _perspective_step(b: _Builder, finalize: bool) -> Decision | None:
         elif status == "failed":
             b.gap(make_gap(name, "agent_failed", f"에이전트 실행 실패로 결과 없음 ({error[:120]})"))
         else:
-            for item in missing[:3]:
+            # 반대 방향을 다시 찾고도 한쪽뿐이면 그 사실을 따로 남긴다. 보고서가 판정표 아래에 한계로 밝히고,
+            # 편향 규칙과 Judge는 "탐색했으나 없음"을 확증편향(탐색 안 함)과 구분해 판정한다.
+            # 직전 재조사 지시에 그 방향 힌트가 실제로 들어갔을 때만 "재검색했으나 없음"이다. 다른 사유로 한도를
+            # 다 쓴 뒤에 처음 한쪽 판정이 나온 경우는 탐색하지 않았으므로 일반 근거 부족으로 남긴다.
+            last_hints = (state.get("feedback", {}).get(name, {}).get("queries_by_tech") or {})
+            searched = [x for x in directions if DIRECTION_HINTS[x["side"]] in last_hints.get(x["technology"], [])]
+            for x in searched:
+                b.gap(make_gap(name, "one_sided", f"{x['opposite']} 방향 근거를 재검색했으나 찾지 못해 {x['side']} 판정만 남음",
+                               x["technology"]))
+            one_sided = {x["reason"] for x in searched}
+            for item in [m for m in missing if m not in one_sided][:3]:
                 technology, detail = split_scope(item)
                 b.gap(make_gap(name, "insufficient", detail, technology))
         reasons.append(f"{name}: 제외(근거 공백 기록)")
@@ -351,7 +386,7 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
                 # Judge 사유 문장은 실행마다 달라서 항목과 관점만으로 같은 사유를 판단한다.
                 judged = _AgentIssue(agent, name, f"{name}: {c.get('reason', '')[:300]}", "judge")
                 issues_by_agent.setdefault(agent, []).extend(own or [judged])
-    rerun = [a for a in issues_by_agent if b.can_followup(a)]
+    rerun = [a for a in issues_by_agent if b.can_reinvestigate(a)]
     carried: list[_AgentIssue] = []  # 재조사하지 못해 보고서에 판정 한계로 적을 이슈
     for agent, issues in issues_by_agent.items():
         if agent in rerun:
@@ -365,7 +400,8 @@ def _report_and_eval_step(b: _Builder, finalize: bool) -> Decision:
                 detail = issue.reason_key if issue.reason_key != "judge" else issue.text.split(": ", 1)[-1]
                 b.gap(make_gap(agent, "evaluation", detail[:200], issue.technology, issue.criterion))
     if rerun:
-        b.followup(rerun, {agent: _eval_feedback([i.text for i in issues_by_agent[agent]]) for agent in rerun})
+        b.followup(rerun, {agent: _eval_feedback([i.text for i in issues_by_agent[agent]]) for agent in rerun},
+                   counter="reinvestigate_counts")
         return b.done(rerun, "reinvestigate:" + ",".join(rerun),
                       "품질 평가 미달 원인 관점만 재조사: "
                       + "; ".join(i.text for a in rerun for i in issues_by_agent[a])[:300])

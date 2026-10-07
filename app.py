@@ -164,6 +164,7 @@ def finalize(state: dict, output_dir: Path) -> dict:
         "gaps": state.get("gaps", []), "trace_id": trace_id, "status": state.get("status"),
         "supervisor_steps": state.get("step_count"), "retry_counts": state.get("retry_counts", {}),
         "followup_counts": state.get("followup_counts", {}),
+        "reinvestigate_counts": state.get("reinvestigate_counts", {}),
     })
     from kv_eval.evidence_store import missing_full_text
     store_missing = missing_full_text(state.get("evidence", []))
@@ -223,7 +224,8 @@ def report_only() -> dict:
     seed["node_status"] = {**{name: "done" for name in (*PERSPECTIVES, "synthesis")},
                            "report": "pending", "quality_evaluator": "pending"}
     policy = Policy(retry_limits={**RETRY_LIMITS, **{name: 0 for name in PERSPECTIVES}, "synthesis": 0},
-                    followup_limits={name: 0 for name in PERSPECTIVES})
+                    followup_limits={name: 0 for name in PERSPECTIVES},
+                    reinvestigate_limits={name: 0 for name in PERSPECTIVES})
     llm = StructuredLLM(settings.openai_key)
     initial = initial_state(previous.get("user_query", DEFAULT_QUERY), trace_id, seed)
     print(f"[trace] trace_id={trace_id} (report-only)", flush=True)

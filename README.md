@@ -9,11 +9,11 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(IT
 - Tools : LangGraph(StateGraph, `Send`, `astream`, AsyncSqliteSaver), FAISS + BM25(RRF), Tavily, LangSmith, pdfplumber
 - **Pattern : Supervisor** — `supervisor` 노드 하나가 State를 읽고 `add_conditional_edges` 하나로 다음 노드를 고른다. 보고서·품질 평가 노드를 포함한 모든 작업 노드는 실행 후 Supervisor로만 돌아온다(작업 노드 간 직접 엣지 0개, `tests/test_graph_structure.py`에서 검사). Supervisor는 LLM이 아니라 결정적 규칙 함수다(`src/kv_eval/supervisor/policy.py`, 명세 `docs/SUPERVISOR_POLICY.md`).
 - **선정 이유** : 이 과제의 핵심은 "관점별 근거가 충분한지 판단하고 부족한 관점만 다시 조사한다"와 "품질 평가 미달 원인에 따라 다른 에이전트로 되돌린다"는 두 루프다. 단계 체인은 순서가 엣지에 묶여 특정 관점만 다시 부를 수 없다. Orchestrator-Workers는 오케스트레이터가 매번 작업을 새로 쪼개고 Synthesizer가 합치는 구조인데, 평가 틀이 4관점·D1~D7로 이미 정해진 이 과제에서는 분해가 실행마다 달라져 재현이 어렵고, "어느 관점이 부족한가"를 판정하는 루프는 따로 만들어야 한다. State 전체를 한 곳에서 보고 다음 노드를 정하는 Supervisor가 두 루프를 가장 직접 구현한다.
-- **동적 처리** : 실행 순서를 고정하지 않는다. Supervisor는 매 진입마다 `perspective_status`·`node_status`·`retry_counts`·`followup_counts`·`eval_result`·`step_count`만 보고 결정한다.
+- **동적 처리** : 실행 순서를 고정하지 않는다. Supervisor는 매 진입마다 `perspective_status`·`node_status`·`retry_counts`·`followup_counts`·`reinvestigate_counts`·`eval_result`·`step_count`만 보고 결정한다.
   - 미수집 관점을 `Send`로 한 번에 할당한다. 기술 조사 결과를 다른 관점이 입력으로 쓰지 않으므로 선행 순서가 없다. 실행은 `AGENT_CONCURRENCY`(기본 1)만큼만 동시에 돈다.
-  - 판정을 막는 결함(검색 결과·인용 없음, 기준 판정 불가, TRL 미기재 등)이 있거나 기술별 고유 출처가 2개 미만인 관점만 다시 부른다. 에이전트가 적은 세부 미확인 항목은 재조사 사유가 아니라 보고서 한계점에 남는다. 재작업 지시(사유와 기술별 검색 힌트)는 RAG 질의 계획·캐시 키·에이전트 프롬프트에 반영된다.
-  - 종합 에이전트가 특정 관점의 추가 근거를 요구하면 그 관점만 다시 조사한다(충분성 재조사와 별도의 후속 한도).
-  - 보고서가 정상 완료되면 Supervisor가 품질 평가 노드를 부른다. 미달 시 원인으로 경로를 나눈다: 원인이 관점 에이전트(편향·커버리지, 또는 에이전트 판정을 옮긴 표의 근거 결함)면 `reinvestigate:<관점>`, 보고서 서술이면 `rewrite:report`.
+  - 판정을 막는 결함(검색 결과·인용 없음, 기준 판정 불가, TRL 미기재 등)이 있거나, 기술별 고유 출처가 2개 미만이거나, 판정이 긍정·우려 한쪽뿐인 관점만 다시 부른다. 한쪽 판정 검사는 품질 평가의 편향 규칙과 같은 함수(`direction_shortfalls`)라서 보고서를 쓰기 전에 반대 방향 근거를 찾는다. 에이전트가 적은 세부 미확인 항목은 재조사 사유가 아니라 보고서 한계점에 남는다. 재작업 지시(사유와 기술별 검색 힌트)는 RAG 질의 계획·캐시 키·에이전트 프롬프트에 반영된다.
+  - 종합 에이전트가 특정 관점의 추가 근거를 요구하면 그 관점만 다시 조사한다(충분성 재조사와 별도의 종합 후속 한도).
+  - 보고서가 정상 완료되면 Supervisor가 품질 평가 노드를 부른다. 미달 시 원인으로 경로를 나눈다: 원인이 관점 에이전트(편향·커버리지, 또는 에이전트 판정을 옮긴 표의 근거 결함)면 `reinvestigate:<관점>`(종합 후속 한도와 별도인 평가 재조사 한도), 보고서 서술이면 `rewrite:report`.
   - 에이전트 예외는 `node_status=failed`로 기록하고 재시도한다. 한도를 넘으면 제외하고 근거 공백으로 보고서에 적는다.
   - 종료 조건은 근거 충분성과 품질 평가 통과다. `MAX_STEPS`·재시도 한도·`recursion_limit`은 안전장치이며, 상한에 닿아도 근거 공백을 적은 보고서를 만들고 정상 종료한다.
   - 모든 결정은 사유와 함께 `outputs/decisions_{trace_id}.jsonl`과 LangSmith(metadata `trace_id`)에 남는다.
@@ -33,7 +33,7 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(IT
   - HW 베이스라인 문서(InfiniGen, CXL-PNM)로 ITME의 한계를 교차 확인한다.
   - 두 기술을 같은 형식(쟁점 / 관점 A / 관점 B / 엇갈리는 이유)으로 병기한다. 신호표·판정표·증거 균형표는 LLM이 아니라 코드가 State의 판정값으로 만든다.
   - 종합 에이전트는 새로 검색하지 않고 검증된 Evidence만 쓴다.
-  - 편향 통제 규칙 : 기술·관점별 고유 출처 2개 이상(논문은 문서 단위), 웹 근거의 단일 발행처 비중 60% 이하, 판정이 긍정·우려 한쪽뿐이면 반대 방향 근거를 다시 찾는다. 원문 1편에만 기댄 도메인 '적합' 판정은 '조건부'로 낮춘다. 포럼·개인 블로그는 개발자 반응의 보조 근거로만 쓴다.
+  - 편향 통제 규칙 : 기술·관점별 고유 출처 2개 이상(논문은 문서 단위), 웹 근거의 단일 발행처 비중 60% 이하, 판정이 긍정·우려 한쪽뿐이면 보고서 전에 반대 방향 근거를 다시 찾는다. 시장·이해관계자 검색어에는 처음부터 기술마다 반대 방향(제약·비판) 검색어가 들어 있다. 다시 찾아도 한쪽뿐이면 '탐색했으나 없음'을 공백(`one_sided`)으로 남기고, 코드가 해당 판정표 바로 아래에 `한계:` 문장을 적는다. 원문 1편에만 기댄 도메인 '적합' 판정은 '조건부'로 낮춘다. 포럼·개인 블로그는 개발자 반응의 보조 근거로만 쓴다.
 - **보고서 품질 평가 (Hybrid)** : 보고서 다음에 독립 노드 `quality_evaluator`가 4항목을 각각 판정한다. 규칙 검사에서 실패한 항목은 LLM Judge가 통과로 뒤집지 못한다.
 
   | 항목 | 규칙 검사 | LLM Judge (`EvalVerdict`) | 미달 시 |
@@ -80,7 +80,7 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(IT
 | 구분 | 필드 | reducer |
 |---|---|---|
 | 제어 | `trace_id`, `step_count`, `next_agents`, `status` | 단일 작성자(Supervisor) |
-| 제어 | `perspective_status`, `node_status`, `retry_counts`, `followup_counts`, `last_error`, `feedback` | 키 단위 dict merge |
+| 제어 | `perspective_status`, `node_status`, `retry_counts`, `followup_counts`, `reinvestigate_counts`, `last_error`, `feedback` | 키 단위 dict merge |
 | 제어 | `eval_result`, `last_decision` | 단일 작성자 |
 | 제어 | `gaps` (`Gap`: 관점·기술·종류·사유) | 중복 제거 append |
 | 페이로드 | `perspectives{tech, market, stakeholder, domain}` (`PerspectiveResult`) | 키 단위 dict merge |
@@ -103,7 +103,7 @@ KV cache 최적화 기술을 소프트웨어(DeepSeek-V2 MLA)와 하드웨어(IT
 4. **상관** : uuid4 `trace_id` 하나를 LangGraph `thread_id`, LangSmith metadata, 결정 로그 파일명에 같이 쓴다. 세 저장소를 손으로 맞출 일이 없다.
 5. **재개/복구** : `AsyncSqliteSaver`(파일 하나)와 `node_status{pending/running/done/failed/skipped}`·`last_error`·`retry_counts`로 마지막 체크포인트부터 `--resume`한다. 메모리 체크포인터는 프로세스가 죽으면 사라지고, Postgres는 단일 사용자 CLI에 과하다.
 6. **동시 처리** : `Send`로 함께 할당된 노드의 쓰기는 superstep 끝에 같이 반영되므로, 순차 실행이어도 같은 키에 쓰는 필드에는 reducer가 필요하다. dict merge, 에이전트 단위 교체, 중복 제거 append를 필드별로 정했다.
-7. **종료 보장** : `step_count > MAX_STEPS`(20)이면 Supervisor가 조사를 멈추고 근거 공백을 적은 뒤 종합·보고서·평가까지 마치고 정상 종료한다. 관점 재시도 2회, 후속 재조사 1회, 보고서 재작성 2회, `recursion_limit`은 그 뒤의 안전장치다.
+7. **종료 보장** : `step_count > MAX_STEPS`(20)이면 Supervisor가 조사를 멈추고 근거 공백을 적은 뒤 종합·보고서·평가까지 마치고 정상 종료한다. 관점 재시도 2회, 종합 후속 재조사 1회, 평가 재조사 1회, 보고서 재작성 2회, `recursion_limit`은 그 뒤의 안전장치다.
 
 ## Architecture
 
@@ -159,6 +159,8 @@ flowchart TD
 
 종합이 4관점 중 market·stakeholder만 골라 다시 조사했고, 평가 미달은 원인 관점(market)을 지목했다. market은 후속 재조사 한도를 이미 썼기 때문에 Supervisor는 재조사 대신 4.2 표 아래에 판정 한계를 적게 하는 재작성으로 보냈고, 같은 원인으로 다시 미달하자 무한 재작성 없이 미검증으로 끝냈다. 남은 미달은 market이 MLA의 시장성 판정 3개를 모두 '긍정'으로 내리면서 반대 방향 근거를 찾지 않은 것(편향 통제 3점)으로, 7장 근거 공백에 그대로 적혀 있다. 부족한 관점만 재조사해 통과하는 경로는 `tests/test_scenarios.py`, `tests/test_review_fixes.py`가 Fake로 재현한다.
 
+이 실행이 드러낸 두 결함은 이후 고쳤다. ① 종합 요청과 평가 요청이 같은 후속 한도를 써서, 종합이 market 한도를 먼저 쓰자 평가가 지목한 market을 재조사할 수 없었다 → 평가 재조사 한도(`REINVESTIGATE_LIMITS`, `reinvestigate_counts`)를 분리했다. ② 충분성 검사는 판정 방향을 보지 않아 #2에서 market을 '충분'으로 넘겼다가 #6 편향 규칙에서 '긍정 한쪽뿐'으로 걸렸다 → 같은 방향 검사를 충분성 단계에 넣었다. 이 경로는 `tests/test_scenarios.py::test_eval_reinvestigation_still_available_after_synthesis_followup`, `test_one_sided_verdict_is_reworked_before_report`가 재현한다. 위 산출물은 이 수정 전 실행 결과다.
+
 ## 설계 결정
 
 전체 목록은 `docs/DECISIONS.md`에 있다. 평가 항목과 직접 관련된 것만 적는다.
@@ -168,11 +170,12 @@ flowchart TD
 - **Hybrid 평가** : 형식 검사만으로는 근거가 주장을 뒷받침하는지 볼 수 없고, Judge만 쓰면 실행마다 판정이 흔들린다. 규칙은 하드 게이트, Judge는 내용 게이트다.
 - **원인 기준 재작업** : 평가 미달 경로를 항목이 아니라 원인(`target_agents`)으로 정한다. 코드가 에이전트 판정을 옮긴 표의 결함은 보고서를 다시 써도 같은 판정으로 채워지므로 그 관점을 재조사한다.
 - **충분성 기준** : 판정을 막는 결함과 고유 출처 수만 재조사 사유로 쓴다. 에이전트가 적는 세부 미확인 항목까지 부족으로 보면 모든 관점이 매번 재시도 한도까지 돌아 사실상 고정 스텝이 된다.
-- **후속 재조사 한도 분리** : 종합·평가가 지목한 관점은 충분성 재조사 한도와 별도로 한 번 더 조사할 수 있다. 같은 한도를 쓰면 평가 미달 → 관점 재조사 경로가 실행될 수 없다.
+- **재조사 한도 3분리** : 충분성 재조사(`RETRY_LIMITS`), 종합 요청 후속 재조사(`FOLLOWUP_LIMITS`), 평가 요청 재조사(`REINVESTIGATE_LIMITS`)를 따로 센다. 종합과 평가가 한 카운터를 쓰면 종합이 먼저 한도를 써 버려, 평가가 원인으로 지목한 관점을 재조사하지 못하고 고칠 수 없는 판정표를 보고서 재작성으로만 다루다 미검증으로 끝난다(실제 실행 `77cb99ef`).
+- **방향 검사를 충분성 단계로** : '판정이 긍정·우려 한쪽뿐' 검사를 평가에서만 하면 판정표가 보고서에 들어간 뒤에야 걸린다. 같은 함수를 충분성 검사에도 써서 보고서 전에 반대 방향 근거를 재검색하게 했다. 다시 찾아도 없으면 '탐색했으나 없음'을 공백으로 남기고 판정표 아래에 코드가 한계를 적는다. 확증편향은 반대 근거를 찾지 않거나 뺀 것이므로, 찾았으나 없음을 밝힌 판정은 편향 규칙에서 인정한다.
 - **출처 단위** : 논문은 문서 단위로 센다. 페이지 단위로 세면 논문 1편으로도 '고유 출처 2개'를 통과한다.
 - **설계 문서 `[D]`** : 1·2장의 설계 조건에만 쓴다. 기술 사실의 근거는 허용 논문과 웹 출처뿐이다.
 - **순차 실행** : 4관점을 동시에 돌리면 메모리 사용량이 관점 수만큼 커지고 MPS 임베딩 모델을 여러 스레드가 동시에 불러 중단된다. 할당은 한 번에 하고 실행만 하나씩 한다.
-- **재시도 한도** : 관점 2회, 후속 1회, 보고서 2회, 종합 1회. `MAX_STEPS`는 20으로, 정상 경로(5단계)와 재작업이 많은 경로(11~12단계)를 끝까지 보내고 그 이상은 마무리 모드로 끊는다.
+- **재시도 한도** : 관점 2회, 종합 후속 1회, 평가 재조사 1회, 보고서 2회, 종합 1회. `MAX_STEPS`는 20으로, 정상 경로(5단계)와 재작업이 많은 경로(11~12단계)를 끝까지 보내고 그 이상은 마무리 모드로 끊는다.
 
 ## Data Preprocessing
 

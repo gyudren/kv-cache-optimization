@@ -6,7 +6,7 @@ Supervisor는 State를 읽고 다음에 실행할 노드를 고른다. 결과의
 
 ## 원칙
 
-- 실행 순서를 미리 정하지 않는다. 매 진입마다 제어 필드(`perspective_status`, `node_status`, `retry_counts`, `followup_counts`, `eval_result`, `step_count`)만 보고 다음 노드를 고른다.
+- 실행 순서를 미리 정하지 않는다. 매 진입마다 제어 필드(`perspective_status`, `node_status`, `retry_counts`, `followup_counts`, `reinvestigate_counts`, `eval_result`, `step_count`)만 보고 다음 노드를 고른다.
 - 모든 작업 노드는 실행 후 Supervisor로만 돌아온다. 노드끼리 직접 넘기지 않는다.
 - 미수집·부족·실패 관점만 골라 한 번에 할당한다(`Send` fan-out). 실행은 `AGENT_CONCURRENCY`(기본 1)에 따라 하나씩 한다.
 - 재조사 요청에는 사유(`missing`)와 기술별 재검색 힌트(`queries_by_tech`)를 함께 넘긴다.
@@ -17,17 +17,18 @@ Supervisor는 State를 읽고 다음에 실행할 노드를 고른다. 결과의
 ## 결정 규칙 (우선순위 순)
 
 1. 단계 상한 — `step_count`가 `MAX_STEPS`를 넘으면 조사·재작성을 멈추고, 미완료 관점을 근거 공백으로 기록한 뒤 종합·보고서·평가만 마친다. `MAX_STEPS + FINALIZE_STEPS`도 넘으면 즉시 종료한다.
-2. 관점 수집 — `pending`·`insufficient`·`failed` 관점 중 재시도 한도 안의 것을 할당한다. `insufficient`는 필수 결함(검색 결과·인용 없음, 기준 판정 불가, TRL 미기재, 필수 질문 근거 없음, D1~D7 불완전)이 있거나, 기술·시장·이해관계자 관점에서 기술별 고유 출처가 2개 미만인 경우다. `missing_optional`과 `llm_sufficient`는 재조사 사유가 아니다. 한도를 넘으면 `excluded`로 두고 근거 공백을 기록한다.
+2. 관점 수집 — `pending`·`insufficient`·`failed` 관점 중 재시도 한도 안의 것을 할당한다. `insufficient`는 필수 결함(검색 결과·인용 없음, 기준 판정 불가, TRL 미기재, 필수 질문 근거 없음, D1~D7 불완전)이 있거나, 기술·시장·이해관계자 관점에서 기술별 고유 출처가 2개 미만이거나, 시장·이해관계자·도메인 판정이 긍정·우려 한쪽뿐인 경우다(품질 평가 편향 규칙과 같은 `direction_shortfalls`). 한쪽 판정의 재조사 지시에는 반대 방향 검색 힌트가 붙는다. `missing_optional`과 `llm_sufficient`는 재조사 사유가 아니다. 한도를 넘으면 `excluded`로 두고 근거 공백을 기록한다. 반대 방향을 다시 찾고도 한쪽뿐이면 공백 종류는 `one_sided`이고, 보고서가 해당 판정표 아래에 `한계:` 문장을 코드로 적는다.
 3. 종합 — 모든 관점이 결론 상태면 종합을 부른다. 종합이 `needs_source_agents`로 추가 근거를 요구하면 그 관점만 후속 재조사 한도 안에서 다시 부른다(`excluded` 관점 포함). `needs_revision`이면 종합을 한 번 더 돌린다. 종합 실행 실패가 한도를 넘으면 공백으로 기록하고 보고서로 넘어간다.
 4. 보고서 — 종합이 끝나면 보고서를 부른다. 보고서는 Supervisor로 돌아오고, 본문이 있을 때만 `evaluate`로 품질 평가 노드를 부른다. 본문이 없거나 실패한 보고서는 평가하지 않고 재작성하거나, 한도를 넘었으면 미검증으로 끝낸다.
-5. 평가 결과 — 통과면 종료한다. 미달이면 원인별로 `reinvestigate:<관점>`(후속 재조사 한도) 또는 `rewrite:report`(보고서 재시도 한도)로 보낸다. 후속 한도가 소진된 관점 원인은 보고서 재작성 지시에 '판정 한계'로 넣고, 그 재작성 후에도 같은 항목이 같은 사유로 미달이면 재작성을 멈추고 미검증으로 끝낸다.
+5. 평가 결과 — 통과면 종료한다. 미달이면 원인별로 `reinvestigate:<관점>`(평가 재조사 한도, 종합 후속 한도와 별도) 또는 `rewrite:report`(보고서 재시도 한도)로 보낸다. 평가 재조사 한도가 소진된 관점 원인은 보고서 재작성 지시에 '판정 한계'로 넣고, 그 재작성 후에도 같은 항목이 같은 사유로 미달이면 재작성을 멈추고 미검증으로 끝낸다.
 
 ## 재시도 한도 (`config.py`)
 
 | 대상 | 한도 | 비고 |
 |---|---|---|
 | 관점 충분성 재조사 (tech·market·stakeholder·domain) | 각 2회 | `RETRY_LIMITS` |
-| 관점 후속 재조사 (종합 요청·평가 미달 원인) | 각 1회 | `FOLLOWUP_LIMITS`, `followup_counts`. 충분성 재조사와 따로 센다 |
+| 관점 후속 재조사 (종합 요청) | 각 1회 | `FOLLOWUP_LIMITS`, `followup_counts`. 충분성 재조사와 따로 센다 |
+| 관점 재조사 (평가 미달 원인) | 각 1회 | `REINVESTIGATE_LIMITS`, `reinvestigate_counts`. 종합 후속 재조사와 따로 센다 |
 | 종합 | 1회 | `RETRY_LIMITS` |
 | 보고서 | 2회 | `RETRY_LIMITS` |
 | 품질 평가 노드 실행 실패 | 1회 | `RETRY_LIMITS` |
