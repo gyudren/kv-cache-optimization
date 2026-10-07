@@ -152,6 +152,10 @@ Payload는 각 agent가 수집·생성한 결과를 담는다.
 ![Supervisor 라우팅 순서](docs/architecture.png)
 
 ```mermaid
+---
+config:
+  layout: dagre
+---
 flowchart TB
     START([START]) --> D1
 
